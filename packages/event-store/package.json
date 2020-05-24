@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "node_modules/.bin/tsc -w",
     "clean": "node_modules/.bin/rimraf ./dist",
-    "test": "node_modules/.bin/jest",
+    "test": "node_modules/.bin/jest --passWithNoTest",
     "compile": "yarn run clean && node_modules/.bin/tsc",
     "prepublish": "yarn run clean && yarn run compile"
   },
