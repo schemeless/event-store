@@ -1,0 +1,46 @@
+{
+  "name": "@schemeless/event-store",
+  "version": "1.0.0",
+  "typescript:main": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "dev": "node_modules/.bin/tsc -w",
+    "clean": "node_modules/.bin/rimraf ./dist",
+    "test": "node_modules/.bin/jest",
+    "compile": "yarn run clean && node_modules/.bin/tsc",
+    "prepublish": "yarn run clean && yarn run compile"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/schemeless/event-store.git"
+  },
+  "keywords": [],
+  "author": "akinoniku",
+  "bugs": {
+    "url": "https://github.com/schemeless/event-store/issues"
+  },
+  "peerDependencies": {
+    "typeorm": "*",
+    "uuid": "*"
+  },
+  "dependencies": {
+    "bull": "^3.12.1",
+    "debug": "^4.1.1",
+    "rxjs": "^6.5.3",
+    "typeorm": "^0.2.20",
+    "uuid": "^3.3.3"
+  },
+  "devDependencies": {
+    "@types/bull": "^3.10.6",
+    "@types/debug": "^4.1.5",
+    "@types/jest": "^24.0.21",
+    "@types/node": "^12.11.7",
+    "@types/uuid": "^3.4.5",
+    "jest": "^24.9.0",
+    "rimraf": "^3.0.0",
+    "sqlite3": "^4.1.0",
+    "ts-jest": "^24.1.0",
+    "typescript": "^3.7.2"
+  }
+}
