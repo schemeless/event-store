@@ -4,6 +4,8 @@ import { applyMainFlow } from './applyMainFlow';
 import * as Rx from 'rxjs/operators';
 import { ApplyQueue } from '../queue/RxQueue';
 
+type EventError = { task: CreatedEvent<any>; error: Error };
+
 const applyRootEvent = (eventFlowMap: EventFlowMap, applyQueue: ApplyQueue) => async ({ task, done }, drained) => {
   const createdEvent = defaultEventCreator(task.currentEvent, task.causalEvent);
   try {
@@ -15,12 +17,18 @@ const applyRootEvent = (eventFlowMap: EventFlowMap, applyQueue: ApplyQueue) => a
     return createdEvent;
   } catch (e) {
     done({ task: createdEvent, error: e });
-    return { task: createdEvent, error: e };
+    return { task: createdEvent, error: e } as EventError;
   }
 };
+
+const isError = (eventOrError: CreatedEvent<any> | EventError): eventOrError is EventError =>
+  (eventOrError as EventError).error != null;
 
 export const applyRootEventAndCollectSucceed = (eventFlowMap: EventFlowMap, applyQueue: ApplyQueue) =>
   applyQueue.process$.pipe(
     Rx.mergeMap(applyRootEvent(eventFlowMap, applyQueue)),
-    Rx.scan((acc, event: CreatedEvent<any>) => [...acc, event], [] as CreatedEvent<any>[])
+    Rx.scan(
+      (acc, eventOrError: EventError) => (isError(eventOrError) ? acc : [...acc, eventOrError]),
+      [] as CreatedEvent<any>[]
+    )
   );

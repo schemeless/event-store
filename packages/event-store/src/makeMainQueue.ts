@@ -34,6 +34,8 @@ export const makeMainQueue = (eventFlows: EventFlow<any>[]) => {
   return {
     processed$,
     queueInstance: mainQueue,
-    push: ((task, cb): Queue.Ticket => mainQueue.push(task, cb)) as typeof mainQueue.push
+    push: ((task, cb): Queue.Ticket => {
+      return mainQueue.push(task, cb);
+    }) as typeof mainQueue.push
   };
 };
