@@ -82,5 +82,6 @@
     "ts-node": "^8.6.2",
     "ts-node-dev": "^1.0.0-pre.44",
     "typescript": "^3.8.2"
-  }
+  },
+  "gitHead": "d1c667b92b51ace33259f4b94f59e14d7212c969"
 }

@@ -56,7 +56,7 @@ export type EventStore = {
   mainQueueProcessed$: Observable<void>;
 };
 
-const makeEventStore = (connectionOptions: ConnectionOptions) => async (
+export const makeEventStore = (connectionOptions: ConnectionOptions) => async (
   eventFlows: EventFlow[]
 ): Promise<EventStore> => {
   const eventStoreRepo = new EventStoreRepo(connectionOptions);
