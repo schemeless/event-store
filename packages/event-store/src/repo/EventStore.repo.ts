@@ -1,8 +1,8 @@
 import { Connection, getManager, Repository } from 'typeorm';
 import { EventStoreEntity } from './EventStore.entity';
 import { ConnectionOptions } from 'typeorm';
-import { getConnection } from './util/getConnection';
-import { CreatedEvent } from './EventStore.types';
+import { getConnection } from './getConnection';
+import { CreatedEvent } from '../EventStore.types';
 
 const serialiseEvent = (event: EventStoreEntity): EventStoreEntity => {
   return Object.assign({}, event, { payload: JSON.parse(event.payload) });

@@ -1,12 +1,5 @@
-import { BaseEvent, CreatedEvent, EventFlowMap } from '../EventStore.types';
+import { BaseEvent, CreatedEvent } from '../EventStore.types';
 import * as uuid from 'uuid/v4';
-
-export const getEventKey = (event: BaseEvent<any>) => event.domain + '__' + event.type;
-
-export const getEventFlow = (eventFlowMap: EventFlowMap, eventPayloadArgs: BaseEvent<any>) => {
-  const key = getEventKey(eventPayloadArgs);
-  return eventFlowMap[key];
-};
 
 export function defaultEventCreator<Payload>(
   eventArgs: BaseEvent<Payload>,

@@ -1,4 +1,4 @@
-import { EventStoreService } from './EventStore.service';
+import { EventStore } from './makeEventStore';
 
 export interface BaseEventInput<Payload> {
   payload: Payload;
@@ -31,25 +31,25 @@ export interface StoredEvent<Payload> extends CreatedEvent<Payload> {
 
 export type Event<Payload> = StoredEvent<Payload>;
 
-export interface EventFlow<Payload> {
+export interface EventFlow<Payload = any> {
   domain: string;
   type: string;
   description?: string;
 
   samplePayload: Payload;
 
-  consequentEventsCreator?: (causalEvent: CreatedEvent<Payload>) => Promise<BaseEvent<any>[]>;
-  validator?: (event: CreatedEvent<Payload>) => Promise<Error | void>;
-  executor?: (event: CreatedEvent<Payload>) => Promise<void>;
-  executorCanceler?: (event: CreatedEvent<Payload>) => Promise<void>;
-  sideEffect?: (event: CreatedEvent<Payload>) => Promise<void>;
+  consequentEventsCreator?: (causalEvent: CreatedEvent<Payload>) => Promise<BaseEvent<any>[]> | BaseEvent<any>[];
+  validator?: (event: CreatedEvent<Payload>) => Promise<Error | void> | Error | void;
+  executor?: (event: CreatedEvent<Payload>) => Promise<void> | void;
+  executorCanceler?: (event: CreatedEvent<Payload>) => Promise<void> | void;
+  sideEffect?: (event: CreatedEvent<Payload>) => Promise<void> | void;
 
-  receiver: (
-    eventStoreService: EventStoreService,
-    eventInputArgs: BaseEventInput<Payload>
-  ) => Promise<StoredEvent<Payload>>;
+  receiver: (eventStore: EventStore) => (eventInputArgs: BaseEventInput<Payload>) => Promise<CreatedEvent<any>[]>;
 }
+
+export type EventTaskAndError = { task: CreatedEvent<any>; error: Error };
 
 export interface EventFlowMap {
   [key: string]: EventFlow<any>;
 }
+export type EventFlowAndEvent<Payload = any> = { eventFlow: EventFlow<Payload>; event: CreatedEvent<Payload> };

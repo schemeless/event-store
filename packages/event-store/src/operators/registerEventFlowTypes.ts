@@ -1,4 +1,4 @@
-import { EventFlow, EventFlowMap } from './EventStore.types';
+import { EventFlow, EventFlowMap } from '../EventStore.types';
 
 const getEventFlowKey = (eventFlow: EventFlow<any>) => {
   if (!eventFlow.domain) throw new Error(`EventFlow domain is not defined. type: ${eventFlow.type}`);
