@@ -62,7 +62,7 @@ export const makeEventStore = (connectionOptions: ConnectionOptions) => async (
   const eventStoreRepo = new EventStoreRepo(connectionOptions);
   const mainQueue = makeMainQueue(eventFlows);
 
-  await this.eventStoreRepo.init();
+  await eventStoreRepo.init();
 
   const mainQueueProcessed$ = mainQueue.processed$.pipe(
     // todo do side effect
