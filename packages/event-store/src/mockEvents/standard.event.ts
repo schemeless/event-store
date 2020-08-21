@@ -24,7 +24,7 @@ export const StandardEvent: EventFlow<Payload> = {
 
   async validator(event: CreatedEvent<Payload>) {
     if (event.payload.positiveNumber < 0) {
-      throw new Error(`Invalid positive number`);
+      return new Error(`Invalid positive number`);
     }
   },
 

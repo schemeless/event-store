@@ -44,7 +44,9 @@ export interface EventFlow<Payload = any> {
   executorCanceler?: (event: CreatedEvent<Payload>) => Promise<void> | void;
   sideEffect?: (event: CreatedEvent<Payload>) => Promise<void> | void;
 
-  receiver: (eventStore: EventStore) => (eventInputArgs: BaseEventInput<Payload>) => Promise<CreatedEvent<any>[]>;
+  receiver: (
+    eventStore: EventStore
+  ) => (eventInputArgs: BaseEventInput<Payload>) => Promise<[CreatedEvent<Payload>, ...Array<CreatedEvent<any>>]>;
 }
 
 export type EventTaskAndError = { task: CreatedEvent<any>; error: Error };
