@@ -41,5 +41,8 @@ export const StandardEvent: EventFlow<Payload> = {
     console.log('sideEffect called');
   },
 
-  receive: eventStore => eventInputArgs => eventStore.receive(StandardEvent)(eventInputArgs)
+  receive: eventStore => eventInputArgs => {
+    console.log(eventInputArgs);
+    return eventStore.receive(StandardEvent)(eventInputArgs);
+  }
 };
