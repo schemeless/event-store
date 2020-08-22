@@ -1,15 +1,17 @@
 import { CreatedEvent, EventFlowMap } from '../EventStore.types';
 import { defaultEventCreator } from './defaultEventCreator';
-import { applyMainFlow } from './applyMainFlow';
+import { makeValidateAndExecute } from './makeValidateAndExecute';
 import * as Rx from 'rxjs/operators';
 import { ApplyQueue } from '../queue/RxQueue';
+import { makeGetConsequentEventInputs } from './makeGetConsequentEvent';
 
 type EventError = { task: CreatedEvent<any>; error: Error };
 
 const applyRootEvent = (eventFlowMap: EventFlowMap, applyQueue: ApplyQueue) => async ({ task, done }, drained) => {
   const createdEvent = defaultEventCreator(task.currentEvent, task.causalEvent);
   try {
-    const consequentEvents = await applyMainFlow(eventFlowMap)(createdEvent);
+    await makeValidateAndExecute(eventFlowMap)(createdEvent);
+    const { consequentEvents } = await makeGetConsequentEventInputs(eventFlowMap)(createdEvent);
     consequentEvents.forEach(currentEvent => {
       applyQueue.push({ currentEvent, causalEvent: createdEvent });
     });

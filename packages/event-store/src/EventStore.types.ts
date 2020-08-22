@@ -38,15 +38,17 @@ export interface EventFlow<Payload = any> {
 
   samplePayload: Payload;
 
-  consequentEventsCreator?: (causalEvent: CreatedEvent<Payload>) => Promise<BaseEvent<any>[]> | BaseEvent<any>[];
-  validator?: (event: CreatedEvent<Payload>) => Promise<Error | void> | Error | void;
-  executor?: (event: CreatedEvent<Payload>) => Promise<void> | void;
-  executorCanceler?: (event: CreatedEvent<Payload>) => Promise<void> | void;
-  sideEffect?: (event: CreatedEvent<Payload>) => Promise<void> | void;
-
   receiver: (
     eventStore: EventStore
   ) => (eventInputArgs: BaseEventInput<Payload>) => Promise<[CreatedEvent<Payload>, ...Array<CreatedEvent<any>>]>;
+
+  validator?: (event: CreatedEvent<Payload>) => Promise<Error | void> | Error | void;
+  executor?: (event: CreatedEvent<Payload>) => Promise<void> | void;
+  executorCanceler?: (event: CreatedEvent<Payload>) => Promise<void> | void;
+
+  consequentEventsCreator?: (causalEvent: CreatedEvent<Payload>) => Promise<BaseEvent<any>[]> | BaseEvent<any>[];
+
+  sideEffect?: (event: CreatedEvent<Payload>) => Promise<void> | void;
 }
 
 export type EventTaskAndError = { task: CreatedEvent<any>; error: Error };
@@ -54,4 +56,5 @@ export type EventTaskAndError = { task: CreatedEvent<any>; error: Error };
 export interface EventFlowMap {
   [key: string]: EventFlow<any>;
 }
+
 export type EventFlowAndEvent<Payload = any> = { eventFlow: EventFlow<Payload>; event: CreatedEvent<Payload> };
