@@ -1,5 +1,5 @@
 import { BaseEvent, CreatedEvent } from '../EventStore.types';
-import * as uuid from 'uuid/v4';
+import { v4 as uuid } from 'uuid';
 
 export function defaultEventCreator<Payload>(
   eventArgs: BaseEvent<Payload>,

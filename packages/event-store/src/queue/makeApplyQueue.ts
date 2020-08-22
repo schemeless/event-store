@@ -1,6 +1,6 @@
 import { createRxQueue } from './RxQueue';
 import { BaseEvent, CreatedEvent } from '../EventStore.types';
-import * as uuid from 'uuid/v4';
+import { v4 as uuid } from 'uuid';
 
 export const makeApplyQueue = () =>
   createRxQueue<{ causalEvent?: CreatedEvent<any>; currentEvent: BaseEvent<any> }, CreatedEvent<any>>(
