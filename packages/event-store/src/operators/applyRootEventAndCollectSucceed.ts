@@ -1,24 +1,27 @@
 import { CreatedEvent, EventFlowMap } from '../EventStore.types';
 import { defaultEventCreator } from './defaultEventCreator';
-import { makeValidateAndExecute } from './makeValidateAndExecute';
 import * as Rx from 'rxjs/operators';
 import { ApplyQueue } from '../queue/RxQueue';
-import { makeGetConsequentEventInputs } from './makeGetConsequentEvent';
+import { makeValidateAndApply } from '../eventLifeCycle/makeValidateAndApply';
+import { makeCreateConsequentEventInputs } from '../eventLifeCycle/createConsequentEvents';
 
 type EventError = { task: CreatedEvent<any>; error: Error };
 
-const applyRootEvent = (eventFlowMap: EventFlowMap, applyQueue: ApplyQueue) => async ({ task, done }, drained) => {
+const applyRootEvent = (eventFlowMap: EventFlowMap, applyQueue: ApplyQueue) => async (
+  { task, done: applyQueueDone },
+  drained
+) => {
   const createdEvent = defaultEventCreator(task.currentEvent, task.causalEvent);
   try {
-    await makeValidateAndExecute(eventFlowMap)(createdEvent);
-    const { consequentEvents } = await makeGetConsequentEventInputs(eventFlowMap)(createdEvent);
+    const preAppliedEvent = await makeValidateAndApply(eventFlowMap)(createdEvent);
+    const { consequentEvents } = await makeCreateConsequentEventInputs(eventFlowMap)(preAppliedEvent);
     consequentEvents.forEach(currentEvent => {
-      applyQueue.push({ currentEvent, causalEvent: createdEvent });
+      applyQueue.push({ currentEvent, causalEvent: preAppliedEvent });
     });
-    done(null, createdEvent);
-    return createdEvent;
+    applyQueueDone(null, preAppliedEvent);
+    return preAppliedEvent;
   } catch (e) {
-    done({ task: createdEvent, error: e });
+    applyQueueDone({ task: createdEvent, error: e });
     return { task: createdEvent, error: e } as EventError;
   }
 };

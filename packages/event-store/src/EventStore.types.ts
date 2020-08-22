@@ -1,4 +1,8 @@
-import { EventStore } from './makeEventStore';
+import { makeMainQueue } from './queue/makeMainQueue';
+import { EventStoreRepo } from './repo/EventStore.repo';
+import { makeReceive } from './queue/makeReceive';
+import { makeReplay } from './makeReplay';
+import { Observable } from 'rxjs';
 
 export interface BaseEventInput<Payload> {
   payload: Payload;
@@ -31,30 +35,64 @@ export interface StoredEvent<Payload> extends CreatedEvent<Payload> {
 
 export type Event<Payload> = StoredEvent<Payload>;
 
-export interface EventFlow<Payload = any> {
-  domain: string;
-  type: string;
-  description?: string;
+export interface EventFlow<PartialPayload = any, Payload extends PartialPayload = PartialPayload> {
+  readonly domain: string;
+  readonly type: string;
+  readonly description?: string;
 
-  samplePayload: Payload;
+  readonly meta?: {
+    readonly sideEffectFailedRetryAllowed?: number;
+  };
 
-  receiver: (
+  readonly samplePayload: PartialPayload | Payload;
+
+  readonly receive: (
     eventStore: EventStore
-  ) => (eventInputArgs: BaseEventInput<Payload>) => Promise<[CreatedEvent<Payload>, ...Array<CreatedEvent<any>>]>;
+  ) => (
+    eventInputArgs: BaseEventInput<PartialPayload>
+  ) => Promise<[CreatedEvent<Payload>, ...Array<CreatedEvent<any>>]>;
 
-  validator?: (event: CreatedEvent<Payload>) => Promise<Error | void> | Error | void;
-  executor?: (event: CreatedEvent<Payload>) => Promise<void> | void;
-  executorCanceler?: (event: CreatedEvent<Payload>) => Promise<void> | void;
+  readonly validate?: (event: CreatedEvent<Payload>) => Promise<Error | void> | Error | void;
 
-  consequentEventsCreator?: (causalEvent: CreatedEvent<Payload>) => Promise<BaseEvent<any>[]> | BaseEvent<any>[];
+  readonly preApply?: (event: CreatedEvent<Payload>) => Promise<CreatedEvent<Payload> | void> | Promise<void> | void;
+  readonly apply?: (event: CreatedEvent<Payload>) => Promise<void> | void;
+  readonly sideEffect?: (event: CreatedEvent<Payload>) => Promise<void> | void;
 
-  sideEffect?: (event: CreatedEvent<Payload>) => Promise<void> | void;
+  readonly cancelApply?: (event: CreatedEvent<Payload>) => Promise<void> | void;
+
+  readonly createConsequentEvents?: (
+    causalEvent: CreatedEvent<Payload>
+  ) => Promise<BaseEvent<any>[]> | BaseEvent<any>[];
 }
 
 export type EventTaskAndError = { task: CreatedEvent<any>; error: Error };
 
 export interface EventFlowMap {
-  [key: string]: EventFlow<any>;
+  [key: string]: EventFlow;
 }
 
-export type EventFlowAndEvent<Payload = any> = { eventFlow: EventFlow<Payload>; event: CreatedEvent<Payload> };
+export interface EventStore {
+  mainQueue: ReturnType<typeof makeMainQueue>;
+  eventStoreRepo: EventStoreRepo;
+  receive: ReturnType<typeof makeReceive>;
+  replay: ReturnType<typeof makeReplay>;
+  output$: Observable<EventStoreOutput>;
+}
+
+export enum SideEffectsState {
+  done = 'SideEffects:done',
+  retry = 'SideEffects:retry',
+  fail = 'SideEffects:fail'
+}
+
+export enum EventOutputState {
+  done = 'Event:done',
+  invalid = 'Event:invalid',
+  canceled = 'Event:canceled'
+}
+
+export interface EventStoreOutput {
+  state: SideEffectsState | EventOutputState;
+  error?: Error;
+  event: CreatedEvent<any>;
+}

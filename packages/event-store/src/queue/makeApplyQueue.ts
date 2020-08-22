@@ -1,4 +1,4 @@
-import { createRxQueue } from '../queue/RxQueue';
+import { createRxQueue } from './RxQueue';
 import { BaseEvent, CreatedEvent } from '../EventStore.types';
 import * as uuid from 'uuid/v4';
 

@@ -1,6 +1,6 @@
 import { ConnectionOptions } from 'typeorm';
-import { EventStore, makeEventStore } from '../makeEventStore';
-import { EventFlow } from '../EventStore.types';
+import { makeEventStore } from '../makeEventStore';
+import { EventFlow, EventStore } from '../EventStore.types';
 
 const defaultInMemDBOption = {
   type: 'sqlite',
@@ -22,7 +22,7 @@ export const getTestEventStore = async (allEventFlows: EventFlow[]) => {
     return eventStore;
   } else {
     eventStore = await makeEventStore(defaultInMenDBOptionEventSourcing)(allEventFlows);
-    eventStore.mainQueueProcessed$.subscribe();
+    eventStore.output$.subscribe(console.log);
     return eventStore;
   }
 };

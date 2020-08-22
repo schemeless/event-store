@@ -1,4 +1,4 @@
-import { CreatedEvent, EventFlowMap } from '../EventStore.types';
+import { BaseEvent, CreatedEvent, EventFlowMap } from '../EventStore.types';
 import * as Queue from 'better-queue';
 import { from, of, pipe } from 'rxjs';
 import * as Rx from 'rxjs/operators';
@@ -7,16 +7,20 @@ import { logEvent } from '../util/logEvent';
 
 const cancelEvent = (eventFlowMap: EventFlowMap) => async (event: CreatedEvent<any>) => {
   const eventFlow = getEventFlow(eventFlowMap)(event);
-  if (eventFlow.executorCanceler) {
+  if (eventFlow.cancelApply) {
     logEvent(event, '❌', 'cancel');
-    await eventFlow.executorCanceler(event);
+    await eventFlow.cancelApply(event);
   } else {
     logEvent(event, '🤔️', 'noCancel?');
   }
   return event;
 };
 
-export const cleanupAndCancelFailedEvent = (eventFlowMap: EventFlowMap, done: Queue.ProcessFunctionCb<any>) =>
+export const cleanupAndCancelFailedEvent = (
+  eventFlowMap: EventFlowMap,
+  done: Queue.ProcessFunctionCb<any>,
+  event: BaseEvent<any>
+) =>
   pipe(
     // call event canceler if failed
     Rx.concatMap(([doneEvents, eventTaskAndError]) => {

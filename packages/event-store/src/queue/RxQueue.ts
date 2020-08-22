@@ -24,7 +24,7 @@ const makeFailedEventQueueObservable = <TASK, RESULT, RETURN = [Queue<TASK, RESU
   return new Observable<RETURN>(observer => {
     queue.on('task_failed', (id, error) => {
       logger.warn('EventQueueObservable error');
-      logger.fatal('%o', error);
+      // logger.fatal('%o', error);
       observer.error(error);
     });
   });

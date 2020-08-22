@@ -1,6 +1,6 @@
-import { validateEvent } from './validateEvent';
+import { validate } from './validate';
 import { StandardEvent } from '../mockEvents';
-import { defaultEventCreator } from './defaultEventCreator';
+import { defaultEventCreator } from '../operators/defaultEventCreator';
 
 describe('validateEvent', () => {
   it('should throw an error on invalid', () => {
@@ -9,7 +9,7 @@ describe('validateEvent', () => {
       type: StandardEvent.type,
       payload: { positiveNumber: -1 }
     });
-    expect(validateEvent(StandardEvent, event)).rejects.toThrow(/Invalid positive number/);
+    expect(validate(StandardEvent, event)).rejects.toThrow(/Invalid positive number/);
   });
 
   it('should not throw an error on valid', () => {
@@ -18,6 +18,6 @@ describe('validateEvent', () => {
       type: StandardEvent.type,
       payload: { positiveNumber: 1 }
     });
-    expect(() => validateEvent(StandardEvent, event)).not.toThrow();
+    expect(() => validate(StandardEvent, event)).not.toThrow();
   });
 });

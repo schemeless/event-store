@@ -22,18 +22,18 @@ export const StandardEvent: EventFlow<Payload> = {
     positiveNumber: 1
   },
 
-  async validator(event: CreatedEvent<Payload>) {
+  async validate(event: CreatedEvent<Payload>) {
     if (event.payload.positiveNumber < 0) {
       return new Error(`Invalid positive number`);
     }
   },
 
-  async executor(event: CreatedEvent<Payload>) {
+  async apply(event: CreatedEvent<Payload>) {
     await wait(10);
     testObject.sum += event.payload.positiveNumber;
   },
 
-  executorCanceler(event: CreatedEvent<Payload>) {
+  cancelApply(event: CreatedEvent<Payload>) {
     testObject.sum -= event.payload.positiveNumber;
   },
 
@@ -41,5 +41,5 @@ export const StandardEvent: EventFlow<Payload> = {
     console.log('sideEffect called');
   },
 
-  receiver: eventStore => eventInputArgs => eventStore.receiver(StandardEvent)(eventInputArgs)
+  receive: eventStore => eventInputArgs => eventStore.receive(StandardEvent)(eventInputArgs)
 };

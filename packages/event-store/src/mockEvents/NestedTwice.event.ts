@@ -19,13 +19,13 @@ export const NestedTwiceEvent: EventFlow<Payload> = {
     positiveNumber: 1
   },
 
-  async validator(event: CreatedEvent<Payload>) {
+  async validate(event: CreatedEvent<Payload>) {
     if (event.payload.positiveNumber < 0) {
       throw new Error(`Invalid positive number`);
     }
   },
 
-  consequentEventsCreator(causalEvent) {
+  createConsequentEvents(causalEvent) {
     const nestedOnceEvent: BaseEvent<typeof NestedOnceEvent.samplePayload> = {
       domain: NestedOnceEvent.domain,
       type: NestedOnceEvent.type,
@@ -40,5 +40,5 @@ export const NestedTwiceEvent: EventFlow<Payload> = {
     console.log('sideEffect called');
   },
 
-  receiver: eventStore => eventInputArgs => eventStore.receiver(NestedTwiceEvent)(eventInputArgs)
+  receive: eventStore => eventInputArgs => eventStore.receive(NestedTwiceEvent)(eventInputArgs)
 };

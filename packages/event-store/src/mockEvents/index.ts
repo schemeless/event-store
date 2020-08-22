@@ -5,5 +5,11 @@ export { StandardEvent } from './standard.event';
 export { NestedOnceEvent } from './NestedOnce.event';
 export { NestedTwiceEvent } from './NestedTwice.event';
 import { EventFlow } from '../EventStore.types';
+import { FailsSideEffectEvent } from './FailSideEffect.event';
 
-export const testEventFlows: EventFlow<any>[] = [StandardEvent, NestedOnceEvent, NestedTwiceEvent];
+export const testEventFlows: EventFlow<any>[] = [
+  StandardEvent,
+  NestedOnceEvent,
+  NestedTwiceEvent,
+  FailsSideEffectEvent
+];

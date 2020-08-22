@@ -1,21 +1,20 @@
-import { createRxQueue } from './queue/RxQueue';
+import { createRxQueue } from './RxQueue';
 import * as Rx from 'rxjs/operators';
-import { BaseEvent, CreatedEvent, EventFlow, EventTaskAndError } from './EventStore.types';
+import { BaseEvent, CreatedEvent, EventFlow, EventTaskAndError } from '../EventStore.types';
 import { combineLatest, Observable } from 'rxjs';
-import * as Queue from 'better-queue';
-import { logEvent } from './util/logEvent';
-import { registerEventFlowTypes } from './operators/registerEventFlowTypes';
-import { applyRootEventAndCollectSucceed } from './operators/applyRootEventAndCollectSucceed';
-import { cleanupAndCancelFailedEvent } from './operators/cleanupAndCancelFailedEvent';
-import { racedQueueFailedOrDrained } from './operators/racedQueueFailedOrDrained';
-import { makeApplyQueue } from './operators/makeApplyQueue';
+import { logEvent } from '../util/logEvent';
+import { registerEventFlowTypes } from '../operators/registerEventFlowTypes';
+import { applyRootEventAndCollectSucceed } from '../operators/applyRootEventAndCollectSucceed';
+import { cleanupAndCancelFailedEvent } from '../operators/cleanupAndCancelFailedEvent';
+import { racedQueueFailedOrDrained } from '../operators/racedQueueFailedOrDrained';
+import { makeApplyQueue } from './makeApplyQueue';
 
 export const makeMainQueue = (eventFlows: EventFlow<any>[]) => {
   const mainQueue = createRxQueue<BaseEvent<any>, any>('main', { concurrent: 1 });
   const eventFlowMap = registerEventFlowTypes({}, eventFlows);
 
   const processed$ = mainQueue.process$.pipe(
-    Rx.concatMap(({ task, done }) => {
+    Rx.concatMap(({ task, done: mainQueueDone }) => {
       const applyQueue = makeApplyQueue();
       logEvent(task, '✨', 'received');
       applyQueue.push({ currentEvent: task });
@@ -24,7 +23,7 @@ export const makeMainQueue = (eventFlows: EventFlow<any>[]) => {
         racedQueueFailedOrDrained(applyQueue)
       ]).pipe(
         Rx.take(1),
-        cleanupAndCancelFailedEvent(eventFlowMap, done),
+        cleanupAndCancelFailedEvent(eventFlowMap, mainQueueDone, task),
         Rx.tap(() => applyQueue.queueInstance.destroy(() => undefined)),
         Rx.tap(() => logEvent(task, '🏁', 'finished'))
       );
@@ -34,8 +33,6 @@ export const makeMainQueue = (eventFlows: EventFlow<any>[]) => {
   return {
     processed$,
     queueInstance: mainQueue,
-    push: ((task, cb): Queue.Ticket => {
-      return mainQueue.push(task, cb);
-    }) as typeof mainQueue.push
+    push: mainQueue.push.bind(mainQueue) as typeof mainQueue.push
   };
 };
