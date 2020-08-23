@@ -1,5 +1,6 @@
 import { BaseEvent, CreatedEvent, EventFlow } from '../EventStore.types';
 import { NestedOnceEvent } from './NestedOnce.event';
+import { storeGet, storeSet } from './mockStore';
 
 const testObject = {
   sum: 0
@@ -9,6 +10,7 @@ const DOMAIN = 'test';
 const TYPE = 'nestedTwice';
 
 interface Payload {
+  key: string;
   positiveNumber: number;
 }
 
@@ -16,6 +18,7 @@ export const NestedTwiceEvent: EventFlow<Payload> = {
   domain: DOMAIN,
   type: TYPE,
   samplePayload: {
+    key: 's',
     positiveNumber: 1
   },
 
@@ -30,10 +33,21 @@ export const NestedTwiceEvent: EventFlow<Payload> = {
       domain: NestedOnceEvent.domain,
       type: NestedOnceEvent.type,
       payload: {
+        key: causalEvent.payload.key,
         positiveNumber: causalEvent.payload.positiveNumber - 1
       }
     };
     return [nestedOnceEvent, nestedOnceEvent];
+  },
+
+  async apply(event: CreatedEvent<Payload>) {
+    const num = storeGet(event.payload.key) || 0;
+    storeSet(event.payload.key, num + event.payload.positiveNumber);
+  },
+
+  cancelApply(event: CreatedEvent<Payload>) {
+    const num = storeGet(event.payload.key) || 0;
+    storeSet(event.payload.key, num - event.payload.positiveNumber);
   },
 
   sideEffect(event: CreatedEvent<Payload>) {

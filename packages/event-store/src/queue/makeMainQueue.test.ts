@@ -10,16 +10,15 @@ describe('Main Queue', () => {
     mainQueue.push({
       domain: NestedTwiceEvent.domain,
       type: NestedTwiceEvent.type,
-      payload: { positiveNumber: 1 }
+      payload: { key: 'MainQueue1', positiveNumber: 1 }
     });
     mainQueue.push(
       {
         domain: NestedOnceEvent.domain,
         type: NestedOnceEvent.type,
-        payload: { positiveNumber: 1 }
+        payload: { key: 'MainQueue2', positiveNumber: 1 }
       },
       (err, result) => {
-        console.log(err, result);
         cb();
       }
     );

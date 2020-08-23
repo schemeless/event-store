@@ -22,7 +22,7 @@ export const getTestEventStore = async (allEventFlows: EventFlow[]) => {
     return eventStore;
   } else {
     eventStore = await makeEventStore(defaultInMenDBOptionEventSourcing)(allEventFlows);
-    eventStore.output$.subscribe(console.log);
+    eventStore.output$.subscribe();
     return eventStore;
   }
 };

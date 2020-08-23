@@ -7,7 +7,7 @@ describe('validateEvent', () => {
     const event = defaultEventCreator({
       domain: StandardEvent.domain,
       type: StandardEvent.type,
-      payload: { positiveNumber: -1 }
+      payload: { key: 'validateEvent1', positiveNumber: -1 }
     });
     expect(validate(StandardEvent, event)).rejects.toThrow(/Invalid positive number/);
   });
@@ -16,7 +16,7 @@ describe('validateEvent', () => {
     const event = defaultEventCreator({
       domain: StandardEvent.domain,
       type: StandardEvent.type,
-      payload: { positiveNumber: 1 }
+      payload: { key: 'validateEvent2', positiveNumber: 1 }
     });
     expect(() => validate(StandardEvent, event)).not.toThrow();
   });

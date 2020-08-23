@@ -1,13 +1,11 @@
 import { CreatedEvent, EventFlow } from '../EventStore.types';
-
-export const testObject = {
-  sum: 0
-};
+import { storeGet, storeSet } from './mockStore';
 
 const DOMAIN = 'test';
 const TYPE = 'standard';
 
 interface Payload {
+  key: string;
   positiveNumber: number;
 }
 
@@ -19,6 +17,7 @@ export const StandardEvent: EventFlow<Payload> = {
   domain: DOMAIN,
   type: TYPE,
   samplePayload: {
+    key: 's',
     positiveNumber: 1
   },
 
@@ -30,11 +29,13 @@ export const StandardEvent: EventFlow<Payload> = {
 
   async apply(event: CreatedEvent<Payload>) {
     await wait(10);
-    testObject.sum += event.payload.positiveNumber;
+    const num = storeGet(event.payload.key) || 0;
+    storeSet(event.payload.key, num + event.payload.positiveNumber);
   },
 
   cancelApply(event: CreatedEvent<Payload>) {
-    testObject.sum -= event.payload.positiveNumber;
+    const num = storeGet(event.payload.key) || 0;
+    storeSet(event.payload.key, num - event.payload.positiveNumber);
   },
 
   sideEffect(event: CreatedEvent<Payload>) {
@@ -42,7 +43,6 @@ export const StandardEvent: EventFlow<Payload> = {
   },
 
   receive: eventStore => eventInputArgs => {
-    console.log(eventInputArgs);
     return eventStore.receive(StandardEvent)(eventInputArgs);
   }
 };
