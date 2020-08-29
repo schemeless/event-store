@@ -54,7 +54,9 @@ export interface EventFlow<PartialPayload = any, Payload extends PartialPayload 
 
   readonly validate?: (event: CreatedEvent<Payload>) => Promise<Error | void> | Error | void;
 
-  readonly preApply?: (event: CreatedEvent<Payload>) => Promise<CreatedEvent<Payload> | void> | Promise<void> | void;
+  readonly preApply?: (
+    event: CreatedEvent<Payload>
+  ) => Promise<CreatedEvent<Payload> | void> | CreatedEvent<Payload> | void;
   readonly apply?: (event: CreatedEvent<Payload>) => Promise<void> | void;
   readonly sideEffect?: (event: CreatedEvent<Payload>) => Promise<void> | void;
 

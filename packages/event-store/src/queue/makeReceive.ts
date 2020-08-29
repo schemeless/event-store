@@ -1,9 +1,12 @@
 import { makeMainQueue } from './makeMainQueue';
 import { BaseEventInput, CreatedEvent, EventFlow, EventTaskAndError } from '../EventStore.types';
 
-export const makeReceive = (mainQueue: ReturnType<typeof makeMainQueue>) => <Payload>(
-  eventFlow: EventFlow<Payload>
-) => (eventInput: BaseEventInput<Payload>): Promise<[CreatedEvent<Payload>, ...Array<CreatedEvent<any>>]> => {
+export const makeReceive = (mainQueue: ReturnType<typeof makeMainQueue>) => <
+  PartialPayload,
+  Payload extends PartialPayload
+>(
+  eventFlow: EventFlow<PartialPayload, Payload>
+) => (eventInput: BaseEventInput<PartialPayload>): Promise<[CreatedEvent<Payload>, ...Array<CreatedEvent<any>>]> => {
   const event = Object.assign({}, eventInput, {
     domain: eventFlow.domain,
     type: eventFlow.type
