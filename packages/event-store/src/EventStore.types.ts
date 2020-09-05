@@ -4,8 +4,9 @@ import { makeReceive } from './queue/makeReceive';
 import { makeReplay } from './makeReplay';
 import { Observable } from 'rxjs';
 
-export interface BaseEventInput<Payload> {
+export interface BaseEventInput<Payload, META = undefined> {
   payload: Payload;
+  meta?: META;
 
   identifier?: string;
   trackingId?: string;
@@ -13,7 +14,7 @@ export interface BaseEventInput<Payload> {
   causationId?: string;
 }
 
-export interface BaseEvent<Payload> extends BaseEventInput<Payload> {
+export interface BaseEvent<Payload, META = undefined> extends BaseEventInput<Payload, META> {
   domain: string;
   type: string;
   payload: Payload;
@@ -24,16 +25,16 @@ export interface BaseEvent<Payload> extends BaseEventInput<Payload> {
   causationId?: string;
 }
 
-export interface CreatedEvent<Payload> extends BaseEvent<Payload> {
+export interface CreatedEvent<Payload, META = undefined> extends BaseEvent<Payload, META> {
   trackingId: string;
   readonly created: Date;
 }
 
-export interface StoredEvent<Payload> extends CreatedEvent<Payload> {
+export interface StoredEvent<Payload, META = undefined> extends CreatedEvent<Payload, META> {
   readonly id?: number;
 }
 
-export type Event<Payload> = StoredEvent<Payload>;
+export type Event<Payload, META = undefined> = StoredEvent<Payload, META>;
 
 export interface EventFlow<PartialPayload = any, Payload extends PartialPayload = PartialPayload> {
   readonly domain: string;
@@ -44,7 +45,10 @@ export interface EventFlow<PartialPayload = any, Payload extends PartialPayload 
     readonly sideEffectFailedRetryAllowed?: number;
   };
 
-  readonly samplePayload: PartialPayload | Payload;
+  readonly eventType?: CreatedEvent<Payload>;
+  readonly payloadType?: PartialPayload | Payload;
+
+  readonly samplePayload?: PartialPayload | Payload;
 
   readonly receive: (
     eventStore: EventStore
@@ -55,9 +59,11 @@ export interface EventFlow<PartialPayload = any, Payload extends PartialPayload 
   readonly validate?: (event: CreatedEvent<Payload>) => Promise<Error | void> | Error | void;
 
   readonly preApply?: (
-    event: CreatedEvent<Payload>
+    event: CreatedEvent<PartialPayload>
   ) => Promise<CreatedEvent<Payload> | void> | CreatedEvent<Payload> | void;
+
   readonly apply?: (event: CreatedEvent<Payload>) => Promise<void> | void;
+
   readonly sideEffect?: (event: CreatedEvent<Payload>) => Promise<void> | void;
 
   readonly cancelApply?: (event: CreatedEvent<Payload>) => Promise<void> | void;
@@ -79,6 +85,28 @@ export interface EventStore {
   receive: ReturnType<typeof makeReceive>;
   replay: ReturnType<typeof makeReplay>;
   output$: Observable<EventStoreOutput>;
+}
+
+interface EventObserverStaticFilter {
+  domain: string;
+  type: string;
+  state: SideEffectsState | EventOutputState;
+}
+
+interface EventObserverFunctionFilter {
+  (event: CreatedEvent<any>): Promise<boolean> | boolean;
+}
+
+type EventObserverFilter = EventObserverStaticFilter | EventObserverFunctionFilter;
+
+export interface EventObserver<Payload> {
+  filters: EventObserverFilter[];
+
+  readonly apply?: (event: CreatedEvent<Payload>) => Promise<void> | void;
+
+  readonly sideEffect?: (event: CreatedEvent<Payload>) => Promise<void> | void;
+
+  readonly cancelApply?: (event: CreatedEvent<Payload>) => Promise<void> | void;
 }
 
 export enum SideEffectsState {

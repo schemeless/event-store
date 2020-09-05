@@ -50,7 +50,7 @@ export class EventStoreRepo {
 
   createEventEntity = (event: CreatedEvent<any>): EventStoreEntity => {
     const newEventEntity = new EventStoreEntity();
-    const { trackingId, domain, type, payload, created, correlationId, causationId, identifier } = event;
+    const { trackingId, domain, type, payload, meta, created, correlationId, causationId, identifier } = event;
 
     Object.assign(newEventEntity, {
       trackingId,
@@ -63,6 +63,10 @@ export class EventStoreRepo {
     });
 
     newEventEntity.payload = JSON.stringify(payload);
+
+    if (meta) {
+      newEventEntity.meta = JSON.stringify(meta);
+    }
 
     return newEventEntity;
   };

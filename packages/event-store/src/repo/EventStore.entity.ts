@@ -12,6 +12,9 @@ export class EventStoreEntity {
   type: string;
 
   @Column('text')
+  meta: string;
+
+  @Column('text')
   payload: string;
 
   @Column('varchar', { nullable: true, length: 64 })
