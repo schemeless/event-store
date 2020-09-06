@@ -1,15 +1,40 @@
 import { ConnectionOptions } from 'typeorm';
 import * as Rx from 'rxjs/operators';
 import { EventStoreRepo } from './repo/EventStore.repo';
-import { CreatedEvent, EventFlow, EventOutputState, EventStore, EventTaskAndError } from './EventStore.types';
+import {
+  CreatedEvent,
+  EventFlow,
+  EventOutput,
+  EventOutputState,
+  EventStore,
+  EventTaskAndError,
+  SuccessEventObserver
+} from './EventStore.types';
 import { makeMainQueue } from './queue/makeMainQueue';
+import { makeObserverQueue } from './queue/makeObserverQueue';
 import { makeReceive } from './queue/makeReceive';
 import { makeReplay } from './makeReplay';
 import { makeSideEffectQueue } from './queue/makeSideEffectQueue';
-import { from, merge } from 'rxjs';
+import { from, merge, Observable, Subject } from 'rxjs';
+
+const assignObserver = (output$: Observable<EventOutput>, successEventObservers: SuccessEventObserver<any>[]) => {
+  const observerQueue = makeObserverQueue(successEventObservers);
+  const result$ = output$.pipe(
+    Rx.tap(eventOutput => {
+      if (eventOutput.state === EventOutputState.success) {
+        observerQueue.push(eventOutput.event);
+      }
+    })
+  );
+  return {
+    result$,
+    observerQueue
+  };
+};
 
 export const makeEventStore = (connectionOptions: ConnectionOptions) => async (
-  eventFlows: EventFlow[]
+  eventFlows: EventFlow[],
+  successEventObservers: SuccessEventObserver<any>[] = []
 ): Promise<EventStore> => {
   const eventStoreRepo = new EventStoreRepo(connectionOptions);
   const mainQueue = makeMainQueue(eventFlows);
@@ -35,7 +60,7 @@ export const makeEventStore = (connectionOptions: ConnectionOptions) => async (
         return from(
           doneEvents.map(e => ({
             event: e,
-            state: EventOutputState.done
+            state: EventOutputState.success
           }))
         );
       } else {
@@ -48,7 +73,9 @@ export const makeEventStore = (connectionOptions: ConnectionOptions) => async (
     })
   );
 
-  const output$ = merge(mainQueueProcessed$, sideEffectQueue.processed$);
+  const doneAndSideEffect$ = merge(mainQueueProcessed$, sideEffectQueue.processed$);
+  const { result$, observerQueue } = assignObserver(doneAndSideEffect$, successEventObservers);
+  const output$ = merge(result$, observerQueue.processed$);
 
   return {
     mainQueue,

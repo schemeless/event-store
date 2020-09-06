@@ -74,11 +74,10 @@ export class EventStoreRepo {
   storeEvents = async (events: CreatedEvent<any>[]) => {
     await this.init();
     const allEventEntities = events.map(this.createEventEntity);
-    await getManager(this.conn.name).transaction(async entityManager => {
-      await allEventEntities.reduce<Promise<any>>(async (acc, currentEventEntity) => {
-        if (acc) await acc;
+    await this.conn.transaction(async entityManager => {
+      for await (const currentEventEntity of allEventEntities) {
         await entityManager.save(currentEventEntity);
-      }, null);
+      }
     });
   };
 }

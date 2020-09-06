@@ -84,29 +84,20 @@ export interface EventStore {
   eventStoreRepo: EventStoreRepo;
   receive: ReturnType<typeof makeReceive>;
   replay: ReturnType<typeof makeReplay>;
-  output$: Observable<EventStoreOutput>;
+  output$: Observable<EventOutput>;
 }
 
 interface EventObserverStaticFilter {
   domain: string;
   type: string;
-  state: SideEffectsState | EventOutputState;
 }
 
-interface EventObserverFunctionFilter {
-  (event: CreatedEvent<any>): Promise<boolean> | boolean;
-}
+type EventObserverFilter = EventObserverStaticFilter;
 
-type EventObserverFilter = EventObserverStaticFilter | EventObserverFunctionFilter;
-
-export interface EventObserver<Payload> {
+export interface SuccessEventObserver<Payload = any> {
   filters: EventObserverFilter[];
 
   readonly apply?: (event: CreatedEvent<Payload>) => Promise<void> | void;
-
-  readonly sideEffect?: (event: CreatedEvent<Payload>) => Promise<void> | void;
-
-  readonly cancelApply?: (event: CreatedEvent<Payload>) => Promise<void> | void;
 }
 
 export enum SideEffectsState {
@@ -116,13 +107,17 @@ export enum SideEffectsState {
 }
 
 export enum EventOutputState {
-  done = 'Event:done',
+  success = 'Event:success',
   invalid = 'Event:invalid',
   canceled = 'Event:canceled'
 }
 
-export interface EventStoreOutput {
-  state: SideEffectsState | EventOutputState;
+export enum EventObserverState {
+  success = 'Observer:success'
+}
+
+export interface EventOutput<Payload = any> {
+  state: SideEffectsState | EventOutputState | EventObserverState;
   error?: Error;
-  event: CreatedEvent<any>;
+  event: CreatedEvent<Payload>;
 }

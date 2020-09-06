@@ -1,6 +1,6 @@
 import { ConnectionOptions } from 'typeorm';
 import { makeEventStore } from '../makeEventStore';
-import { EventFlow, EventStore } from '../EventStore.types';
+import { EventFlow, EventStore, SuccessEventObserver } from '../EventStore.types';
 
 const defaultInMemDBOption = {
   type: 'sqlite',
@@ -8,7 +8,7 @@ const defaultInMemDBOption = {
   dropSchema: true,
   synchronize: true,
   logger: 'advanced-console',
-  logging: ['error', 'warn']
+  logging: 'all'
 } as ConnectionOptions;
 
 const defaultInMenDBOptionEventSourcing: ConnectionOptions = Object.assign({}, defaultInMemDBOption, {
@@ -17,12 +17,15 @@ const defaultInMenDBOptionEventSourcing: ConnectionOptions = Object.assign({}, d
 
 let eventStore: EventStore;
 
-export const getTestEventStore = async (allEventFlows: EventFlow[]) => {
+export const getTestEventStore = async (
+  allEventFlows: EventFlow[],
+  successEventObservers: SuccessEventObserver<any>[]
+) => {
   if (eventStore) {
     return eventStore;
   } else {
-    eventStore = await makeEventStore(defaultInMenDBOptionEventSourcing)(allEventFlows);
-    eventStore.output$.subscribe();
+    eventStore = await makeEventStore(defaultInMenDBOptionEventSourcing)(allEventFlows, successEventObservers);
+    eventStore.output$.subscribe(console.log);
     return eventStore;
   }
 };

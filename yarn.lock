@@ -2247,6 +2247,11 @@
   resolved "https://registry.yarnpkg.com/@types/node/-/node-12.12.42.tgz#d0d1149336bd07540dd1ea576692829d575dec34"
   integrity sha512-R/9QdYFLL9dE9l5cWWzWIZByVGFd7lk7JVOJ7KD+E1SJ4gni7XJRLz9QTjyYQiHIqEAgku9VgxdLjMlhhUaAFg==
 
+"@types/node@^7.0.5":
+  version "7.10.12"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-7.10.12.tgz#9d30258a562bfd99adfe8fcff1244a5943674296"
+  integrity sha512-SieeKQUj5NbRKZtRH/6T3H2XQCraXqSEc+gABTXNtL4uwPtXmoZEaHJ3WJylfwF3vJzj5ha6Aq8h9dbKFBINiQ==
+
 "@types/normalize-package-data@^2.4.0":
   version "2.4.0"
   resolved "https://registry.yarnpkg.com/@types/normalize-package-data/-/normalize-package-data-2.4.0.tgz#e486d0d97396d79beedd0a6e33f4534ff6b4973e"
@@ -4207,6 +4212,13 @@ define-property@^2.0.2:
   dependencies:
     is-descriptor "^1.0.2"
     isobject "^3.0.1"
+
+delay.ts@^1.1.0:
+  version "1.1.0"
+  resolved "https://registry.yarnpkg.com/delay.ts/-/delay.ts-1.1.0.tgz#dac5e8e8d4d4b1077970dbf84c03ad9e29b0cfe4"
+  integrity sha1-2sXo6NTUsQd5cNv4TAOtnimwz+Q=
+  dependencies:
+    "@types/node" "^7.0.5"
 
 delayed-stream@~1.0.0:
   version "1.0.0"

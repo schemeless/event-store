@@ -1,7 +1,7 @@
 import { makeSideEffectQueue } from './makeSideEffectQueue';
-import { FailsSideEffectEvent } from '../mockEvents/FailSideEffect.event';
+import { FailsSideEffectEvent } from '../mocks/FailSideEffect.event';
 import { defaultEventCreator } from '../operators/defaultEventCreator';
-import { storeSet } from '../mockEvents/mockStore';
+import { storeSet } from '../mocks/mockStore';
 import { SideEffectsState } from '../EventStore.types';
 
 const spy = jest.spyOn(FailsSideEffectEvent, 'sideEffect');

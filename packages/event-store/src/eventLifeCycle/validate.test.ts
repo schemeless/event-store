@@ -1,5 +1,5 @@
 import { validate } from './validate';
-import { StandardEvent } from '../mockEvents';
+import { StandardEvent } from '../mocks';
 import { defaultEventCreator } from '../operators/defaultEventCreator';
 
 describe('validateEvent', () => {

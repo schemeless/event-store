@@ -11,8 +11,8 @@ export class EventStoreEntity {
   @Column('varchar', { length: 32 })
   type: string;
 
-  @Column('text')
-  meta: string;
+  @Column('text', { nullable: true })
+  meta?: string;
 
   @Column('text')
   payload: string;

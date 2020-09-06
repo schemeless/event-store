@@ -1,7 +1,7 @@
 import { makeMainQueue } from './makeMainQueue';
-import { StandardEvent } from '../mockEvents/Standard.event';
-import { NestedOnceEvent } from '../mockEvents/NestedOnce.event';
-import { NestedTwiceEvent } from '../mockEvents/NestedTwice.event';
+import { StandardEvent } from '../mocks/Standard.event';
+import { NestedOnceEvent } from '../mocks/NestedOnce.event';
+import { NestedTwiceEvent } from '../mocks/NestedTwice.event';
 
 describe('Main Queue', () => {
   it('should run', cb => {

@@ -1,4 +1,4 @@
-import { EventFlow } from './EventStore.types';
+import { BaseEvent, CreatedEvent, EventFlow } from './EventStore.types';
 import { EventStoreRepo } from './repo/EventStore.repo';
 import { registerEventFlowTypes } from './operators/registerEventFlowTypes';
 import { logger } from './util/logger';
@@ -17,9 +17,9 @@ export const makeReplay = (eventFlows: EventFlow[], eventStoreRepo: EventStoreRe
         if (acc) await acc;
         const EventFlow = getEventFlow(eventFlowMap)(currentEvent);
         currentEvent.payload = JSON.parse(currentEvent.payload);
-        logEvent(currentEvent, '✅️️', 'Apply');
+        logEvent(currentEvent as CreatedEvent<any>, '✅️️', 'Apply');
         if (EventFlow.apply) {
-          await EventFlow.apply(currentEvent);
+          await EventFlow.apply(currentEvent as CreatedEvent<any>);
         }
       }, null);
       page++;
