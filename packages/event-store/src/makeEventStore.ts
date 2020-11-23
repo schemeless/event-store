@@ -1,11 +1,10 @@
-import { ConnectionOptions } from 'typeorm';
 import * as Rx from 'rxjs/operators';
-import { EventStoreRepo } from './repo/EventStore.repo';
 import {
   CreatedEvent,
   EventFlow,
   EventOutputState,
   EventTaskAndError,
+  IEventStoreRepo,
   SuccessEventObserver,
 } from '@schemeless/event-store-types';
 import { makeMainQueue } from './queue/makeMainQueue';
@@ -31,11 +30,10 @@ const assignObserver = (output$: Observable<EventOutput>, successEventObservers:
   };
 };
 
-export const makeEventStore = (connectionOptions: ConnectionOptions) => async (
+export const makeEventStore = (eventStoreRepo: IEventStoreRepo) => async (
   eventFlows: EventFlow[],
   successEventObservers: SuccessEventObserver<any>[] = []
 ): Promise<EventStore> => {
-  const eventStoreRepo = new EventStoreRepo(connectionOptions);
   const mainQueue = makeMainQueue(eventFlows);
   const sideEffectQueue = makeSideEffectQueue(eventFlows);
 

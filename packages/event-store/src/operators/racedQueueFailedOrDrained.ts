@@ -1,6 +1,6 @@
+import type { EventTaskAndError } from '@schemeless/event-store-types';
 import { ApplyQueue } from '../queue/RxQueue';
 import { Observable, of, race } from 'rxjs';
-import { EventTaskAndError } from '@schemeless/event-store-types';
 import * as Rx from 'rxjs/operators';
 import { isEventTaskError } from './isEventTaskError';
 

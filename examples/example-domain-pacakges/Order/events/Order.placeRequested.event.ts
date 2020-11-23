@@ -1,4 +1,4 @@
-import { BaseEvent, EventFlow } from '@schemeless/event-store';
+import type { BaseEvent, EventFlow } from '@schemeless/event-store';
 import { v4 as uuid } from 'uuid';
 import { AccountPackage } from '../../index';
 import { OrderType } from '../Order.entity';
@@ -25,10 +25,10 @@ export const OrderPlaceRequested: EventFlow<OrderPlaceRequestedEventPayload> = {
     type: OrderType.BUY,
     tokenId: 'tokenId',
     amount: 10,
-    unitPrice: 10
+    unitPrice: 10,
   },
 
-  validator: async event => {
+  validator: async (event) => {
     //check whether the user own the account
     const account = await AccountPackage.Query.getAccountById(event.payload.accountId);
 
@@ -81,7 +81,7 @@ export const OrderPlaceRequested: EventFlow<OrderPlaceRequestedEventPayload> = {
     }
   },
 
-  consequentEventsCreator: async parentEvent => {
+  consequentEventsCreator: async (parentEvent) => {
     const { userId, accountId, tokenId, unitPrice, amount, type } = parentEvent.payload;
 
     const orderPlacedEvent: BaseEvent<typeof OrderPlaced.samplePayload> = {
@@ -94,13 +94,13 @@ export const OrderPlaceRequested: EventFlow<OrderPlaceRequestedEventPayload> = {
         type,
         tokenId,
         amount,
-        unitPrice
-      }
+        unitPrice,
+      },
     };
 
     return [orderPlacedEvent];
   },
 
   receiver: (eventStoreService, eventInputArgs) =>
-    eventStoreService.receiveEventInput(OrderPlaceRequested.domain, OrderPlaceRequested.type, eventInputArgs)
+    eventStoreService.receiveEventInput(OrderPlaceRequested.domain, OrderPlaceRequested.type, eventInputArgs),
 };

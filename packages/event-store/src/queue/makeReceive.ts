@@ -1,4 +1,4 @@
-import { BaseEventInput, CreatedEvent, EventFlow, EventTaskAndError } from '@schemeless/event-store-types';
+import type { BaseEventInput, CreatedEvent, EventFlow, EventTaskAndError } from '@schemeless/event-store-types';
 import { makeMainQueue } from './makeMainQueue';
 
 export const makeReceive = (mainQueue: ReturnType<typeof makeMainQueue>) => <

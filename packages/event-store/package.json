@@ -29,6 +29,7 @@
   },
   "devDependencies": {
     "@schemeless/event-store-types": "^1.0.0",
+    "@schemeless/event-store-adapter-typeorm": "^1.0.0",
     "@types/better-queue": "^3.8.2",
     "@types/debug": "^4.1.5",
     "@types/jest": "^26.0.15",

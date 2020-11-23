@@ -1,4 +1,4 @@
-import { BaseEvent, BaseEventInput, CreatedEvent, EventFlow, StoredEvent } from '@schemeless/event-store-types';
+import type { BaseEvent, BaseEventInput, CreatedEvent, EventFlow, StoredEvent } from '@schemeless/event-store-types';
 import { StandardEvent } from './standard.event';
 import { storeGet, storeSet } from './mockStore';
 

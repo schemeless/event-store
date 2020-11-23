@@ -1,4 +1,4 @@
-import { BaseEvent, EventFlow } from '@schemeless/event-store';
+import type { BaseEvent, EventFlow } from '@schemeless/event-store';
 import { AccountCredit } from './Account.credit.event';
 
 interface Payload {
@@ -22,7 +22,7 @@ export const AccountTraded: EventFlow<Payload> = {
 
     secondaryAccountId: 'secondaryAccountId',
     secondaryTokenId: 'token', // Token
-    secondaryTokenAmount: 100
+    secondaryTokenAmount: 100,
   },
 
   consequentEventsCreator: async (
@@ -34,7 +34,7 @@ export const AccountTraded: EventFlow<Payload> = {
       primaryTokenId,
       secondaryAccountId,
       secondaryTokenAmount,
-      secondaryTokenId
+      secondaryTokenId,
     } = parentEvent.payload;
 
     const depositPrimaryEvent = {
@@ -43,8 +43,8 @@ export const AccountTraded: EventFlow<Payload> = {
       payload: {
         accountId: primaryAccountId,
         tokenId: secondaryTokenId,
-        amount: secondaryTokenAmount
-      }
+        amount: secondaryTokenAmount,
+      },
     };
 
     const depositSecondaryEvent = {
@@ -53,13 +53,13 @@ export const AccountTraded: EventFlow<Payload> = {
       payload: {
         accountId: secondaryAccountId,
         tokenId: primaryTokenId,
-        amount: primaryTokenAmount
-      }
+        amount: primaryTokenAmount,
+      },
     };
 
     return [depositPrimaryEvent, depositSecondaryEvent];
   },
 
   receiver: (eventStoreService, eventInputArgs) =>
-    eventStoreService.receiveEventInput(AccountTraded.domain, AccountTraded.type, eventInputArgs)
+    eventStoreService.receiveEventInput(AccountTraded.domain, AccountTraded.type, eventInputArgs),
 };

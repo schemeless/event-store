@@ -1,4 +1,4 @@
-import { BaseEvent, CreatedEvent, EventFlowMap } from '@schemeless/event-store-types';
+import type { BaseEvent, CreatedEvent, EventFlowMap } from '@schemeless/event-store-types';
 import * as Queue from 'better-queue';
 import { from, of, pipe } from 'rxjs';
 import * as Rx from 'rxjs/operators';

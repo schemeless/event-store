@@ -1,4 +1,4 @@
-import { CreatedEvent, EventFlowMap, EventTaskAndError } from '@schemeless/event-store-types';
+import type { CreatedEvent, EventFlowMap, EventTaskAndError } from '@schemeless/event-store-types';
 import { defaultEventCreator } from './defaultEventCreator';
 import * as Rx from 'rxjs/operators';
 import { ApplyQueue } from '../queue/RxQueue';

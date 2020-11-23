@@ -1,6 +1,7 @@
+import type { EventFlow, SuccessEventObserver } from '@schemeless/event-store-types';
+import { EventStoreRepo } from '@schemeless/event-store-adapter-typeorm';
 import { ConnectionOptions } from 'typeorm';
 import { makeEventStore } from '../makeEventStore';
-import { EventFlow, SuccessEventObserver } from '@schemeless/event-store-types';
 import { EventStore } from '../EventStore.types';
 
 const defaultInMemDBOption = {
@@ -25,7 +26,8 @@ export const getTestEventStore = async (
   if (eventStore) {
     return eventStore;
   } else {
-    eventStore = await makeEventStore(defaultInMenDBOptionEventSourcing)(allEventFlows, successEventObservers);
+    const eventStoreRepo = new EventStoreRepo(defaultInMenDBOptionEventSourcing);
+    eventStore = await makeEventStore(eventStoreRepo)(allEventFlows, successEventObservers);
     eventStore.output$.subscribe(console.log);
     return eventStore;
   }

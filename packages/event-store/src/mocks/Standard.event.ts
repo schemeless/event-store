@@ -1,4 +1,4 @@
-import { CreatedEvent, EventFlow } from '@schemeless/event-store-types';
+import type { CreatedEvent, EventFlow } from '@schemeless/event-store-types';
 import { storeGet, storeSet } from './mockStore';
 
 const DOMAIN = 'test';

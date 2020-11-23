@@ -1,4 +1,4 @@
-import { CreatedEvent } from './EventStore.types';
+import type { CreatedEvent } from './EventStore.types';
 
 export interface IEventStoreEntity {
   readonly id: number;

@@ -1,4 +1,4 @@
-import { BaseEvent, EventFlow } from '@schemeless/event-store';
+import type { BaseEvent, EventFlow } from '@schemeless/event-store';
 import { OrderEntity, OrderStatus, OrderType } from '../Order.entity';
 import { getOrderEntityRepository } from '../Order.entity.repository';
 import { config } from '../../../service/src/config';
@@ -26,7 +26,7 @@ export const OrderPlaced: EventFlow<OrderPlacedEventPayload> = {
     type: OrderType.BUY,
     tokenId: '<tokenId>',
     amount: 100,
-    unitPrice: 2
+    unitPrice: 2,
   },
 
   executor: async (event): Promise<void> => {
@@ -63,20 +63,20 @@ export const OrderPlaced: EventFlow<OrderPlacedEventPayload> = {
       payload: {
         accountId,
         tokenId: type === OrderType.BUY ? config.baseToken : tokenId,
-        amount: type === OrderType.BUY ? unitPrice * amount : amount
-      }
+        amount: type === OrderType.BUY ? unitPrice * amount : amount,
+      },
     };
 
     const tryMatchedEvent = {
       domain: OrderTryMatched.domain,
       type: OrderTryMatched.type,
       payload: {
-        orderId: id
-      }
+        orderId: id,
+      },
     };
     return [debitEvent, tryMatchedEvent];
   },
 
   receiver: (eventStoreService, eventInputArgs) =>
-    eventStoreService.receiveEventInput(OrderPlaced.domain, OrderPlaced.type, eventInputArgs)
+    eventStoreService.receiveEventInput(OrderPlaced.domain, OrderPlaced.type, eventInputArgs),
 };

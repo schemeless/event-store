@@ -1,5 +1,5 @@
+import type { IEventStoreEntity } from '@schemeless/event-store-types';
 import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
-import { IEventStoreEntity } from '@schemeless/event-store-types';
 
 @Entity()
 export class EventStoreEntity implements IEventStoreEntity {

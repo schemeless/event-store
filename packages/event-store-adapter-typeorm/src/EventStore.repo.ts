@@ -1,4 +1,4 @@
-import { CreatedEvent, IEventStoreRepo } from '@schemeless/event-store-types';
+import type { CreatedEvent, IEventStoreRepo } from '@schemeless/event-store-types';
 import { Connection, Repository } from 'typeorm';
 import { EventStoreEntity } from './EventStore.entity';
 import { ConnectionOptions } from 'typeorm';

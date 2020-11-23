@@ -1,4 +1,4 @@
-import { BaseEvent, CreatedEvent, EventFlow } from '@schemeless/event-store-types';
+import type { BaseEvent, CreatedEvent, EventFlow } from '@schemeless/event-store-types';
 import { NestedOnceEvent } from './NestedOnce.event';
 import { storeGet, storeSet } from './mockStore';
 

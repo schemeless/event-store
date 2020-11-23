@@ -1,6 +1,6 @@
 import { createRxQueue } from './RxQueue';
 import * as Rx from 'rxjs/operators';
-import { BaseEvent, CreatedEvent, EventFlow, EventTaskAndError } from '@schemeless/event-store-types';
+import type { BaseEvent, CreatedEvent, EventFlow, EventTaskAndError } from '@schemeless/event-store-types';
 import { combineLatest, Observable } from 'rxjs';
 import { logEvent } from '../util/logEvent';
 import { registerEventFlowTypes } from '../operators/registerEventFlowTypes';

@@ -1,5 +1,10 @@
 import type { Observable } from 'rxjs';
-import { CreatedEvent, EventObserverState, EventOutputState, SideEffectsState } from '@schemeless/event-store-types';
+import type {
+  CreatedEvent,
+  EventObserverState,
+  EventOutputState,
+  SideEffectsState,
+} from '@schemeless/event-store-types';
 
 import { makeMainQueue } from './queue/makeMainQueue';
 import { makeReceive } from './queue/makeReceive';

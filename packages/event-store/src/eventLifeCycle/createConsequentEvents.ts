@@ -1,5 +1,5 @@
 import * as R from 'ramda';
-import { BaseEvent, CreatedEvent, EventFlowMap } from '@schemeless/event-store-types';
+import type { BaseEvent, CreatedEvent, EventFlowMap } from '@schemeless/event-store-types';
 import { logEvent } from '../util/logEvent';
 import { getEventFlow } from '../operators/getEventFlow';
 

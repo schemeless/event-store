@@ -1,4 +1,4 @@
-import { BaseEvent, EventFlow } from '@schemeless/event-store';
+import type { BaseEvent, EventFlow } from '@schemeless/event-store';
 import { AccountDebit } from './Account.debit.event';
 import { AccountCredit } from './Account.credit.event';
 
@@ -18,10 +18,10 @@ export const AccountTransferred: EventFlow<Payload> = {
     fromAccountId: 'accountId1',
     toAccountId: 'accountId2',
     tokenId: 'tokenId',
-    amount: 10
+    amount: 10,
   },
 
-  validator: async event => {
+  validator: async (event) => {
     if (event.payload.fromAccountId === event.payload.toAccountId) {
       return new Error("AccountTransferred: from and to can't be same account: " + event.payload.fromAccountId);
     }
@@ -42,8 +42,8 @@ export const AccountTransferred: EventFlow<Payload> = {
       payload: {
         accountId: fromAccountId,
         tokenId,
-        amount
-      }
+        amount,
+      },
     };
 
     const creditEvent: BaseEvent<typeof AccountCredit.samplePayload> = {
@@ -52,13 +52,13 @@ export const AccountTransferred: EventFlow<Payload> = {
       payload: {
         accountId: toAccountId,
         tokenId,
-        amount
-      }
+        amount,
+      },
     };
 
     return [debitEvent, creditEvent];
   },
 
   receiver: (eventStoreService, eventInputArgs) =>
-    eventStoreService.receiveEventInput(AccountTransferred.domain, AccountTransferred.type, eventInputArgs)
+    eventStoreService.receiveEventInput(AccountTransferred.domain, AccountTransferred.type, eventInputArgs),
 };

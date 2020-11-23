@@ -1,4 +1,4 @@
-import { CreatedEvent, EventTaskAndError } from '@schemeless/event-store-types';
+import type { CreatedEvent, EventTaskAndError } from '@schemeless/event-store-types';
 
 export const isEventTaskError = (
   eventOrError: CreatedEvent<any> | EventTaskAndError

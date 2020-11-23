@@ -1,4 +1,4 @@
-import { BaseEvent, EventFlow } from '@schemeless/event-store';
+import type { BaseEvent, EventFlow } from '@schemeless/event-store';
 import { ProfileQuery } from '../Profile.query';
 import { getProfileEntityRepository } from '../Profile.entity.repository';
 import { ProfileEntity } from '../Profile.entity';
@@ -29,10 +29,10 @@ export const ProfileIdentityCreated: EventFlow<Payload> = {
     email: 'a@a.com',
     picture: 'http://xxx',
     nickname: '',
-    raw: { sub: 'xxx' } as any
+    raw: { sub: 'xxx' } as any,
   },
 
-  validator: async function(event) {
+  validator: async function (event) {
     const foundId = await ProfileQuery.getProfileById(event.payload.id);
     if (foundId) return new Error(`ProfileIdentityCreated: id is already existed ${event.payload.id}`);
 
@@ -53,14 +53,14 @@ export const ProfileIdentityCreated: EventFlow<Payload> = {
       domain: AccountCreationRequested.domain,
       type: AccountCreationRequested.type,
       payload: {
-        userId: causalEvent.payload.id
-      }
+        userId: causalEvent.payload.id,
+      },
     };
 
     return [event];
   },
 
-  executor: async function(event) {
+  executor: async function (event) {
     const repo = await getProfileEntityRepository();
     const { payload } = event;
     const raw = payload.raw;
@@ -69,7 +69,7 @@ export const ProfileIdentityCreated: EventFlow<Payload> = {
       const identity = {
         type: payload.provider,
         id: raw.sub,
-        raw: payload.raw
+        raw: payload.raw,
       };
       if (found) {
         found.identities.push(identity);
@@ -96,7 +96,7 @@ export const ProfileIdentityCreated: EventFlow<Payload> = {
       const identity = {
         type: payload.provider,
         id: raw.openid,
-        raw: payload.raw
+        raw: payload.raw,
       };
       if (found) {
         found.identities.push(identity);
@@ -124,5 +124,5 @@ export const ProfileIdentityCreated: EventFlow<Payload> = {
   },
 
   receiver: (eventStoreService, eventInputArgs) =>
-    eventStoreService.receiveEventInput(ProfileIdentityCreated.domain, ProfileIdentityCreated.type, eventInputArgs)
+    eventStoreService.receiveEventInput(ProfileIdentityCreated.domain, ProfileIdentityCreated.type, eventInputArgs),
 };

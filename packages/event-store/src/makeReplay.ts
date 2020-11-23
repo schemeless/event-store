@@ -1,11 +1,10 @@
-import { BaseEvent, CreatedEvent, EventFlow } from '@schemeless/event-store-types';
-import { EventStoreRepo } from './repo/EventStore.repo';
+import type { BaseEvent, CreatedEvent, EventFlow, IEventStoreRepo } from '@schemeless/event-store-types';
 import { registerEventFlowTypes } from './operators/registerEventFlowTypes';
 import { logger } from './util/logger';
 import { getEventFlow } from './operators/getEventFlow';
 import { logEvent } from './util/logEvent';
 
-export const makeReplay = (eventFlows: EventFlow[], eventStoreRepo: EventStoreRepo) => async () => {
+export const makeReplay = (eventFlows: EventFlow[], eventStoreRepo: IEventStoreRepo) => async () => {
   const eventFlowMap = registerEventFlowTypes({}, eventFlows);
   let page = 0;
   logger.info('replay starting');

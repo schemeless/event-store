@@ -1,4 +1,4 @@
-import { CreatedEvent, EventFlowMap } from '@schemeless/event-store-types';
+import type { CreatedEvent, EventFlowMap } from '@schemeless/event-store-types';
 import { getEventFlow } from '../operators/getEventFlow';
 import { apply } from './apply';
 import { validate } from './validate';
