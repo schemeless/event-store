@@ -2,15 +2,15 @@ import { makeSideEffectQueue } from './makeSideEffectQueue';
 import { FailsSideEffectEvent } from '../mocks/FailSideEffect.event';
 import { defaultEventCreator } from '../operators/defaultEventCreator';
 import { storeSet } from '../mocks/mockStore';
-import { SideEffectsState } from '../EventStore.types';
+import { SideEffectsState } from '@schemeless/event-store-types';
 
 const spy = jest.spyOn(FailsSideEffectEvent, 'sideEffect');
 
 describe('makeSideEffectQueue', () => {
-  it('should retry until fail', cb => {
+  it('should retry until fail', (cb) => {
     spy.mockClear();
     const sideEffectQueue = makeSideEffectQueue([FailsSideEffectEvent]);
-    sideEffectQueue.processed$.subscribe(r => {
+    sideEffectQueue.processed$.subscribe((r) => {
       if (r.state === SideEffectsState.fail) {
         expect(spy).toBeCalledTimes(4);
         cb();
@@ -24,16 +24,16 @@ describe('makeSideEffectQueue', () => {
         type: FailsSideEffectEvent.type,
         payload: {
           key: 'a',
-          positiveNumber: 1
-        }
-      })
+          positiveNumber: 1,
+        },
+      }),
     });
   });
 
-  it('should stop retry when success', cb => {
+  it('should stop retry when success', (cb) => {
     spy.mockClear();
     const sideEffectQueue = makeSideEffectQueue([FailsSideEffectEvent]);
-    sideEffectQueue.processed$.subscribe(r => {
+    sideEffectQueue.processed$.subscribe((r) => {
       if (r.state === SideEffectsState.done) {
         expect(spy).toBeCalledTimes(2);
         cb();
@@ -48,9 +48,9 @@ describe('makeSideEffectQueue', () => {
           type: FailsSideEffectEvent.type,
           payload: {
             key: 'b',
-            positiveNumber: 1
-          }
-        })
+            positiveNumber: 1,
+          },
+        }),
       },
       () => {
         storeSet('b', 1);

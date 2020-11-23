@@ -1,4 +1,4 @@
-import { CreatedEvent, EventFlow } from '../EventStore.types';
+import { CreatedEvent, EventFlow } from '@schemeless/event-store-types';
 import { storeGet } from './mockStore';
 
 const DOMAIN = 'test';
@@ -14,11 +14,11 @@ export const FailsSideEffectEvent: EventFlow<Payload> = {
   type: TYPE,
   samplePayload: {
     key: '1',
-    positiveNumber: 1
+    positiveNumber: 1,
   },
 
   meta: {
-    sideEffectFailedRetryAllowed: 3
+    sideEffectFailedRetryAllowed: 3,
   },
 
   async validate(event: CreatedEvent<Payload>) {
@@ -34,5 +34,5 @@ export const FailsSideEffectEvent: EventFlow<Payload> = {
     }
   },
 
-  receive: eventStore => eventInputArgs => eventStore.receive(FailsSideEffectEvent)(eventInputArgs)
+  receive: (eventStore) => (eventInputArgs) => eventStore.receive(FailsSideEffectEvent)(eventInputArgs),
 };

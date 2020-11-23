@@ -1,6 +1,6 @@
 import * as Rx from 'rxjs/operators';
 import { pipe } from 'rxjs';
-import { BaseEvent, EventFlow, EventFlowMap } from '../EventStore.types';
+import { BaseEvent, EventFlow, EventFlowMap } from '@schemeless/event-store-types';
 
 // logger.info(`🚥 🎢 |${event.correlationId?.substr(-4) || '----'}|${event.causationId?.substr(-4) || '----'}|${event.refId.substr(-4)}|flow processing\t|${event.domain}__${event.action}: `);
 export const getEventFlow = (eventFlowMap: EventFlowMap) => (event: BaseEvent<any, any>): EventFlow<any> => {

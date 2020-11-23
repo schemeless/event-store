@@ -1,4 +1,4 @@
-import { CreatedEvent, EventFlow, SideEffectsState } from '../EventStore.types';
+import { CreatedEvent, EventFlow, SideEffectsState } from '@schemeless/event-store-types';
 import { createRxQueue } from './RxQueue';
 import { registerEventFlowTypes } from '../operators/registerEventFlowTypes';
 import * as Rx from 'rxjs/operators';
@@ -8,7 +8,7 @@ import { logger } from '../util/logger';
 
 export const makeSideEffectQueue = (eventFlows: EventFlow[]) => {
   const sideEffectQueue = createRxQueue<{ retryCount: number; event: CreatedEvent<any> }, any>('sideEffect', {
-    concurrent: 1
+    concurrent: 1,
   });
   const eventFlowMap = registerEventFlowTypes({}, eventFlows);
 
@@ -47,6 +47,6 @@ export const makeSideEffectQueue = (eventFlows: EventFlow[]) => {
   return {
     processed$,
     queueInstance: sideEffectQueue,
-    push: sideEffectQueue.push.bind(sideEffectQueue) as typeof sideEffectQueue.push
+    push: sideEffectQueue.push.bind(sideEffectQueue) as typeof sideEffectQueue.push,
   };
 };

@@ -6,14 +6,14 @@ export { StandardEvent } from './standard.event';
 export { NestedOnceEvent } from './NestedOnce.event';
 export { NestedTwiceEvent } from './NestedTwice.event';
 export { StandardObserver } from './Standard.observer';
-import { EventFlow, SuccessEventObserver } from '../EventStore.types';
+import { EventFlow, SuccessEventObserver } from '@schemeless/event-store-types';
 import { FailsSideEffectEvent } from './FailSideEffect.event';
 
 export const testEventFlows: EventFlow<any>[] = [
   StandardEvent,
   NestedOnceEvent,
   NestedTwiceEvent,
-  FailsSideEffectEvent
+  FailsSideEffectEvent,
 ];
 
 export const testObservers: SuccessEventObserver<any>[] = [StandardObserver];

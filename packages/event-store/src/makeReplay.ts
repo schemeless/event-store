@@ -1,4 +1,4 @@
-import { BaseEvent, CreatedEvent, EventFlow } from './EventStore.types';
+import { BaseEvent, CreatedEvent, EventFlow } from '@schemeless/event-store-types';
 import { EventStoreRepo } from './repo/EventStore.repo';
 import { registerEventFlowTypes } from './operators/registerEventFlowTypes';
 import { logger } from './util/logger';

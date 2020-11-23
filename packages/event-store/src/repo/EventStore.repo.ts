@@ -1,14 +1,10 @@
-import { Connection, getManager, Repository } from 'typeorm';
+import { CreatedEvent, IEventStoreRepo } from '@schemeless/event-store-types';
+import { Connection, Repository } from 'typeorm';
 import { EventStoreEntity } from './EventStore.entity';
 import { ConnectionOptions } from 'typeorm';
 import { getConnection } from './getConnection';
-import { CreatedEvent } from '../EventStore.types';
 
-const serialiseEvent = (event: EventStoreEntity): EventStoreEntity => {
-  return Object.assign({}, event, { payload: JSON.parse(event.payload) });
-};
-
-export class EventStoreRepo {
+export class EventStoreRepo implements IEventStoreRepo {
   public repo: Repository<EventStoreEntity>;
   public conn: Connection;
 
@@ -27,25 +23,11 @@ export class EventStoreRepo {
     const skip = take * page;
     return await this.repo.find({
       order: {
-        id: 'ASC'
+        id: 'ASC',
       },
       take,
-      skip
+      skip,
     });
-  }
-
-  async getCorrelationEvents(correlationId: string): Promise<EventStoreEntity[]> {
-    const events = await this.repo.find({
-      where: { correlationId }
-    });
-    return events.map(serialiseEvent);
-  }
-
-  async getCausationEvents(causationId: string): Promise<EventStoreEntity[]> {
-    const events = await this.repo.find({
-      where: { causationId }
-    });
-    return events.map(serialiseEvent);
   }
 
   createEventEntity = (event: CreatedEvent<any>): EventStoreEntity => {
@@ -59,7 +41,7 @@ export class EventStoreRepo {
       identifier,
       correlationId,
       causationId,
-      created
+      created,
     });
 
     newEventEntity.payload = JSON.stringify(payload);
@@ -74,7 +56,7 @@ export class EventStoreRepo {
   storeEvents = async (events: CreatedEvent<any>[]) => {
     await this.init();
     const allEventEntities = events.map(this.createEventEntity);
-    await this.conn.transaction(async entityManager => {
+    await this.conn.transaction(async (entityManager) => {
       for await (const currentEventEntity of allEventEntities) {
         await entityManager.save(currentEventEntity);
       }

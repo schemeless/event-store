@@ -1,6 +1,6 @@
 import * as R from 'ramda';
+import { BaseEvent, CreatedEvent, EventFlowMap } from '@schemeless/event-store-types';
 import { logEvent } from '../util/logEvent';
-import { BaseEvent, CreatedEvent, EventFlowMap } from '../EventStore.types';
 import { getEventFlow } from '../operators/getEventFlow';
 
 export const makeCreateConsequentEventInputs = (eventFlowMap: EventFlowMap) => async (

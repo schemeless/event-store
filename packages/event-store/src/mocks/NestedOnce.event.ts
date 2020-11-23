@@ -1,4 +1,4 @@
-import { BaseEvent, BaseEventInput, CreatedEvent, EventFlow, StoredEvent } from '../EventStore.types';
+import { BaseEvent, BaseEventInput, CreatedEvent, EventFlow, StoredEvent } from '@schemeless/event-store-types';
 import { StandardEvent } from './standard.event';
 import { storeGet, storeSet } from './mockStore';
 
@@ -15,7 +15,7 @@ export const NestedOnceEvent: EventFlow<Payload> = {
   type: TYPE,
   samplePayload: {
     key: 'a',
-    positiveNumber: 1
+    positiveNumber: 1,
   },
 
   async validate(event: CreatedEvent<Payload>) {
@@ -30,8 +30,8 @@ export const NestedOnceEvent: EventFlow<Payload> = {
       type: StandardEvent.type,
       payload: {
         key: causalEvent.payload.key,
-        positiveNumber: causalEvent.payload.positiveNumber - 1
-      }
+        positiveNumber: causalEvent.payload.positiveNumber - 1,
+      },
     };
     return [standardEvent, standardEvent];
   },
@@ -50,5 +50,5 @@ export const NestedOnceEvent: EventFlow<Payload> = {
     console.log('sideEffect called');
   },
 
-  receive: eventStore => eventInputArgs => eventStore.receive(NestedOnceEvent)(eventInputArgs)
+  receive: (eventStore) => (eventInputArgs) => eventStore.receive(NestedOnceEvent)(eventInputArgs),
 };

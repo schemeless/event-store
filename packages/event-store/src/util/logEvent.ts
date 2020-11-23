@@ -1,5 +1,5 @@
 import { logger } from './logger';
-import { BaseEvent } from '../EventStore.types';
+import { BaseEvent } from '@schemeless/event-store-types';
 
 const trimId = (str: string | null | undefined) => (str || '----').substr(-4);
 

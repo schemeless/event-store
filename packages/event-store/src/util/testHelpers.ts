@@ -1,6 +1,7 @@
 import { ConnectionOptions } from 'typeorm';
 import { makeEventStore } from '../makeEventStore';
-import { EventFlow, EventStore, SuccessEventObserver } from '../EventStore.types';
+import { EventFlow, SuccessEventObserver } from '@schemeless/event-store-types';
+import { EventStore } from '../EventStore.types';
 
 const defaultInMemDBOption = {
   type: 'sqlite',
@@ -8,11 +9,11 @@ const defaultInMemDBOption = {
   dropSchema: true,
   synchronize: true,
   logger: 'advanced-console',
-  logging: 'all'
+  logging: 'all',
 } as ConnectionOptions;
 
 const defaultInMenDBOptionEventSourcing: ConnectionOptions = Object.assign({}, defaultInMemDBOption, {
-  name: 'EventSourcing'
+  name: 'EventSourcing',
 });
 
 let eventStore: EventStore;

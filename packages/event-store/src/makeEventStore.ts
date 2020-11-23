@@ -4,23 +4,22 @@ import { EventStoreRepo } from './repo/EventStore.repo';
 import {
   CreatedEvent,
   EventFlow,
-  EventOutput,
   EventOutputState,
-  EventStore,
   EventTaskAndError,
-  SuccessEventObserver
-} from './EventStore.types';
+  SuccessEventObserver,
+} from '@schemeless/event-store-types';
 import { makeMainQueue } from './queue/makeMainQueue';
 import { makeObserverQueue } from './queue/makeObserverQueue';
 import { makeReceive } from './queue/makeReceive';
 import { makeReplay } from './makeReplay';
 import { makeSideEffectQueue } from './queue/makeSideEffectQueue';
 import { from, merge, Observable, Subject } from 'rxjs';
+import { EventOutput, EventStore } from './EventStore.types';
 
 const assignObserver = (output$: Observable<EventOutput>, successEventObservers: SuccessEventObserver<any>[]) => {
   const observerQueue = makeObserverQueue(successEventObservers);
   const result$ = output$.pipe(
-    Rx.tap(eventOutput => {
+    Rx.tap((eventOutput) => {
       if (eventOutput.state === EventOutputState.success) {
         observerQueue.push(eventOutput.event);
       }
@@ -28,7 +27,7 @@ const assignObserver = (output$: Observable<EventOutput>, successEventObservers:
   );
   return {
     result$,
-    observerQueue
+    observerQueue,
   };
 };
 
@@ -47,7 +46,7 @@ export const makeEventStore = (connectionOptions: ConnectionOptions) => async (
       async ([doneEvents, eventTaskAndError]): Promise<[CreatedEvent<any>[], EventTaskAndError]> => {
         if (!eventTaskAndError) {
           await eventStoreRepo.storeEvents(doneEvents);
-          doneEvents.forEach(event => sideEffectQueue.push({ event, retryCount: 0 }));
+          doneEvents.forEach((event) => sideEffectQueue.push({ event, retryCount: 0 }));
           return [doneEvents, eventTaskAndError];
         } else {
           // todo store failed event
@@ -58,15 +57,15 @@ export const makeEventStore = (connectionOptions: ConnectionOptions) => async (
     Rx.mergeMap(([doneEvents, eventTaskAndError]) => {
       if (!eventTaskAndError) {
         return from(
-          doneEvents.map(e => ({
+          doneEvents.map((e) => ({
             event: e,
-            state: EventOutputState.success
+            state: EventOutputState.success,
           }))
         );
       } else {
         return from(
           [{ event: eventTaskAndError.task, state: EventOutputState.invalid, error: eventTaskAndError.error }].concat(
-            doneEvents.map(e => ({ event: e, state: EventOutputState.canceled, error: undefined }))
+            doneEvents.map((e) => ({ event: e, state: EventOutputState.canceled, error: undefined }))
           )
         );
       }
@@ -79,9 +78,8 @@ export const makeEventStore = (connectionOptions: ConnectionOptions) => async (
 
   return {
     mainQueue,
-    eventStoreRepo,
     receive: makeReceive(mainQueue),
     replay: makeReplay(eventFlows, eventStoreRepo),
-    output$
+    output$,
   };
 };

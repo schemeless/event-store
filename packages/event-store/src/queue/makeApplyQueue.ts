@@ -1,5 +1,5 @@
 import { createRxQueue } from './RxQueue';
-import { BaseEvent, CreatedEvent } from '../EventStore.types';
+import { BaseEvent, CreatedEvent } from '@schemeless/event-store-types';
 import { v4 as uuid } from 'uuid';
 
 export const makeApplyQueue = () =>
@@ -7,6 +7,6 @@ export const makeApplyQueue = () =>
     'apply:' + uuid().substr(-4, 4),
     {
       filo: true,
-      concurrent: 1
+      concurrent: 1,
     }
   );

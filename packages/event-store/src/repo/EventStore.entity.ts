@@ -1,7 +1,8 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, Repository } from 'typeorm';
+import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { IEventStoreEntity } from '@schemeless/event-store-types';
 
 @Entity()
-export class EventStoreEntity {
+export class EventStoreEntity implements IEventStoreEntity {
   @PrimaryGeneratedColumn()
   readonly id: number;
 

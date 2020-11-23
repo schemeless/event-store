@@ -1,9 +1,9 @@
-import { BaseEvent, CreatedEvent, EventFlow } from '../EventStore.types';
+import { BaseEvent, CreatedEvent, EventFlow } from '@schemeless/event-store-types';
 import { NestedOnceEvent } from './NestedOnce.event';
 import { storeGet, storeSet } from './mockStore';
 
 const testObject = {
-  sum: 0
+  sum: 0,
 };
 
 const DOMAIN = 'test';
@@ -19,7 +19,7 @@ export const NestedTwiceEvent: EventFlow<Payload> = {
   type: TYPE,
   samplePayload: {
     key: 's',
-    positiveNumber: 1
+    positiveNumber: 1,
   },
 
   async validate(event: CreatedEvent<Payload>) {
@@ -34,8 +34,8 @@ export const NestedTwiceEvent: EventFlow<Payload> = {
       type: NestedOnceEvent.type,
       payload: {
         key: causalEvent.payload.key,
-        positiveNumber: causalEvent.payload.positiveNumber - 1
-      }
+        positiveNumber: causalEvent.payload.positiveNumber - 1,
+      },
     };
     return [nestedOnceEvent, nestedOnceEvent];
   },
@@ -54,5 +54,5 @@ export const NestedTwiceEvent: EventFlow<Payload> = {
     console.log('sideEffect called');
   },
 
-  receive: eventStore => eventInputArgs => eventStore.receive(NestedTwiceEvent)(eventInputArgs)
+  receive: (eventStore) => (eventInputArgs) => eventStore.receive(NestedTwiceEvent)(eventInputArgs),
 };

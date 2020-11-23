@@ -1,4 +1,4 @@
-import { CreatedEvent, EventFlow } from '../EventStore.types';
+import { CreatedEvent, EventFlow } from '@schemeless/event-store-types';
 import { storeGet, storeSet } from './mockStore';
 
 const DOMAIN = 'test';
@@ -10,7 +10,7 @@ interface Payload {
 }
 
 function wait(ms = 1000, value = null) {
-  return new Promise(resolve => setTimeout(resolve, ms, value));
+  return new Promise((resolve) => setTimeout(resolve, ms, value));
 }
 
 export const StandardEvent: EventFlow<Payload> = {
@@ -18,7 +18,7 @@ export const StandardEvent: EventFlow<Payload> = {
   type: TYPE,
   samplePayload: {
     key: 's',
-    positiveNumber: 1
+    positiveNumber: 1,
   },
 
   async validate(event: CreatedEvent<Payload>) {
@@ -42,7 +42,7 @@ export const StandardEvent: EventFlow<Payload> = {
     console.log('sideEffect called');
   },
 
-  receive: eventStore => eventInputArgs => {
+  receive: (eventStore) => (eventInputArgs) => {
     return eventStore.receive(StandardEvent)(eventInputArgs);
-  }
+  },
 };
