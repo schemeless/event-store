@@ -2,7 +2,15 @@
   "name": "@schemeless/event-store-types",
   "version": "1.0.0",
   "typescript:main": "src/index.ts",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "dev": "node_modules/.bin/tsc -w",
+    "clean": "node_modules/.bin/rimraf ./dist",
+    "test": "node_modules/.bin/jest --passWithNoTests",
+    "compile": "yarn run clean && node_modules/.bin/tsc",
+    "prepublish": "yarn run clean && yarn run compile"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/schemeless/event-store.git"
@@ -12,5 +20,8 @@
   "bugs": {
     "url": "https://github.com/schemeless/event-store/issues"
   },
-  "gitHead": "e17cef785457ef219b185a2bce121f164fd4af07"
+  "publishConfig": {
+    "access": "public"
+  },
+  "gitHead": "daa48bc5bd611a0f1c3bf8d6779fa1eb256c7fc2"
 }
