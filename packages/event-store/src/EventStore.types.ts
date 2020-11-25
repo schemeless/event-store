@@ -22,3 +22,5 @@ export interface EventStore {
   replay: ReturnType<typeof makeReplay>;
   output$: Observable<EventOutput>;
 }
+
+export * from '@schemeless/event-store-types';
