@@ -3,30 +3,27 @@ export interface BaseEventInput<Payload, META = undefined> {
   meta?: META;
 
   identifier?: string;
-  trackingId?: string;
   correlationId?: string;
   causationId?: string;
 }
 
 export interface BaseEvent<Payload, META = undefined> extends BaseEventInput<Payload, META> {
+  id?: string;
   domain: string;
   type: string;
   payload: Payload;
 
   identifier?: string;
-  trackingId?: string;
   correlationId?: string;
   causationId?: string;
 }
 
 export interface CreatedEvent<Payload, META = undefined> extends BaseEvent<Payload, META> {
-  trackingId: string;
+  id: string;
   readonly created: Date;
 }
 
-export interface StoredEvent<Payload, META = undefined> extends CreatedEvent<Payload, META> {
-  readonly id?: number;
-}
+export interface StoredEvent<Payload, META = undefined> extends CreatedEvent<Payload, META> {}
 
 export type Event<Payload, META = undefined> = StoredEvent<Payload, META>;
 

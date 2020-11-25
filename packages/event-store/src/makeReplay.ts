@@ -1,4 +1,4 @@
-import type { BaseEvent, CreatedEvent, EventFlow, IEventStoreRepo } from '@schemeless/event-store-types';
+import type { CreatedEvent, EventFlow, IEventStoreRepo } from '@schemeless/event-store-types';
 import { registerEventFlowTypes } from './operators/registerEventFlowTypes';
 import { logger } from './util/logger';
 import { getEventFlow } from './operators/getEventFlow';
@@ -6,24 +6,22 @@ import { logEvent } from './util/logEvent';
 
 export const makeReplay = (eventFlows: EventFlow[], eventStoreRepo: IEventStoreRepo) => async () => {
   const eventFlowMap = registerEventFlowTypes({}, eventFlows);
-  let page = 0;
+  let pageSize = 200;
   logger.info('replay starting');
-  while (true) {
-    const events = await eventStoreRepo.getAllEvents(page);
+  const eventStoreIterator = await eventStoreRepo.getAllEvents(pageSize);
+  for await (const events of eventStoreIterator) {
     if (events.length > 0) {
-      logger.info(`page, ${page}. replaying ${events.length}`);
+      logger.info(`replaying ${events.length}`);
       await events.reduce<Promise<any>>(async (acc, currentEvent) => {
         if (acc) await acc;
         const EventFlow = getEventFlow(eventFlowMap)(currentEvent);
-        currentEvent.payload = JSON.parse(currentEvent.payload);
         logEvent(currentEvent as CreatedEvent<any>, '✅️️', 'Apply');
         if (EventFlow.apply) {
           await EventFlow.apply(currentEvent as CreatedEvent<any>);
         }
       }, null);
-      page++;
     } else {
-      logger.info(`replay finished pages ${page}`);
+      logger.info(`replay finished`);
       break;
     }
   }

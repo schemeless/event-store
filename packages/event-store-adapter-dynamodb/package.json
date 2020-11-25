@@ -1,10 +1,12 @@
 {
-  "name": "@schemeless/event-store",
-  "version": "2.0.0",
+  "name": "@schemeless/event-store-adapter-dynamodb",
+  "version": "1.0.0",
   "typescript:main": "src/index.ts",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
+    "dev:up": "docker-compose --file .dev/docker-compose.yml up",
+    "dev:down": "docker-compose --file .dev/docker-compose.yml down",
     "dev": "node_modules/.bin/tsc -w",
     "clean": "node_modules/.bin/rimraf ./dist",
     "test": "node_modules/.bin/jest --passWithNoTests",
@@ -21,27 +23,20 @@
     "url": "https://github.com/schemeless/event-store/issues"
   },
   "dependencies": {
-    "@schemeless/event-store-types": "^1.0.0",
-    "better-queue": "^3.8.10",
-    "debug": "^4.2.0",
-    "rxjs": "^6.6.3",
-    "uuid": "^8.3.1"
+    "@aws/dynamodb-data-mapper": "^0.7.3",
+    "@aws/dynamodb-data-mapper-annotations": "^0.7.3",
+    "debug": "^4.2.0"
   },
   "devDependencies": {
-    "@schemeless/event-store-adapter-typeorm": "^1.0.0",
-    "@schemeless/event-store-adapter-dynamodb": "^1.0.0",
-    "@types/better-queue": "^3.8.2",
     "@types/debug": "^4.1.5",
     "@types/jest": "^26.0.15",
     "@types/node": "^14.14.7",
     "@types/uuid": "^8.3.0",
-    "delay.ts": "^1.1.0",
+    "aws-sdk": "^2.797.0",
     "jest": "^26.6.3",
     "rimraf": "^3.0.2",
-    "sqlite3": "^5.0.0",
     "ts-jest": "^26.4.4",
     "typescript": "^4.0.5",
-    "typeorm": "^0.2.29"
-  },
-  "gitHead": "d1c667b92b51ace33259f4b94f59e14d7212c969"
+    "uuid": "^8.3.1"
+  }
 }

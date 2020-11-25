@@ -1,8 +1,9 @@
-import type { CreatedEvent, IEventStoreRepo } from '@schemeless/event-store-types';
+import type { CreatedEvent, IEventStoreEntity, IEventStoreRepo } from '@schemeless/event-store-types';
 import { Connection, Repository } from 'typeorm';
 import { EventStoreEntity } from './EventStore.entity';
 import { ConnectionOptions } from 'typeorm';
 import { getConnection } from './getConnection';
+import { EventStoreIterator } from './EventStoreIterator';
 
 export class EventStoreRepo implements IEventStoreRepo {
   public repo: Repository<EventStoreEntity>;
@@ -17,25 +18,17 @@ export class EventStoreRepo implements IEventStoreRepo {
     }
   }
 
-  async getAllEvents(page: number): Promise<EventStoreEntity[]> {
+  async getAllEvents(pageSize: number = 100): Promise<AsyncIterableIterator<Array<IEventStoreEntity>>> {
     await this.init();
-    const take = 100;
-    const skip = take * page;
-    return await this.repo.find({
-      order: {
-        id: 'ASC',
-      },
-      take,
-      skip,
-    });
+    return new EventStoreIterator(this.repo, pageSize);
   }
 
   createEventEntity = (event: CreatedEvent<any>): EventStoreEntity => {
     const newEventEntity = new EventStoreEntity();
-    const { trackingId, domain, type, payload, meta, created, correlationId, causationId, identifier } = event;
+    const { id, domain, type, payload, meta, created, correlationId, causationId, identifier } = event;
 
     Object.assign(newEventEntity, {
-      trackingId,
+      id,
       domain,
       type,
       identifier,
@@ -44,7 +37,9 @@ export class EventStoreRepo implements IEventStoreRepo {
       created,
     });
 
-    newEventEntity.payload = JSON.stringify(payload);
+    if (payload) {
+      newEventEntity.payload = JSON.stringify(payload);
+    }
 
     if (meta) {
       newEventEntity.meta = JSON.stringify(meta);

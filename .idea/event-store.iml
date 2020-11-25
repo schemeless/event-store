@@ -3,6 +3,8 @@
   <component name="NewModuleRootManager">
     <content url="file://$MODULE_DIR$">
       <excludeFolder url="file://$MODULE_DIR$/.tmp" />
+      <excludeFolder url="file://$MODULE_DIR$/packages/event-store-adapter-dynamodb/dist" />
+      <excludeFolder url="file://$MODULE_DIR$/packages/event-store-adapter-typeorm/dist" />
       <excludeFolder url="file://$MODULE_DIR$/packages/event-store/dist" />
       <excludeFolder url="file://$MODULE_DIR$/temp" />
       <excludeFolder url="file://$MODULE_DIR$/tmp" />
