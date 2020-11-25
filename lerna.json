@@ -11,5 +11,6 @@
     "bootstrap": {
       "ignore": "component-*"
     }
-  }
+  },
+  "packages": ["packages/*"]
 }

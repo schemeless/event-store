@@ -12,6 +12,5 @@
   "bugs": {
     "url": "https://github.com/schemeless/event-store/issues"
   },
-  "dependencies": {},
-  "devDependencies": {}
+  "gitHead": "e17cef785457ef219b185a2bce121f164fd4af07"
 }

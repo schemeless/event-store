@@ -28,8 +28,8 @@
     "uuid": "^8.3.1"
   },
   "devDependencies": {
-    "@schemeless/event-store-adapter-typeorm": "^1.0.0",
     "@schemeless/event-store-adapter-dynamodb": "^1.0.0",
+    "@schemeless/event-store-adapter-typeorm": "^1.0.0",
     "@types/better-queue": "^3.8.2",
     "@types/debug": "^4.1.5",
     "@types/jest": "^26.0.15",
@@ -40,8 +40,8 @@
     "rimraf": "^3.0.2",
     "sqlite3": "^5.0.0",
     "ts-jest": "^26.4.4",
-    "typescript": "^4.0.5",
-    "typeorm": "^0.2.29"
+    "typeorm": "^0.2.29",
+    "typescript": "^4.0.5"
   },
-  "gitHead": "d1c667b92b51ace33259f4b94f59e14d7212c969"
+  "gitHead": "e17cef785457ef219b185a2bce121f164fd4af07"
 }
