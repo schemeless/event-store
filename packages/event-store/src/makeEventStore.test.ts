@@ -1,10 +1,13 @@
 import { getTestEventStore } from './util/testHelpers';
-import { NestedTwiceEvent, StandardEvent, testEventFlows } from './mockEvents';
-import { storeGet } from './mockEvents/mockStore';
+import { NestedTwiceEvent, StandardEvent, testEventFlows, testObservers } from './mocks';
+import { storeGet } from './mocks/mockStore';
+import { mockObserverApply } from './mocks/Standard.observer';
+import delay from 'delay.ts';
 
 describe('make eventStore', () => {
+  beforeEach(() => jest.clearAllMocks());
   it('should process simple events', async () => {
-    const eventStore = await getTestEventStore(testEventFlows);
+    const eventStore = await getTestEventStore(testEventFlows, testObservers);
 
     await expect(
       StandardEvent.receive(eventStore)({
@@ -16,10 +19,12 @@ describe('make eventStore', () => {
     ).resolves.toHaveLength(1);
 
     expect(storeGet('eventStore1')).toBe(1);
+    await delay(100);
+    expect(mockObserverApply.mock.calls.length).toBe(1);
   });
 
   it('should reject invalid events', async () => {
-    const eventStore = await getTestEventStore(testEventFlows);
+    const eventStore = await getTestEventStore(testEventFlows, testObservers);
 
     await expect(
       StandardEvent.receive(eventStore)({
@@ -31,10 +36,11 @@ describe('make eventStore', () => {
     ).rejects.toThrowError(/Invalid positive number/);
 
     expect(storeGet('eventStore2')).toBeUndefined();
+    expect(mockObserverApply.mock.calls.length).toBe(0);
   });
 
   it('should process complex events', async () => {
-    const eventStore = await getTestEventStore(testEventFlows);
+    const eventStore = await getTestEventStore(testEventFlows, testObservers);
     const events = await NestedTwiceEvent.receive(eventStore)({
       payload: {
         key: 'eventStore3',
@@ -43,11 +49,13 @@ describe('make eventStore', () => {
     });
     await expect(events).toHaveLength(7); // 1 NestedTwice, 2 NestedOnce, 4 Standard
 
+    await delay(100);
     expect(storeGet('eventStore3')).toBe(18);
+    expect(mockObserverApply.mock.calls.length).toBe(6);
   });
 
   it('should cancel done events when invalid', async () => {
-    const eventStore = await getTestEventStore(testEventFlows);
+    const eventStore = await getTestEventStore(testEventFlows, testObservers);
 
     await expect(
       NestedTwiceEvent.receive(eventStore)({
@@ -59,5 +67,6 @@ describe('make eventStore', () => {
     ).rejects.toThrowError(/Invalid positive number/);
 
     expect(storeGet('eventStore4')).toBe(0);
+    expect(mockObserverApply.mock.calls.length).toBe(0);
   });
 });

@@ -1,4 +1,4 @@
-import { BaseEvent, EventFlow } from '@schemeless/event-store';
+import type { BaseEvent, EventFlow } from '@schemeless/event-store';
 import { getOrderEntityRepository } from '../Order.entity.repository';
 import { OrderPackage } from '../index';
 import { OrderStatus, OrderType } from '../Order.entity';
@@ -17,10 +17,10 @@ export const OrderCancelled: EventFlow<OrderCancelledPayload> = {
 
   samplePayload: {
     id: '<id>',
-    userId: '<userId>'
+    userId: '<userId>',
   },
 
-  validator: async event => {
+  validator: async (event) => {
     const order = await OrderPackage.Query.getOrderById(event.payload.id);
     if (!order) {
       return new Error(`Order ${event.payload.id} not found!`);
@@ -37,7 +37,7 @@ export const OrderCancelled: EventFlow<OrderCancelledPayload> = {
     }
   },
 
-  executor: async event => {
+  executor: async (event) => {
     const orderRepo = await getOrderEntityRepository();
     const order = await OrderPackage.Query.getOrderById(event.payload.id);
     if (!order) {
@@ -60,9 +60,9 @@ export const OrderCancelled: EventFlow<OrderCancelledPayload> = {
           payload: {
             accountId: order.accountId,
             tokenId: config.baseToken,
-            amount: order.amountLeft * order.unitPrice
-          }
-        }
+            amount: order.amountLeft * order.unitPrice,
+          },
+        },
       ];
     } else if (order.type === OrderType.SELL) {
       return [
@@ -72,9 +72,9 @@ export const OrderCancelled: EventFlow<OrderCancelledPayload> = {
           payload: {
             accountId: order.accountId,
             tokenId: order.tokenId,
-            amount: order.amountLeft
-          }
-        }
+            amount: order.amountLeft,
+          },
+        },
       ];
     }
 
@@ -82,5 +82,5 @@ export const OrderCancelled: EventFlow<OrderCancelledPayload> = {
   },
 
   receiver: (eventStoreService, eventInputArgs) =>
-    eventStoreService.receiveEventInput(OrderCancelled.domain, OrderCancelled.type, eventInputArgs)
+    eventStoreService.receiveEventInput(OrderCancelled.domain, OrderCancelled.type, eventInputArgs),
 };

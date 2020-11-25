@@ -1,5 +1,5 @@
 import { logEvent } from '../util/logEvent';
-import { CreatedEvent, EventFlow } from '../EventStore.types';
+import type { CreatedEvent, EventFlow } from '@schemeless/event-store-types';
 
 export const validate = async (eventFlow: EventFlow<any>, event: CreatedEvent<any>): Promise<void> => {
   try {

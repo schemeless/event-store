@@ -1,4 +1,4 @@
-import { CreatedEvent, EventFlowMap, EventTaskAndError } from '../EventStore.types';
+import type { CreatedEvent, EventFlowMap, EventTaskAndError } from '@schemeless/event-store-types';
 import { defaultEventCreator } from './defaultEventCreator';
 import * as Rx from 'rxjs/operators';
 import { ApplyQueue } from '../queue/RxQueue';
@@ -14,7 +14,7 @@ const applyRootEvent = (eventFlowMap: EventFlowMap, applyQueue: ApplyQueue) => a
   try {
     const preAppliedEvent = await makeValidateAndApply(eventFlowMap)(createdEvent);
     const { consequentEvents } = await makeCreateConsequentEventInputs(eventFlowMap)(preAppliedEvent);
-    consequentEvents.forEach(currentEvent => {
+    consequentEvents.forEach((currentEvent) => {
       applyQueue.push({ currentEvent, causalEvent: preAppliedEvent });
     });
     applyQueueDone(null, preAppliedEvent);

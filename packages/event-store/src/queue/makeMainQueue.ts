@@ -1,6 +1,6 @@
 import { createRxQueue } from './RxQueue';
 import * as Rx from 'rxjs/operators';
-import { BaseEvent, CreatedEvent, EventFlow, EventTaskAndError } from '../EventStore.types';
+import type { BaseEvent, CreatedEvent, EventFlow, EventTaskAndError } from '@schemeless/event-store-types';
 import { combineLatest, Observable } from 'rxjs';
 import { logEvent } from '../util/logEvent';
 import { registerEventFlowTypes } from '../operators/registerEventFlowTypes';
@@ -20,7 +20,7 @@ export const makeMainQueue = (eventFlows: EventFlow<any>[]) => {
       applyQueue.push({ currentEvent: task });
       return combineLatest([
         applyRootEventAndCollectSucceed(eventFlowMap, applyQueue),
-        racedQueueFailedOrDrained(applyQueue)
+        racedQueueFailedOrDrained(applyQueue),
       ]).pipe(
         Rx.take(1),
         cleanupAndCancelFailedEvent(eventFlowMap, mainQueueDone, task),
@@ -33,6 +33,6 @@ export const makeMainQueue = (eventFlows: EventFlow<any>[]) => {
   return {
     processed$,
     queueInstance: mainQueue,
-    push: mainQueue.push.bind(mainQueue) as typeof mainQueue.push
+    push: mainQueue.push.bind(mainQueue) as typeof mainQueue.push,
   };
 };

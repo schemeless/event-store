@@ -1,17 +1,39 @@
-import { ConnectionOptions } from 'typeorm';
 import * as Rx from 'rxjs/operators';
-import { EventStoreRepo } from './repo/EventStore.repo';
-import { CreatedEvent, EventFlow, EventOutputState, EventStore, EventTaskAndError } from './EventStore.types';
+import {
+  CreatedEvent,
+  EventFlow,
+  EventOutputState,
+  EventTaskAndError,
+  IEventStoreRepo,
+  SuccessEventObserver,
+} from '@schemeless/event-store-types';
 import { makeMainQueue } from './queue/makeMainQueue';
+import { makeObserverQueue } from './queue/makeObserverQueue';
 import { makeReceive } from './queue/makeReceive';
 import { makeReplay } from './makeReplay';
 import { makeSideEffectQueue } from './queue/makeSideEffectQueue';
-import { from, merge } from 'rxjs';
+import { from, merge, Observable, Subject } from 'rxjs';
+import { EventOutput, EventStore } from './EventStore.types';
 
-export const makeEventStore = (connectionOptions: ConnectionOptions) => async (
-  eventFlows: EventFlow[]
+const assignObserver = (output$: Observable<EventOutput>, successEventObservers: SuccessEventObserver<any>[]) => {
+  const observerQueue = makeObserverQueue(successEventObservers);
+  const result$ = output$.pipe(
+    Rx.tap((eventOutput) => {
+      if (eventOutput.state === EventOutputState.success) {
+        observerQueue.push(eventOutput.event);
+      }
+    })
+  );
+  return {
+    result$,
+    observerQueue,
+  };
+};
+
+export const makeEventStore = (eventStoreRepo: IEventStoreRepo) => async (
+  eventFlows: EventFlow[],
+  successEventObservers: SuccessEventObserver<any>[] = []
 ): Promise<EventStore> => {
-  const eventStoreRepo = new EventStoreRepo(connectionOptions);
   const mainQueue = makeMainQueue(eventFlows);
   const sideEffectQueue = makeSideEffectQueue(eventFlows);
 
@@ -22,7 +44,7 @@ export const makeEventStore = (connectionOptions: ConnectionOptions) => async (
       async ([doneEvents, eventTaskAndError]): Promise<[CreatedEvent<any>[], EventTaskAndError]> => {
         if (!eventTaskAndError) {
           await eventStoreRepo.storeEvents(doneEvents);
-          doneEvents.forEach(event => sideEffectQueue.push({ event, retryCount: 0 }));
+          doneEvents.forEach((event) => sideEffectQueue.push({ event, retryCount: 0 }));
           return [doneEvents, eventTaskAndError];
         } else {
           // todo store failed event
@@ -33,28 +55,29 @@ export const makeEventStore = (connectionOptions: ConnectionOptions) => async (
     Rx.mergeMap(([doneEvents, eventTaskAndError]) => {
       if (!eventTaskAndError) {
         return from(
-          doneEvents.map(e => ({
+          doneEvents.map((e) => ({
             event: e,
-            state: EventOutputState.done
+            state: EventOutputState.success,
           }))
         );
       } else {
         return from(
           [{ event: eventTaskAndError.task, state: EventOutputState.invalid, error: eventTaskAndError.error }].concat(
-            doneEvents.map(e => ({ event: e, state: EventOutputState.canceled, error: undefined }))
+            doneEvents.map((e) => ({ event: e, state: EventOutputState.canceled, error: undefined }))
           )
         );
       }
     })
   );
 
-  const output$ = merge(mainQueueProcessed$, sideEffectQueue.processed$);
+  const doneAndSideEffect$ = merge(mainQueueProcessed$, sideEffectQueue.processed$);
+  const { result$, observerQueue } = assignObserver(doneAndSideEffect$, successEventObservers);
+  const output$ = merge(result$, observerQueue.processed$);
 
   return {
     mainQueue,
-    eventStoreRepo,
     receive: makeReceive(mainQueue),
     replay: makeReplay(eventFlows, eventStoreRepo),
-    output$
+    output$,
   };
 };

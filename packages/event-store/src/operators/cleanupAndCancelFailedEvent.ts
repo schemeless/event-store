@@ -1,4 +1,4 @@
-import { BaseEvent, CreatedEvent, EventFlowMap } from '../EventStore.types';
+import type { BaseEvent, CreatedEvent, EventFlowMap } from '@schemeless/event-store-types';
 import * as Queue from 'better-queue';
 import { from, of, pipe } from 'rxjs';
 import * as Rx from 'rxjs/operators';
@@ -26,7 +26,7 @@ export const cleanupAndCancelFailedEvent = (
     Rx.concatMap(([doneEvents, eventTaskAndError]) => {
       if (eventTaskAndError && doneEvents.length > 0) {
         return of(doneEvents).pipe(
-          Rx.concatMap(events => from(events).pipe(Rx.mergeMap(cancelEvent(eventFlowMap)))),
+          Rx.concatMap((events) => from(events).pipe(Rx.mergeMap(cancelEvent(eventFlowMap)))),
           Rx.mapTo([doneEvents, eventTaskAndError])
         );
       } else {

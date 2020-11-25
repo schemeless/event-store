@@ -134,3 +134,6 @@ $RECYCLE.BIN/
 
 # terraform
 .terraform
+
+# dist
+dist

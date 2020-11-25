@@ -1,5 +1,5 @@
 import { v4 as uuid } from 'uuid';
-import { BaseEvent, EventFlow } from '@schemeless/event-store';
+import type { BaseEvent, EventFlow } from '@schemeless/event-store';
 import { AccountCreated } from './Account.created.event';
 
 interface Payload {
@@ -12,7 +12,7 @@ export const AccountCreationRequested: EventFlow<Payload> = {
   description: 'request to create an account',
 
   samplePayload: {
-    userId: '<UserID>'
+    userId: '<UserID>',
   },
 
   async consequentEventsCreator(event): Promise<[BaseEvent<typeof AccountCreated.samplePayload>]> {
@@ -24,9 +24,9 @@ export const AccountCreationRequested: EventFlow<Payload> = {
         type: AccountCreated.type,
         payload: {
           userId,
-          accountId: uuid()
-        }
-      }
+          accountId: uuid(),
+        },
+      },
     ];
   },
 
@@ -35,5 +35,5 @@ export const AccountCreationRequested: EventFlow<Payload> = {
   // },
 
   receiver: (eventStoreService, eventInputArgs) =>
-    eventStoreService.receiveEventInput(AccountCreationRequested.domain, AccountCreationRequested.type, eventInputArgs)
+    eventStoreService.receiveEventInput(AccountCreationRequested.domain, AccountCreationRequested.type, eventInputArgs),
 };

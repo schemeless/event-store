@@ -1,4 +1,4 @@
-import { CreatedEvent, EventFlow } from '../EventStore.types';
+import type { CreatedEvent, EventFlow } from '@schemeless/event-store-types';
 import { logEvent } from '../util/logEvent';
 
 export const preApply = async (eventFlow: EventFlow<any>, event: CreatedEvent<any>): Promise<CreatedEvent<any>> => {

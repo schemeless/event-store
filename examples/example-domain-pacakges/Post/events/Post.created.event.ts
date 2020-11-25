@@ -1,4 +1,4 @@
-import { BaseEvent, EventFlow } from '@schemeless/event-store';
+import type { BaseEvent, EventFlow } from '@schemeless/event-store';
 import { PostQuery } from '../Post.query';
 import { getPostEntityRepository } from '../Post.entity.repository';
 import { PostEntity, PostStatus } from '../Post.entity';
@@ -27,10 +27,10 @@ export const PostCreated: EventFlow<Payload> = {
     postId: '<UUID>',
     uid: 1,
     title: 'title',
-    content: 'content'
+    content: 'content',
   },
 
-  validator: async function(event) {
+  validator: async function (event) {
     // todo check if user valid
     const post = await PostQuery.getPostById(event.payload.postId);
     if (post) {
@@ -59,14 +59,14 @@ export const PostCreated: EventFlow<Payload> = {
       payload: {
         accountId: account.id,
         tokenId: createTokenId(causalEvent.payload.userId, causalEvent.payload.uid),
-        amount: config.defaultTokenLimit
-      }
+        amount: config.defaultTokenLimit,
+      },
     };
 
     return [creditAuthor];
   },
 
-  executor: async function(event) {
+  executor: async function (event) {
     const repo = await getPostEntityRepository();
     const newPost = new PostEntity();
     const { title, content, userId, uid, postId } = event.payload;
@@ -84,5 +84,5 @@ export const PostCreated: EventFlow<Payload> = {
   },
 
   receiver: (eventStoreService, eventInputArgs) =>
-    eventStoreService.receiveEventInput(PostCreated.domain, PostCreated.type, eventInputArgs)
+    eventStoreService.receiveEventInput(PostCreated.domain, PostCreated.type, eventInputArgs),
 };

@@ -1,6 +1,9 @@
+import type { EventFlow, SuccessEventObserver } from '@schemeless/event-store-types';
+// import { EventStoreRepo } from '@schemeless/event-store-adapter-typeorm';
+import { EventStoreRepo } from '@schemeless/event-store-adapter-dynamodb';
 import { ConnectionOptions } from 'typeorm';
 import { makeEventStore } from '../makeEventStore';
-import { EventFlow, EventStore } from '../EventStore.types';
+import { EventStore } from '../EventStore.types';
 
 const defaultInMemDBOption = {
   type: 'sqlite',
@@ -8,21 +11,29 @@ const defaultInMemDBOption = {
   dropSchema: true,
   synchronize: true,
   logger: 'advanced-console',
-  logging: ['error', 'warn']
+  logging: 'all',
 } as ConnectionOptions;
 
 const defaultInMenDBOptionEventSourcing: ConnectionOptions = Object.assign({}, defaultInMemDBOption, {
-  name: 'EventSourcing'
+  name: 'EventSourcing',
 });
 
 let eventStore: EventStore;
 
-export const getTestEventStore = async (allEventFlows: EventFlow[]) => {
+export const getTestEventStore = async (
+  allEventFlows: EventFlow[],
+  successEventObservers: SuccessEventObserver<any>[]
+) => {
   if (eventStore) {
     return eventStore;
   } else {
-    eventStore = await makeEventStore(defaultInMenDBOptionEventSourcing)(allEventFlows);
-    eventStore.output$.subscribe();
+    // const eventStoreRepo = new EventStoreRepo(defaultInMenDBOptionEventSourcing);
+    const eventStoreRepo = new EventStoreRepo('test', {
+      region: 'us-east-2',
+      endpoint: 'http://127.0.0.1:8000',
+    });
+    eventStore = await makeEventStore(eventStoreRepo)(allEventFlows, successEventObservers);
+    eventStore.output$.subscribe(console.log);
     return eventStore;
   }
 };

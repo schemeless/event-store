@@ -1,0 +1,17 @@
+{
+  "name": "@schemeless/event-store-types",
+  "version": "1.0.0",
+  "typescript:main": "src/index.ts",
+  "main": "src/index.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/schemeless/event-store.git"
+  },
+  "keywords": [],
+  "author": "akinoniku",
+  "bugs": {
+    "url": "https://github.com/schemeless/event-store/issues"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

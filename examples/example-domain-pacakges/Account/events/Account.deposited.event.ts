@@ -1,6 +1,6 @@
 import { getAccountEntityRepository, getAccountTokenBalanceEntityRepository } from '../Account.entity.repository';
 import { AccountPackage } from '../index';
-import { BaseEvent, EventFlow } from '@schemeless/event-store';
+import type { BaseEvent, EventFlow } from '@schemeless/event-store';
 import { config } from '../../../service/src/config';
 import { AccountCredit } from './Account.credit.event';
 
@@ -20,10 +20,10 @@ export const AccountDeposited: EventFlow<Payload> = {
     accountId: 'AccountId',
     tokenId: 'tokenId',
     amount: 10,
-    reason: 'attendance'
+    reason: 'attendance',
   },
 
-  validator: async event => {
+  validator: async (event) => {
     if (event.payload.amount <= 0) {
       return new Error(`Deposit amount should be > 0`);
     }
@@ -46,14 +46,14 @@ export const AccountDeposited: EventFlow<Payload> = {
       payload: {
         accountId: parentEvent.payload.accountId,
         tokenId: parentEvent.payload.tokenId,
-        amount: parentEvent.payload.amount
-      }
+        amount: parentEvent.payload.amount,
+      },
     };
 
     return [creditEvent];
   },
 
-  executor: async event => {
+  executor: async (event) => {
     const repo = await getAccountEntityRepository();
     const { accountId, tokenId, amount, reason } = event.payload;
     if (reason !== 'attendance') {
@@ -71,5 +71,5 @@ export const AccountDeposited: EventFlow<Payload> = {
   },
 
   receiver: (eventStoreService, eventInputArgs) =>
-    eventStoreService.receiveEventInput(AccountDeposited.domain, AccountDeposited.type, eventInputArgs)
+    eventStoreService.receiveEventInput(AccountDeposited.domain, AccountDeposited.type, eventInputArgs),
 };
