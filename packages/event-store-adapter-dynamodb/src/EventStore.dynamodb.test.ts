@@ -12,23 +12,53 @@ const makeEvent = (): CreatedEvent<any, any> => ({
   created: new Date(Date.now() + Math.round(1000 * 1000 * Math.random())),
 });
 describe('EventStore Dynamodb', () => {
-  const eventStoreRepo = new EventStoreRepo('test', {
-    region: 'us-east-2',
-    endpoint: 'http://127.0.0.1:8000',
-  });
-
-  beforeAll(async () => {
-    await eventStoreRepo.mapper.deleteTable(EventStoreEntity);
-  });
-
-  it('should save events', async () => {
-    const events = [...new Array(100).keys()].map(makeEvent);
-    await eventStoreRepo.storeEvents(events);
-  });
-  it('should load events', async () => {
+  it('should make 50 events works', async () => {
+    const eventStoreRepo = new EventStoreRepo('test', {
+      region: 'us-east-2',
+      endpoint: 'http://127.0.0.1:8000',
+    });
+    try {
+      await eventStoreRepo.mapper.deleteTable(EventStoreEntity);
+    } catch {}
+    const eventsToStore = [...new Array(50).keys()].map(makeEvent);
+    await eventStoreRepo.init(true);
+    await eventStoreRepo.storeEvents(eventsToStore);
     const pages = await eventStoreRepo.getAllEvents(100);
+    let allEvents: CreatedEvent<any, any>[] = [];
     for await (const events of pages) {
-      console.log(events);
+      allEvents = allEvents.concat(events);
     }
+    expect(allEvents.length).toBe(50);
+    const rightOrder = allEvents.every((currentEvent, index) => {
+      const nextEvent = allEvents[index + 1];
+      if (!nextEvent) return true;
+      return nextEvent.created >= currentEvent.created;
+    });
+    expect(rightOrder).toBe(true);
+  });
+
+  it('should make 500 events works', async () => {
+    const eventStoreRepo = new EventStoreRepo('test', {
+      region: 'us-east-2',
+      endpoint: 'http://127.0.0.1:8000',
+    });
+    try {
+      await eventStoreRepo.mapper.deleteTable(EventStoreEntity);
+    } catch {}
+    const eventsToStore = [...new Array(500).keys()].map(makeEvent);
+    await eventStoreRepo.init(true);
+    await eventStoreRepo.storeEvents(eventsToStore);
+    const pages = await eventStoreRepo.getAllEvents(100);
+    let allEvents: CreatedEvent<any, any>[] = [];
+    for await (const events of pages) {
+      allEvents = allEvents.concat(events);
+    }
+    expect(allEvents.length).toBe(500);
+    const rightOrder = allEvents.every((currentEvent, index) => {
+      const nextEvent = allEvents[index + 1];
+      if (!nextEvent) return true;
+      return nextEvent.created >= currentEvent.created;
+    });
+    expect(rightOrder).toBe(true);
   });
 });

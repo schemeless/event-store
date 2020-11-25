@@ -3,6 +3,7 @@ import type { CreatedEvent, IEventStoreRepo } from '@schemeless/event-store-type
 import { DataMapper } from '@aws/dynamodb-data-mapper';
 import * as Dynamodb from 'aws-sdk/clients/dynamodb';
 import { dateIndexGSIOptions, EventStoreEntity } from './EventStore.dynamodb.entity';
+import { logger } from './utils/logger';
 
 const dateIndexName = 'created';
 
@@ -20,16 +21,16 @@ export class EventStoreRepo implements IEventStoreRepo {
     this.initialized = false;
   }
 
-  async init() {
-    if (this.initialized) return;
-    const result = await this.mapper.ensureTableExists(EventStoreEntity, {
+  async init(force = false) {
+    if (this.initialized && !force) return;
+    await this.mapper.ensureTableExists(EventStoreEntity, {
       readCapacityUnits: 10,
       writeCapacityUnits: 10,
       indexOptions: {
         [dateIndexName]: dateIndexGSIOptions,
       },
     });
-    console.log(result);
+    logger.info('initialized');
     this.initialized = true;
   }
 

@@ -30,16 +30,15 @@ export const createAccountAndGetId = async (userId: string) => {
   const eventStoreService = await getEventStoreService();
   const accountCreationRequested = await AccountCreationRequested.receiver(eventStoreService, {
     payload: {
-      userId: userId
+      userId: userId,
     },
-    identifier: userId
+    identifier: userId,
   });
 
   const causationEvents = await eventStoreService.getCausationEvents(accountCreationRequested.trackingId);
-  console.log(causationEvents);
 
   const accountCreatedEvent: BaseEvent<typeof AccountCreated.samplePayload> | undefined = causationEvents.find(
-    event => event.type === AccountCreated.type
+    (event) => event.type === AccountCreated.type
   );
 
   if (!accountCreatedEvent) throw new Error('account not found');
@@ -53,9 +52,9 @@ export const depositTokenToAccount = async (userId: string, accountId: string, t
     payload: {
       accountId,
       tokenId,
-      amount
+      amount,
     },
-    identifier: userId
+    identifier: userId,
   });
 };
 
@@ -75,8 +74,8 @@ export const placeOrder = async (
       type: type,
       tokenId: tokenId,
       amount: amount,
-      unitPrice: unitPrice
+      unitPrice: unitPrice,
     },
-    identifier: userId
+    identifier: userId,
   });
 };
