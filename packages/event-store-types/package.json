@@ -20,8 +20,17 @@
   "bugs": {
     "url": "https://github.com/schemeless/event-store/issues"
   },
+  "devDependencies": {
+    "@types/debug": "^4.1.5",
+    "@types/jest": "^26.0.15",
+    "@types/node": "^14.14.7",
+    "jest": "^26.6.3",
+    "rimraf": "^3.0.2",
+    "ts-jest": "^26.4.4",
+    "typescript": "^4.0.5"
+  },
   "publishConfig": {
     "access": "public"
   },
-  "gitHead": "daa48bc5bd611a0f1c3bf8d6779fa1eb256c7fc2"
+  "gitHead": "bd602dd972a17cf970267ec78356649b37628e12"
 }

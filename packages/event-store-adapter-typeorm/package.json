@@ -21,6 +21,7 @@
     "url": "https://github.com/schemeless/event-store/issues"
   },
   "dependencies": {
+    "@schemeless/event-store-types": "^1.0.0",
     "debug": "^4.2.0",
     "typeorm": "^0.2.29"
   },
@@ -38,5 +39,5 @@
   "publishConfig": {
     "access": "public"
   },
-  "gitHead": "daa48bc5bd611a0f1c3bf8d6779fa1eb256c7fc2"
+  "gitHead": "bd602dd972a17cf970267ec78356649b37628e12"
 }
