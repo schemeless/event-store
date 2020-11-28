@@ -54,4 +54,10 @@ export class EventStoreRepo implements IEventStoreRepo {
     for await (const saved of this.mapper.batchPut(allEventEntities)) {
     }
   };
+
+  resetStore = async () => {
+    await this.mapper.deleteTable(EventStoreEntity);
+    this.initialized = false;
+    await this.init(true);
+  };
 }

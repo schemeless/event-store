@@ -3,6 +3,7 @@ import type {
   CreatedEvent,
   EventObserverState,
   EventOutputState,
+  IEventStoreRepo,
   SideEffectsState,
 } from '@schemeless/event-store-types';
 
@@ -20,6 +21,7 @@ export interface EventStore {
   mainQueue: ReturnType<typeof makeMainQueue>;
   receive: ReturnType<typeof makeReceive>;
   replay: ReturnType<typeof makeReplay>;
+  eventStoreRepo: IEventStoreRepo;
   output$: Observable<EventOutput>;
 }
 

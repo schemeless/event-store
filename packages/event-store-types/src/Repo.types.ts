@@ -23,4 +23,5 @@ export interface IEventStoreRepo<PAYLOAD = any, META = any> {
   getAllEvents: (pageSize: number) => Promise<AsyncIterableIterator<Array<IEventStoreEntity<PAYLOAD, META>>>>;
   createEventEntity: (event: CreatedEvent<any>) => IEventStoreEntity<PAYLOAD, META>;
   storeEvents: (events: CreatedEvent<any>[]) => Promise<void>;
+  resetStore: () => Promise<void>;
 }

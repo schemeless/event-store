@@ -78,6 +78,7 @@ export const makeEventStore = (eventStoreRepo: IEventStoreRepo) => async (
     mainQueue,
     receive: makeReceive(mainQueue),
     replay: makeReplay(eventFlows, eventStoreRepo),
+    eventStoreRepo: eventStoreRepo,
     output$,
   };
 };
