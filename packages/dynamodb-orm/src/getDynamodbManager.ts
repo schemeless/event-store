@@ -4,7 +4,10 @@ import { DynamodbManager } from './dynamodb.manager';
 import { Class } from './utils';
 import { tableName } from './dynamodb.repo.decorator';
 
-const makeGetDynamoDbManager = <T extends Class>(tableNamePrefix: string, clientConfiguration: ClientConfiguration) => {
+export const makeGetDynamoDbManager = <T extends Class>(
+  tableNamePrefix: string,
+  clientConfiguration: ClientConfiguration
+) => {
   const lock = new AsyncLock();
   const map: { [key: string]: DynamodbManager<any> } = {};
 
