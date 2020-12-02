@@ -6,7 +6,7 @@ import { Class } from './utils';
 
 export class DynamodbRepo<T extends Class> {
   constructor(public Entity: T, public dataMapper: DataMapper) {
-    if (!(this.Entity as any)[createTableOptionsKey]) {
+    if (!(this.Entity as any).prototype[createTableOptionsKey]) {
       throw new Error(`@repo decorator is required for ${Entity.toString()}`);
     }
   }
@@ -48,11 +48,11 @@ export class DynamodbRepo<T extends Class> {
   }
 
   async createTable(): Promise<void> {
-    return this.dataMapper.createTable(this.Entity, (this.Entity as any)[createTableOptionsKey]);
+    return this.dataMapper.createTable(this.Entity, (this.Entity as any).prototype[createTableOptionsKey]);
   }
 
   async ensureTableExists(): Promise<void> {
-    return this.dataMapper.ensureTableExists(this.Entity, (this.Entity as any)[createTableOptionsKey]);
+    return this.dataMapper.ensureTableExists(this.Entity, (this.Entity as any).prototype[createTableOptionsKey]);
   }
 
   async deleteTable(): Promise<void> {
