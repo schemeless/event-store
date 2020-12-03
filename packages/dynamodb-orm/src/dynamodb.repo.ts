@@ -3,6 +3,14 @@ import type { DataMapper, QueryIterator } from '@aws/dynamodb-data-mapper';
 import type { ScanIterator } from '@aws/dynamodb-data-mapper/build/ScanIterator';
 import { createTableOptionsKey } from './dynamodb.repo.decorator';
 import { Class } from './utils';
+import { ConditionExpression, ConditionExpressionPredicate } from '@aws/dynamodb-expressions';
+import {
+  DeleteOptions,
+  GetOptions,
+  ParallelScanWorkerOptions,
+  PutOptions,
+  UpdateOptions,
+} from '@aws/dynamodb-data-mapper/build/namedParameters';
 
 export class DynamodbRepo<T extends Class> {
   constructor(public Entity: T, public dataMapper: DataMapper) {
@@ -11,28 +19,35 @@ export class DynamodbRepo<T extends Class> {
     }
   }
 
-  async put(obj: Partial<T>): Promise<T> {
-    return this.dataMapper.put(Object.assign(new this.Entity(), obj));
+  async put(obj: Partial<T>, options?: PutOptions): Promise<T> {
+    return this.dataMapper.put(Object.assign(new this.Entity(), obj, options));
   }
 
-  async get(obj: Partial<T>): Promise<T> {
-    return this.dataMapper.get(Object.assign(new this.Entity(), obj));
+  async get(obj: Partial<T>, options?: GetOptions): Promise<T> {
+    return this.dataMapper.get(Object.assign(new this.Entity(), obj), options);
   }
 
-  async update(obj: Partial<T>): Promise<T> {
-    return this.dataMapper.update(Object.assign(new this.Entity(), obj));
+  async update(obj: Partial<T>, options?: UpdateOptions): Promise<T> {
+    return this.dataMapper.update(Object.assign(new this.Entity(), obj, options));
   }
 
-  async delete(obj: Partial<T>): Promise<T> {
-    return this.dataMapper.delete(Object.assign(new this.Entity(), obj));
+  async delete(obj: Partial<T>, options?: DeleteOptions): Promise<T> {
+    return this.dataMapper.delete(Object.assign(new this.Entity(), obj, options));
   }
 
-  async scan(options: ScanOptions): Promise<ScanIterator<T>> {
+  async scan(options?: ScanOptions | ParallelScanWorkerOptions): Promise<ScanIterator<T>> {
     return this.dataMapper.scan(this.Entity, options);
   }
 
-  async query(queryOptions: QueryOptions): Promise<QueryIterator<T>> {
-    return this.dataMapper.query(this.Entity, queryOptions);
+  async query(
+    keyCondition:
+      | ConditionExpression
+      | {
+          [propertyName: string]: ConditionExpressionPredicate | any;
+        },
+    options?: QueryOptions
+  ): Promise<QueryIterator<T>> {
+    return this.dataMapper.query(this.Entity, keyCondition, options);
   }
 
   async batchPut(objs: Array<Partial<T>>): Promise<AsyncIterableIterator<T>> {
