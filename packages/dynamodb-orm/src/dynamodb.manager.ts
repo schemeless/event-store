@@ -2,9 +2,8 @@ import { ClientConfiguration } from 'aws-sdk/clients/dynamodb';
 import { DataMapper } from '@aws/dynamodb-data-mapper';
 import * as Dynamodb from 'aws-sdk/clients/dynamodb';
 import { DynamodbRepo } from './dynamodb.repo';
-import { Class } from './utils';
 
-export class DynamodbManager<T extends Class> {
+export class DynamodbManager<T> {
   public client: Dynamodb;
   public dataMapper: DataMapper;
   public repo: DynamodbRepo<T>;

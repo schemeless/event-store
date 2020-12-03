@@ -2,13 +2,18 @@ import { makeGetDynamoDbManager } from './getDynamodbManager';
 
 describe('dynamodb manager', () => {
   it('should make typescript type happy', async () => {
-    class Test {
+    interface TestType {
       a: string;
       b: number;
     }
-    const getDynamoDbManager = makeGetDynamoDbManager<typeof Test>('dev', {});
-    const manager = await getDynamoDbManager(Test);
+
+    class Test implements TestType {
+      a: string;
+      b: number;
+    }
+    const getDynamoDbManager = makeGetDynamoDbManager('dev', {});
+    const manager = await getDynamoDbManager<TestType>(Test);
     const repo = manager.repo;
-    await repo.get({ a: 1 });
+    const a = await repo.get({ a: '1' });
   });
 });
