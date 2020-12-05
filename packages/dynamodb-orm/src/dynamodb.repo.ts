@@ -22,42 +22,42 @@ export class DynamodbRepo<T> {
     this.EntityClass = Entity as any;
   }
 
-  async put(obj: Partial<T>, options?: PutOptions): Promise<T> {
+  put(obj: Partial<T>, options?: PutOptions): Promise<T> {
     return this.dataMapper.put(Object.assign(new this.EntityClass(), obj, options));
   }
 
-  async get(obj: Partial<T>, options?: GetOptions): Promise<T> {
+  get(obj: Partial<T>, options?: GetOptions): Promise<T> {
     return this.dataMapper.get(Object.assign(new this.EntityClass(), obj), options);
   }
 
-  async update(obj: Partial<T>, options?: UpdateOptions): Promise<T> {
+  update(obj: Partial<T>, options?: UpdateOptions): Promise<T> {
     return this.dataMapper.update(Object.assign(new this.EntityClass(), obj, options));
   }
 
-  async delete(obj: Partial<T>, options?: DeleteOptions): Promise<T> {
+  delete(obj: Partial<T>, options?: DeleteOptions): Promise<T> {
     return this.dataMapper.delete(Object.assign(new this.EntityClass(), obj, options));
   }
 
-  async scan(options?: ScanOptions | ParallelScanWorkerOptions): Promise<ScanIterator<T>> {
+  scan(options?: ScanOptions | ParallelScanWorkerOptions): ScanIterator<T> {
     return this.dataMapper.scan(this.EntityClass, options);
   }
 
-  async query(
+  query(
     keyCondition:
       | ConditionExpression
       | {
           [propertyName: string]: ConditionExpressionPredicate | any;
         },
     options?: QueryOptions
-  ): Promise<QueryIterator<T>> {
+  ): QueryIterator<T> {
     return this.dataMapper.query(this.EntityClass, keyCondition, options);
   }
 
-  async batchPut(objs: Array<Partial<T>>): Promise<AsyncIterableIterator<T>> {
+  batchPut(objs: Array<Partial<T>>): AsyncIterableIterator<T> {
     return this.dataMapper.batchPut(objs.map((obj) => Object.assign(new this.EntityClass(), obj)));
   }
 
-  async batchGet(objs: Array<Partial<T>>): Promise<AsyncIterableIterator<T>> {
+  batchGet(objs: Array<Partial<T>>): AsyncIterableIterator<T> {
     return this.dataMapper.batchGet(objs.map((obj) => Object.assign(new this.EntityClass(), obj)));
   }
 
@@ -65,22 +65,22 @@ export class DynamodbRepo<T> {
     return this.dataMapper.batchGet(objs.map((obj) => Object.assign(new this.EntityClass(), obj)));
   }
 
-  async createTable(): Promise<void> {
+  createTable(): Promise<void> {
     return this.dataMapper.createTable(this.EntityClass, (this.EntityClass as any).prototype[createTableOptionsKey]);
   }
 
-  async ensureTableExists(): Promise<void> {
+  ensureTableExists(): Promise<void> {
     return this.dataMapper.ensureTableExists(
       this.EntityClass,
       (this.EntityClass as any).prototype[createTableOptionsKey]
     );
   }
 
-  async deleteTable(): Promise<void> {
+  deleteTable(): Promise<void> {
     return this.dataMapper.deleteTable(this.EntityClass);
   }
 
-  async ensureTableNotExists(): Promise<void> {
+  ensureTableNotExists(): Promise<void> {
     return this.dataMapper.ensureTableNotExists(this.EntityClass);
   }
 }
