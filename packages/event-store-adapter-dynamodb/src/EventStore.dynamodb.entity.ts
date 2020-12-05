@@ -1,6 +1,14 @@
 import { attribute, hashKey, table } from '@aws/dynamodb-data-mapper-annotations';
+import type { CustomType } from '@aws/dynamodb-data-marshaller';
 import type { IEventStoreEntity } from '@schemeless/event-store-types';
 import { GlobalSecondaryIndexOptions } from '@aws/dynamodb-data-mapper/build/namedParameters/SecondaryIndexOptions';
+import { AttributeValue } from 'aws-sdk/clients/dynamodb';
+
+const DateType: CustomType<Date> = {
+  type: 'Custom',
+  marshall: (input: Date): AttributeValue => ({ S: input.toISOString() }),
+  unmarshall: (persistedValue: AttributeValue): Date => new Date(persistedValue.S!),
+};
 
 export const dateIndexGSIOptions: GlobalSecondaryIndexOptions = {
   type: 'global',
@@ -40,11 +48,12 @@ export class EventStoreEntity implements IEventStoreEntity<any, any> {
   @attribute({ type: 'String' })
   causationId?: string; //uuid
 
-  @attribute({
-    type: 'Date',
-    indexKeyConfigurations: {
-      created: 'HASH',
-    },
-  })
+  @attribute(
+    Object.assign(DateType, {
+      indexKeyConfigurations: {
+        created: 'HASH',
+      },
+    })
+  )
   created: Date;
 }
