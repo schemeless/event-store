@@ -26,8 +26,11 @@ export class DynamodbRepo<T> {
     return this.dataMapper.put(Object.assign(new this.EntityClass(), obj, options));
   }
 
-  get(obj: Partial<T>, options?: GetOptions): Promise<T> {
-    return this.dataMapper.get(Object.assign(new this.EntityClass(), obj), options);
+  get(obj: Partial<T>, options?: GetOptions): Promise<T | undefined> {
+    return this.dataMapper.get(Object.assign(new this.EntityClass(), obj), options).catch((e) => {
+      if (e.name === 'ItemNotFoundException') return undefined;
+      else throw e;
+    });
   }
 
   update(obj: Partial<T>, options?: UpdateOptions): Promise<T> {
