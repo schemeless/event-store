@@ -12,7 +12,7 @@ export const makeGetDynamoDbManager = (
   const map: { [key: string]: DynamodbManager<any> } = {};
 
   return async <T extends StringToAnyObjectMap = StringToAnyObjectMap>(entity: any) => {
-    const key = (entity as any)[tableNameKey] as string;
+    const key = (entity as any).prototype[tableNameKey] as string;
     if (map[key]) return map[key];
     await lock.acquire(tableNameKey, async () => {
       const dynamoDbManager = new DynamodbManager(tableNamePrefix, entity, clientConfiguration);
