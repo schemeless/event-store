@@ -6,6 +6,7 @@ import { AttributeValue } from 'aws-sdk/clients/dynamodb';
 
 const DateType: CustomType<Date> = {
   type: 'Custom',
+  attributeType: 'S',
   marshall: (input: Date): AttributeValue => ({ S: input.toISOString() }),
   unmarshall: (persistedValue: AttributeValue): Date => new Date(persistedValue.S!),
 };
