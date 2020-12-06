@@ -1,7 +1,7 @@
 import * as AsyncLock from 'async-lock';
 import { ClientConfiguration } from 'aws-sdk/clients/dynamodb';
 import { DynamodbManager } from './dynamodb.manager';
-import { tableName } from './dynamodb.repo.decorator';
+import { tableNameKey } from './dynamodb.repo.decorator';
 import { StringToAnyObjectMap } from '@aws/dynamodb-data-mapper/build/constants';
 
 export const makeGetDynamoDbManager = (
@@ -12,9 +12,9 @@ export const makeGetDynamoDbManager = (
   const map: { [key: string]: DynamodbManager<any> } = {};
 
   return async <T extends StringToAnyObjectMap = StringToAnyObjectMap>(entity: any) => {
-    const key = (entity as any)[tableName] as string;
+    const key = (entity as any)[tableNameKey] as string;
     if (map[key]) return map[key];
-    await lock.acquire(tableName, async () => {
+    await lock.acquire(tableNameKey, async () => {
       const dynamoDbManager = new DynamodbManager(tableNamePrefix, entity, clientConfiguration);
       await dynamoDbManager.init();
       map[key] = dynamoDbManager;
