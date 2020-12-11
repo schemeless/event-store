@@ -60,7 +60,8 @@ export class EventStoreRepo implements IEventStoreRepo {
   };
 
   resetStore = async () => {
-    const eventStoreConn: Connection = await this.conn;
+    await this.init();
+    const eventStoreConn: Connection = this.conn;
     await eventStoreConn.query(`CREATE DATABASE IF NOT EXISTS ${this.connectionOptions.database};`);
     await eventStoreConn
       .createQueryRunner()
