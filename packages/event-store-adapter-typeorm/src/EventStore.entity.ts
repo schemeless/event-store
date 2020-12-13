@@ -27,6 +27,6 @@ export class EventStoreEntity implements IEventStoreEntity<any, any | undefined>
   @Column('varchar', { nullable: true, length: 36 })
   causationId?: string; //uuid
 
-  @Column()
+  @Column({ type: 'timestamp', precision: 6 })
   readonly created: Date;
 }
