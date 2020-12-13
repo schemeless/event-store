@@ -21,6 +21,7 @@ export class EventStoreIterator implements AsyncIterableIterator<EventStoreEntit
       await this.repo.find({
         order: {
           created: 'ASC',
+          id: 'ASC',
         },
         take,
         skip,
