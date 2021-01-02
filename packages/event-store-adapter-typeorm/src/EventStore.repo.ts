@@ -1,21 +1,27 @@
 import type { CreatedEvent, IEventStoreEntity, IEventStoreRepo } from '@schemeless/event-store-types';
 import { Connection, Repository } from 'typeorm';
-import { EventStoreEntity } from './EventStore.entity';
+import { EventStoreEntity, EventStoreEntitySqliteSpecial } from './EventStore.entity';
 import { ConnectionOptions } from 'typeorm';
 import { getConnection } from './getConnection';
 import { EventStoreIterator } from './EventStoreIterator';
 import { logger } from './utils/logger';
 
+const isConnForSqlite = (connectionOptions: ConnectionOptions): boolean => connectionOptions.type === 'sqlite';
+type GeneralEventStoreEntity = EventStoreEntity | EventStoreEntitySqliteSpecial;
+
 export class EventStoreRepo implements IEventStoreRepo {
-  public repo: Repository<EventStoreEntity>;
+  public repo: Repository<GeneralEventStoreEntity>;
   public conn: Connection;
 
   constructor(private connectionOptions: ConnectionOptions) {}
 
   async init() {
+    const SelectedEventStoreEntity = isConnForSqlite(this.connectionOptions)
+      ? EventStoreEntitySqliteSpecial
+      : EventStoreEntity;
     if (!this.conn) {
-      this.conn = await getConnection([EventStoreEntity], this.connectionOptions);
-      this.repo = this.conn.getRepository<EventStoreEntity>(EventStoreEntity);
+      this.conn = await getConnection([SelectedEventStoreEntity], this.connectionOptions);
+      this.repo = this.conn.getRepository(SelectedEventStoreEntity);
     }
   }
 
@@ -24,8 +30,11 @@ export class EventStoreRepo implements IEventStoreRepo {
     return new EventStoreIterator(this.repo, pageSize);
   }
 
-  createEventEntity = (event: CreatedEvent<any>): EventStoreEntity => {
-    const newEventEntity = new EventStoreEntity();
+  createEventEntity = (event: CreatedEvent<any>): GeneralEventStoreEntity => {
+    const SelectedEventStoreEntity = isConnForSqlite(this.connectionOptions)
+      ? EventStoreEntitySqliteSpecial
+      : EventStoreEntity;
+    const newEventEntity = new SelectedEventStoreEntity();
     const { id, domain, type, payload, meta, created, correlationId, causationId, identifier } = event;
 
     Object.assign(newEventEntity, {
