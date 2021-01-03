@@ -12,7 +12,7 @@ import { makeObserverQueue } from './queue/makeObserverQueue';
 import { makeReceive } from './queue/makeReceive';
 import { makeReplay } from './makeReplay';
 import { makeSideEffectQueue } from './queue/makeSideEffectQueue';
-import { from, merge, Observable, Subject } from 'rxjs';
+import { from, merge, Observable } from 'rxjs';
 import { EventOutput, EventStore } from './EventStore.types';
 
 const assignObserver = (output$: Observable<EventOutput>, successEventObservers: SuccessEventObserver<any>[]) => {
@@ -77,7 +77,7 @@ export const makeEventStore = (eventStoreRepo: IEventStoreRepo) => async (
   return {
     mainQueue,
     receive: makeReceive(mainQueue),
-    replay: makeReplay(eventFlows, eventStoreRepo),
+    replay: makeReplay(eventFlows, successEventObservers, eventStoreRepo),
     eventStoreRepo: eventStoreRepo,
     output$,
   };
