@@ -26,8 +26,8 @@ export const makeReplay = (
         logEvent(currentEvent as CreatedEvent<any>, '✅️️', 'Apply');
         if (EventFlow.apply) {
           await EventFlow.apply(currentEvent as CreatedEvent<any>);
-          observerQueue.push(currentEvent as CreatedEvent<any>);
         }
+        observerQueue.push(currentEvent as CreatedEvent<any>);
       }, null);
     } else {
       logger.info(`replay finished`);
