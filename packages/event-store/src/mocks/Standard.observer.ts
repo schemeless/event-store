@@ -7,6 +7,7 @@ export const StandardObserver: SuccessEventObserver<
   typeof StandardEvent.payloadType | typeof NestedOnceEvent.payloadType
 > = {
   filters: [StandardEvent, NestedOnceEvent],
+  priority: 1,
   apply: (event) => {
     mockObserverApply();
   },
