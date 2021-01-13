@@ -30,9 +30,11 @@ export const makeReplay = (
         observerQueue.push(currentEvent as CreatedEvent<any>);
       }, null);
     } else {
-      logger.info(`replay finished`);
+      logger.info(`replay apply done`);
       break;
     }
   }
+  await observerQueue.queueInstance.drained$.toPromise();
+  logger.info(`replay all done`);
   subscription.unsubscribe();
 };

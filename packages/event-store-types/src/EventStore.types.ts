@@ -81,6 +81,7 @@ type EventObserverFilter = EventObserverStaticFilter;
 
 export interface SuccessEventObserver<Payload = any> {
   filters: EventObserverFilter[];
+  priority: number;
 
   readonly apply?: (event: CreatedEvent<Payload>) => Promise<void> | void;
 }

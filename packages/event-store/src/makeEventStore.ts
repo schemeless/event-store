@@ -15,21 +15,6 @@ import { makeSideEffectQueue } from './queue/makeSideEffectQueue';
 import { from, merge, Observable } from 'rxjs';
 import { EventOutput, EventStore } from './EventStore.types';
 
-const assignObserver = (output$: Observable<EventOutput>, successEventObservers: SuccessEventObserver<any>[]) => {
-  const observerQueue = makeObserverQueue(successEventObservers);
-  const result$ = output$.pipe(
-    Rx.tap((eventOutput) => {
-      if (eventOutput.state === EventOutputState.success) {
-        observerQueue.push(eventOutput.event);
-      }
-    })
-  );
-  return {
-    result$,
-    observerQueue,
-  };
-};
-
 export const makeEventStore = (eventStoreRepo: IEventStoreRepo) => async (
   eventFlows: EventFlow[],
   successEventObservers: SuccessEventObserver<any>[] = []
@@ -71,12 +56,12 @@ export const makeEventStore = (eventStoreRepo: IEventStoreRepo) => async (
   );
 
   const doneAndSideEffect$ = merge(mainQueueProcessed$, sideEffectQueue.processed$);
-  const { result$, observerQueue } = assignObserver(doneAndSideEffect$, successEventObservers);
-  const output$ = merge(result$, observerQueue.processed$);
+  // const { result$, observerQueue } = assignObserver(doneAndSideEffect$, successEventObservers);
+  const output$ = doneAndSideEffect$;
 
   return {
     mainQueue,
-    receive: makeReceive(mainQueue),
+    receive: makeReceive(mainQueue, successEventObservers),
     replay: makeReplay(eventFlows, successEventObservers, eventStoreRepo),
     eventStoreRepo: eventStoreRepo,
     output$,

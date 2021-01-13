@@ -1,5 +1,6 @@
 import { CreatedEvent, EventObserverState, SuccessEventObserver } from '@schemeless/event-store-types';
 import { createRxQueue } from './RxQueue';
+import * as R from 'ramda';
 import * as Rx from 'rxjs/operators';
 import { logEvent } from '../util/logEvent';
 import { Observable } from 'rxjs';
@@ -29,7 +30,10 @@ export const makeObserverQueue = (successEventObservers: SuccessEventObserver<an
         return null;
       } else {
         // apply observers
-        await Promise.all(observersToApply.map((o) => o.apply(createdEvent)));
+        const orderedObserversToApply = R.sortBy(R.prop('priority'))(observersToApply);
+        for (const observerToApply of orderedObserversToApply) {
+          await observerToApply.apply(createdEvent);
+        }
         logEvent(createdEvent, '👀', 'OB:OK');
         done();
         return { state: EventObserverState.success, event: createdEvent };
