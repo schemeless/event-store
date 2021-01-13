@@ -17,6 +17,7 @@ export const makeReplay = (
   const eventStoreIterator = await eventStoreRepo.getAllEvents(pageSize);
   const observerQueue = makeObserverQueue(successEventObservers);
   const subscription = observerQueue.processed$.subscribe();
+  observerQueue.queueInstance.drained$.subscribe(() => logger.info(`replay all done`));
   for await (const events of eventStoreIterator) {
     if (events.length > 0) {
       logger.info(`replaying ${events.length}`);
@@ -30,11 +31,9 @@ export const makeReplay = (
         observerQueue.push(currentEvent as CreatedEvent<any>);
       }, null);
     } else {
-      logger.info(`replay apply done`);
+      logger.info(`replay apply done, waiting for observer finished`);
       break;
     }
   }
-  await observerQueue.queueInstance.drained$.toPromise();
-  logger.info(`replay all done`);
   subscription.unsubscribe();
 };

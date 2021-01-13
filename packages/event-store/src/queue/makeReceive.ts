@@ -21,9 +21,9 @@ export const makeReceive = (
           reject(err.error);
         } else {
           const observerQueue = makeObserverQueue(successEventObservers);
-          doneEvents.forEach((event) => observerQueue.push(event));
           observerQueue.processed$.subscribe();
-          observerQueue.queueInstance.drained$.toPromise().then(() => resolve(doneEvents));
+          observerQueue.queueInstance.drained$.subscribe(() => resolve(doneEvents));
+          doneEvents.forEach((event) => observerQueue.push(event));
         }
       }
     );
