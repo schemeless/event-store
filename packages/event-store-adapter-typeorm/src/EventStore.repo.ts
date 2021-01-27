@@ -1,6 +1,7 @@
 import type { CreatedEvent, IEventStoreEntity, IEventStoreRepo } from '@schemeless/event-store-types';
 import { Connection, Repository } from 'typeorm';
-import { EventStoreEntity, EventStoreEntitySqliteSpecial } from './EventStore.entity';
+import { EventStoreEntity } from './EventStore.entity';
+import { EventStoreEntitySqliteSpecial } from './EventStore.entity.sqlite';
 import { ConnectionOptions } from 'typeorm';
 import { getConnection } from './getConnection';
 import { EventStoreIterator } from './EventStoreIterator';

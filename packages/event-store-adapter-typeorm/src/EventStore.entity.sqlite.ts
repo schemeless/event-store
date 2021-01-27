@@ -2,7 +2,7 @@ import type { IEventStoreEntity } from '@schemeless/event-store-types';
 import { Column, Entity, PrimaryColumn } from 'typeorm';
 
 @Entity({ name: 'event_store_entity' })
-export class EventStoreEntity implements IEventStoreEntity<any, any | undefined> {
+export class EventStoreEntitySqliteSpecial implements IEventStoreEntity<any, any | undefined> {
   @PrimaryColumn('varchar', { length: 36 })
   id: string; //uuid
 
@@ -27,6 +27,6 @@ export class EventStoreEntity implements IEventStoreEntity<any, any | undefined>
   @Column('varchar', { nullable: true, length: 36 })
   causationId?: string; //uuid
 
-  @Column({ type: 'timestamp', precision: 6 })
+  @Column('datetime')
   readonly created: Date;
 }
