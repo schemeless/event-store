@@ -6,13 +6,20 @@ import { dateIndexGSIOptions, EventStoreEntity } from './EventStore.dynamodb.ent
 import { logger } from './utils/logger';
 
 const dateIndexName = 'created';
+interface Options {
+  skipInitialise?: boolean;
+}
 
 export class EventStoreRepo implements IEventStoreRepo {
   public dynamodbClient: Dynamodb;
   public mapper: DataMapper;
   public initialized: boolean;
 
-  constructor(private tableNamePrefix: string, clientConfiguration: ClientConfiguration) {
+  constructor(
+    private tableNamePrefix: string,
+    clientConfiguration: ClientConfiguration,
+    public options: Options = { skipInitialise: false }
+  ) {
     this.dynamodbClient = new Dynamodb(clientConfiguration);
     this.mapper = new DataMapper({
       client: this.dynamodbClient as any,
@@ -22,6 +29,7 @@ export class EventStoreRepo implements IEventStoreRepo {
   }
 
   async init(force = false) {
+    if (this.options.skipInitialise) return;
     if (this.initialized && !force) return;
     await this.mapper.ensureTableExists(EventStoreEntity, {
       readCapacityUnits: 10,
