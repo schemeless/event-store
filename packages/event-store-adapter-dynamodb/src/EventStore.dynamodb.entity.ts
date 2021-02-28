@@ -1,4 +1,5 @@
-import { attribute, hashKey, table } from '@aws/dynamodb-data-mapper-annotations';
+import { deflateSync, inflateSync } from 'zlib';
+import { attribute, hashKey, rangeKey, table } from '@aws/dynamodb-data-mapper-annotations';
 import type { CustomType } from '@aws/dynamodb-data-marshaller';
 import type { IEventStoreEntity } from '@schemeless/event-store-types';
 import { GlobalSecondaryIndexOptions } from '@aws/dynamodb-data-mapper/build/namedParameters/SecondaryIndexOptions';
@@ -9,6 +10,21 @@ const DateType: CustomType<Date> = {
   attributeType: 'S',
   marshall: (input: Date): AttributeValue => ({ S: input.toISOString() }),
   unmarshall: (persistedValue: AttributeValue): Date => new Date(persistedValue.S!),
+};
+
+const PayloadType: CustomType<any> = {
+  type: 'Custom',
+  attributeType: 'B',
+  marshall(input: any) {
+    const buffer = Buffer.from(JSON.stringify(input));
+    return { B: deflateSync(buffer) };
+  },
+  unmarshall(persistedValue) {
+    const binary = persistedValue.B;
+    const b = Buffer.from(binary);
+    const jsonString = inflateSync(b);
+    return JSON.parse(jsonString.toString());
+  },
 };
 
 export const dateIndexName = 'eventCreated';
@@ -42,7 +58,7 @@ export class EventStoreEntity implements IEventStoreEntity<any, any> {
   @attribute({ type: 'Any' })
   meta?: string;
 
-  @attribute({ type: 'Any' })
+  @attribute(PayloadType)
   payload: string;
 
   @attribute({ type: 'String' })
@@ -54,7 +70,7 @@ export class EventStoreEntity implements IEventStoreEntity<any, any> {
   @attribute({ type: 'String' })
   causationId?: string; //uuid
 
-  @attribute(
+  @rangeKey(
     Object.assign(DateType, {
       indexKeyConfigurations: {
         [dateIndexName]: 'HASH',

@@ -1,6 +1,6 @@
 {
   "name": "@schemeless/event-store-adapter-dynamodb",
-  "version": "2.2.0-rc.2",
+  "version": "2.2.0-rc.3",
   "typescript:main": "src/index.ts",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

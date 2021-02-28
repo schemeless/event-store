@@ -1,42 +1,46 @@
-import type { ScanPaginator } from '@aws/dynamodb-data-mapper';
 import { dateIndexName, EventStoreEntity } from './EventStore.dynamodb.entity';
 import { EventStoreRepo } from './EventStore.dynamodb.repo';
 
 export class EventStoreDynamodbIterator implements AsyncIterableIterator<EventStoreEntity[]> {
-  protected pages: ScanPaginator<EventStoreEntity>;
+  protected currentPage = 0;
+  public allItems: { id: string; created: Date }[];
 
   constructor(protected repo: EventStoreRepo, protected pageSize = 100) {
-    this.pages = this.repo.mapper
-      .query(
-        EventStoreEntity,
-        {},
-        {
-          indexName: dateIndexName,
-          pageSize,
-        }
-      )
+    this.allItems = [];
+  }
+
+  public async init() {
+    const pages = this.repo.mapper
+      .scan(EventStoreEntity, {
+        indexName: dateIndexName,
+        pageSize: 5000,
+      })
       .pages();
+    for await (const items of pages) {
+      this.allItems = this.allItems.concat(items);
+    }
+    this.allItems.sort((a, b) => +a.created - +b.created);
   }
 
   public async next(): Promise<IteratorResult<EventStoreEntity[]>> {
-    const _next = await this.pages.next();
-    if (_next.done === true) {
-      return {
-        done: true,
-        value: undefined,
-      };
-    }
-    console.log(_next.value);
-    const entities = _next.value as EventStoreEntity[];
-    const _gets = entities.map(({ id }) => Object.assign(new EventStoreEntity(), { id: id }));
-    let value = [];
+    const take = this.pageSize;
+    const skip = take * this.currentPage;
+    const entities = this.allItems.slice(skip, skip + take);
+
+    const _gets = entities.map((attrs) => Object.assign(new EventStoreEntity(), attrs));
+    let items = [];
     for await (const _result of this.repo.mapper.batchGet(_gets)) {
-      value = value.concat(_result);
+      items = items.concat(_result);
     }
 
+    items.sort((a, b) => +a.created - +b.created);
+
+    const isDone = this.currentPage * this.pageSize >= this.allItems.length;
+    this.currentPage = this.currentPage + 1;
+
     return {
-      done: _next.done,
-      value: value,
+      done: isDone,
+      value: items,
     };
   }
 
