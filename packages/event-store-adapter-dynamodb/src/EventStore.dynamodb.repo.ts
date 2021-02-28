@@ -2,7 +2,7 @@ import type { ClientConfiguration } from 'aws-sdk/clients/dynamodb';
 import type { CreatedEvent, IEventStoreRepo } from '@schemeless/event-store-types';
 import { DataMapper } from '@aws/dynamodb-data-mapper';
 import * as Dynamodb from 'aws-sdk/clients/dynamodb';
-import { beginsWith } from '@aws/dynamodb-expressions'
+import { beginsWith } from '@aws/dynamodb-expressions';
 import { EventStoreEntity } from './EventStore.dynamodb.entity';
 import { logger } from './utils/logger';
 
@@ -16,26 +16,23 @@ const defaultOptions = {
   skipInitialise: false,
   readCapacityUnits: 10,
   writeCapacityUnits: 10,
-}
+};
 
 export class EventStoreRepo implements IEventStoreRepo {
   public dynamodbClient: Dynamodb;
   public mapper: DataMapper;
   public initialized: boolean;
+  public options: Options;
 
-  constructor(
-    private tableNamePrefix: string,
-    clientConfiguration: ClientConfiguration,
-    public options: Options = {
-      skipInitialise: false
-    }
-  ) {
+  constructor(private tableNamePrefix: string, clientConfiguration: ClientConfiguration, options?: Options) {
     this.dynamodbClient = new Dynamodb(clientConfiguration);
     this.mapper = new DataMapper({
       client: this.dynamodbClient as any,
       tableNamePrefix: this.tableNamePrefix,
     });
-    this.initialized = false;
+    this.options = Object.assign({}, defaultOptions, options);
+
+    this.initialized = this.options.skipInitialise;
   }
 
   async init(force = false) {
@@ -52,9 +49,13 @@ export class EventStoreRepo implements IEventStoreRepo {
   async getAllEvents(pageSize: number = 100): Promise<AsyncIterableIterator<Array<EventStoreEntity>>> {
     await this.init();
     return this.mapper
-      .query(EventStoreEntity,{id: }, {
-        pageSize: pageSize,
-      })
+      .query(
+        EventStoreEntity,
+        { id: beginsWith('') },
+        {
+          pageSize: pageSize,
+        }
+      )
       .pages();
   }
 
