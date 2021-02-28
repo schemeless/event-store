@@ -2,12 +2,20 @@ import type { ClientConfiguration } from 'aws-sdk/clients/dynamodb';
 import type { CreatedEvent, IEventStoreRepo } from '@schemeless/event-store-types';
 import { DataMapper } from '@aws/dynamodb-data-mapper';
 import * as Dynamodb from 'aws-sdk/clients/dynamodb';
-import { dateIndexGSIOptions, EventStoreEntity } from './EventStore.dynamodb.entity';
+import { beginsWith } from '@aws/dynamodb-expressions'
+import { EventStoreEntity } from './EventStore.dynamodb.entity';
 import { logger } from './utils/logger';
 
-const dateIndexName = 'created';
 interface Options {
   skipInitialise?: boolean;
+  readCapacityUnits?: number;
+  writeCapacityUnits?: number;
+}
+
+const defaultOptions = {
+  skipInitialise: false,
+  readCapacityUnits: 10,
+  writeCapacityUnits: 10,
 }
 
 export class EventStoreRepo implements IEventStoreRepo {
@@ -18,7 +26,9 @@ export class EventStoreRepo implements IEventStoreRepo {
   constructor(
     private tableNamePrefix: string,
     clientConfiguration: ClientConfiguration,
-    public options: Options = { skipInitialise: false }
+    public options: Options = {
+      skipInitialise: false
+    }
   ) {
     this.dynamodbClient = new Dynamodb(clientConfiguration);
     this.mapper = new DataMapper({
@@ -32,11 +42,8 @@ export class EventStoreRepo implements IEventStoreRepo {
     if (this.options.skipInitialise) return;
     if (this.initialized && !force) return;
     await this.mapper.ensureTableExists(EventStoreEntity, {
-      readCapacityUnits: 10,
-      writeCapacityUnits: 10,
-      indexOptions: {
-        [dateIndexName]: dateIndexGSIOptions,
-      },
+      readCapacityUnits: this.options.readCapacityUnits,
+      writeCapacityUnits: this.options.writeCapacityUnits,
     });
     logger.info('initialized');
     this.initialized = true;
@@ -45,9 +52,8 @@ export class EventStoreRepo implements IEventStoreRepo {
   async getAllEvents(pageSize: number = 100): Promise<AsyncIterableIterator<Array<EventStoreEntity>>> {
     await this.init();
     return this.mapper
-      .scan(EventStoreEntity, {
-        indexName: dateIndexName,
-        pageSize,
+      .query(EventStoreEntity,{id: }, {
+        pageSize: pageSize,
       })
       .pages();
   }

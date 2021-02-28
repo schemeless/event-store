@@ -1,7 +1,6 @@
-import { attribute, hashKey, table } from '@aws/dynamodb-data-mapper-annotations';
+import { attribute, hashKey, rangeKey, table } from '@aws/dynamodb-data-mapper-annotations';
 import type { CustomType } from '@aws/dynamodb-data-marshaller';
 import type { IEventStoreEntity } from '@schemeless/event-store-types';
-import { GlobalSecondaryIndexOptions } from '@aws/dynamodb-data-mapper/build/namedParameters/SecondaryIndexOptions';
 import { AttributeValue } from 'aws-sdk/clients/dynamodb';
 
 const DateType: CustomType<Date> = {
@@ -11,21 +10,9 @@ const DateType: CustomType<Date> = {
   unmarshall: (persistedValue: AttributeValue): Date => new Date(persistedValue.S!),
 };
 
-export const dateIndexGSIOptions: GlobalSecondaryIndexOptions = {
-  type: 'global',
-  projection: 'all',
-  readCapacityUnits: 10,
-  writeCapacityUnits: 5,
-};
-
 @table('schemeless-event-store')
 export class EventStoreEntity implements IEventStoreEntity<any, any> {
-  @hashKey({
-    type: 'String',
-    indexKeyConfigurations: {
-      created: 'RANGE',
-    },
-  })
+  @hashKey({ type: 'String' })
   id: string;
 
   @attribute({ type: 'String' })
@@ -37,7 +24,7 @@ export class EventStoreEntity implements IEventStoreEntity<any, any> {
   @attribute({ type: 'Any' })
   meta?: string;
 
-  @attribute({ type: 'Any' })
+  @attribute({ type: 'Binary' })
   payload: string;
 
   @attribute({ type: 'String' })
@@ -49,12 +36,6 @@ export class EventStoreEntity implements IEventStoreEntity<any, any> {
   @attribute({ type: 'String' })
   causationId?: string; //uuid
 
-  @attribute(
-    Object.assign(DateType, {
-      indexKeyConfigurations: {
-        created: 'HASH',
-      },
-    })
-  )
+  @rangeKey(DateType)
   created: Date;
 }
