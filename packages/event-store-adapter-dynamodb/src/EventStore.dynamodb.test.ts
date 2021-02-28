@@ -1,10 +1,9 @@
 import { EventStoreRepo } from './EventStore.dynamodb.repo';
 import { CreatedEvent } from '@schemeless/event-store-types';
-import { v4 as uuid } from 'uuid';
 import { EventStoreEntity } from './EventStore.dynamodb.entity';
 
-const makeEvent = (): CreatedEvent<any, any> => ({
-  id: uuid(),
+const makeEvent = (id: string | number): CreatedEvent<any, any> => ({
+  id: id + '',
   domain: 'test',
   type: 'test',
   payload: { id: 'test' },
