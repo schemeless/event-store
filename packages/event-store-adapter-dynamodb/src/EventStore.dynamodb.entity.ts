@@ -1,4 +1,3 @@
-import { deflateSync, inflateSync } from 'zlib';
 import { attribute, hashKey, rangeKey, table } from '@aws/dynamodb-data-mapper-annotations';
 import type { CustomType } from '@aws/dynamodb-data-marshaller';
 import type { IEventStoreEntity } from '@schemeless/event-store-types';
@@ -14,16 +13,13 @@ const DateType: CustomType<Date> = {
 
 const PayloadType: CustomType<any> = {
   type: 'Custom',
-  attributeType: 'B',
+  attributeType: 'S',
   marshall(input: any) {
-    const buffer = Buffer.from(JSON.stringify(input));
-    return { B: deflateSync(buffer) };
+    return { S: JSON.stringify(input) };
   },
   unmarshall(persistedValue) {
-    const binary = persistedValue.B;
-    const b = Buffer.from(binary);
-    const jsonString = inflateSync(b);
-    return JSON.parse(jsonString.toString());
+    const s = persistedValue.S;
+    return JSON.parse(s);
   },
 };
 
@@ -60,6 +56,9 @@ export class EventStoreEntity implements IEventStoreEntity<any, any> {
 
   @attribute(PayloadType)
   payload: string;
+
+  @attribute({ type: 'String' })
+  s3Reference?: string;
 
   @attribute({ type: 'String' })
   identifier?: string;

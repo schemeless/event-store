@@ -28,19 +28,21 @@ export class EventStoreDynamodbIterator implements AsyncIterableIterator<EventSt
     const entities = this.allItems.slice(skip, skip + take);
 
     const _gets = entities.map((attrs) => Object.assign(new EventStoreEntity(), attrs));
-    let items = [];
+    let items: EventStoreEntity[] = [];
     for await (const _result of this.repo.mapper.batchGet(_gets)) {
       items = items.concat(_result);
     }
 
     items.sort((a, b) => +a.created - +b.created);
 
+    const fullItems = await Promise.all(items.map((_) => this.repo.getFullEvent(_)));
+
     const isDone = this.currentPage * this.pageSize >= this.allItems.length;
     this.currentPage = this.currentPage + 1;
 
     return {
       done: isDone,
-      value: items,
+      value: fullItems,
     };
   }
 
