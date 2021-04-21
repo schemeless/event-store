@@ -9,7 +9,7 @@ describe('validateEvent', () => {
       type: StandardEvent.type,
       payload: { key: 'validateEvent1', positiveNumber: -1 }
     });
-    expect(validate(StandardEvent, event)).rejects.toThrow(/Invalid positive number/);
+    expect(validate(StandardEvent)(event)).rejects.toThrow(/Invalid positive number/);
   });
 
   it('should not throw an error on valid', () => {
@@ -18,6 +18,6 @@ describe('validateEvent', () => {
       type: StandardEvent.type,
       payload: { key: 'validateEvent2', positiveNumber: 1 }
     });
-    expect(() => validate(StandardEvent, event)).not.toThrow();
+    expect(() => validate(StandardEvent)(event)).not.toThrow();
   });
 });

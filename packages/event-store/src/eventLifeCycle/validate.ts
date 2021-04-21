@@ -1,7 +1,7 @@
 import { logEvent } from '../util/logEvent';
 import type { CreatedEvent, EventFlow } from '@schemeless/event-store-types';
 
-export const validate = async (eventFlow: EventFlow<any>, event: CreatedEvent<any>): Promise<void> => {
+export const validate = (eventFlow: EventFlow<any>) => async (event: CreatedEvent<any>) => {
   try {
     const error = eventFlow.validate ? await eventFlow.validate(event) : undefined;
     if (error instanceof Error) throw error;
@@ -10,4 +10,5 @@ export const validate = async (eventFlow: EventFlow<any>, event: CreatedEvent<an
     throw error;
   }
   logEvent(event, '☑️', 'verified');
+  return event
 };

@@ -2,9 +2,10 @@ import type { CreatedEvent, EventFlowMap, EventTaskAndError } from '@schemeless/
 import { defaultEventCreator } from './defaultEventCreator';
 import * as Rx from 'rxjs/operators';
 import { ApplyQueue } from '../queue/RxQueue';
-import { makeValidateAndApply } from '../eventLifeCycle/makeValidateAndApply';
-import { makeCreateConsequentEventInputs } from '../eventLifeCycle/createConsequentEvents';
+import { validateAndApply } from '../eventLifeCycle/validateAndApply';
+import { createConsequentEventInputs } from '../eventLifeCycle/createConsequentEvents';
 import { isEventTaskError } from './isEventTaskError';
+import { getEventFlow } from './getEventFlow'
 
 const applyRootEvent = (eventFlowMap: EventFlowMap, applyQueue: ApplyQueue) => async (
   { task, done: applyQueueDone },
@@ -12,8 +13,9 @@ const applyRootEvent = (eventFlowMap: EventFlowMap, applyQueue: ApplyQueue) => a
 ) => {
   const createdEvent = defaultEventCreator(task.currentEvent, task.causalEvent);
   try {
-    const preAppliedEvent = await makeValidateAndApply(eventFlowMap)(createdEvent);
-    const { consequentEvents } = await makeCreateConsequentEventInputs(eventFlowMap)(preAppliedEvent);
+    const eventFlow = getEventFlow(eventFlowMap)(createdEvent);
+    const preAppliedEvent = await validateAndApply(eventFlow)(createdEvent);
+    const { consequentEvents } = await createConsequentEventInputs(eventFlow)(preAppliedEvent);
     consequentEvents.forEach((currentEvent) => {
       applyQueue.push({ currentEvent, causalEvent: preAppliedEvent });
     });
