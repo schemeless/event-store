@@ -1,5 +1,5 @@
 import _debug from 'debug';
-const debug = _debug('schemaless:event-store');
+const debug = _debug('schemeless:event-store');
 const logFunc = (level: string) => (str: string, ...args) => debug(level.padEnd(5) + ':' + str, ...args);
 
 export const logger = {
