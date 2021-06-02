@@ -17,12 +17,13 @@ export const makeReplay = (
   const eventStoreIterator = await eventStoreRepo.getAllEvents(pageSize);
   const observerQueue = makeObserverQueue(successEventObservers);
   const subscription = observerQueue.processed$.subscribe();
-  observerQueue.queueInstance.drained$.subscribe(() => logger.info(`replay all done`));
+  observerQueue.queueInstance.drained$.subscribe(() => logger.debug(`observerQueue drained`));
   for await (const events of eventStoreIterator) {
     if (events.length > 0) {
       logger.info(`replaying ${events.length}`);
       await events.reduce<Promise<any>>(async (acc, currentEvent) => {
         if (acc) await acc;
+        Object.assign(currentEvent, { created: new Date(currentEvent.created) });
         const EventFlow = getEventFlow(eventFlowMap)(currentEvent);
         logEvent(currentEvent as CreatedEvent<any>, '✅️️', 'Apply');
         if (EventFlow.apply) {
@@ -35,5 +36,4 @@ export const makeReplay = (
       break;
     }
   }
-  subscription.unsubscribe();
 };

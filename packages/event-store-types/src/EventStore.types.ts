@@ -5,6 +5,8 @@ export interface BaseEventInput<Payload, META = undefined> {
   identifier?: string;
   correlationId?: string;
   causationId?: string;
+
+  created?: Date;
 }
 
 export interface BaseEvent<Payload, META = undefined> extends BaseEventInput<Payload, META> {
@@ -16,11 +18,13 @@ export interface BaseEvent<Payload, META = undefined> extends BaseEventInput<Pay
   identifier?: string;
   correlationId?: string;
   causationId?: string;
+
+  created?: Date;
 }
 
 export interface CreatedEvent<Payload, META = undefined> extends BaseEvent<Payload, META> {
   id: string;
-  readonly created: Date;
+  readonly created?: Date;
 }
 
 export interface StoredEvent<Payload, META = undefined> extends CreatedEvent<Payload, META> {}
