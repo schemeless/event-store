@@ -1,12 +1,13 @@
-import { CreatedEvent, EventFlow, SideEffectsState } from '@schemeless/event-store-types';
+import { BaseEvent, CreatedEvent, EventFlow, SideEffectsState } from '@schemeless/event-store-types';
 import { createRxQueue } from './RxQueue';
 import { registerEventFlowTypes } from '../operators/registerEventFlowTypes';
 import * as Rx from 'rxjs/operators';
 import { logEvent } from '../util/logEvent';
 import { getEventFlow } from '../operators/getEventFlow';
 import { logger } from '../util/logger';
+import { mainQueueType } from './makeMainQueue';
 
-export const makeSideEffectQueue = (eventFlows: EventFlow[]) => {
+export const makeSideEffectQueue = (eventFlows: EventFlow[], mainQueue: mainQueueType) => {
   const sideEffectQueue = createRxQueue<{ retryCount: number; event: CreatedEvent<any> }, any>('sideEffect', {
     concurrent: 1,
   });
@@ -15,15 +16,20 @@ export const makeSideEffectQueue = (eventFlows: EventFlow[]) => {
   const processed$ = sideEffectQueue.process$.pipe(
     Rx.mergeMap(
       async ({ task: { retryCount, event }, done }): Promise<{ state: SideEffectsState; event: CreatedEvent<any> }> => {
-        const eventFlow = getEventFlow(eventFlowMap)(event);
+        const eventFlow: EventFlow = getEventFlow(eventFlowMap)(event);
         if (!eventFlow.sideEffect) {
-          logEvent(event, '🌠', 'SE:NA');
+          logEvent(event, '🌠', 'SideEffect:N/A');
           done();
           return { event, state: SideEffectsState.done };
         } else {
           try {
-            await eventFlow.sideEffect(event);
-            logEvent(event, '🌠', 'SE:OK');
+            const nextEvents: BaseEvent<any>[] = ((await eventFlow.sideEffect(event)) as unknown) as BaseEvent<any>[];
+            logEvent(event, '🌠', 'SideEffect:Done');
+            if (nextEvents?.length) {
+              nextEvents.forEach((nextEvent) => {
+                mainQueue.push(nextEvent);
+              });
+            }
             done();
             return { event, state: SideEffectsState.done };
           } catch (error) {

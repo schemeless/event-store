@@ -20,7 +20,7 @@ export const makeEventStore = (eventStoreRepo: IEventStoreRepo) => async (
   successEventObservers: SuccessEventObserver<any>[] = []
 ): Promise<EventStore> => {
   const mainQueue = makeMainQueue(eventFlows);
-  const sideEffectQueue = makeSideEffectQueue(eventFlows);
+  const sideEffectQueue = makeSideEffectQueue(eventFlows, mainQueue);
 
   await eventStoreRepo.init();
 

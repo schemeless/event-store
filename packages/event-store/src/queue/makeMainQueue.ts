@@ -36,3 +36,5 @@ export const makeMainQueue = (eventFlows: EventFlow<any>[]) => {
     push: mainQueue.push.bind(mainQueue) as typeof mainQueue.push,
   };
 };
+
+export type mainQueueType = ReturnType<typeof makeMainQueue>;
