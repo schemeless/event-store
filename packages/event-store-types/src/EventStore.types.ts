@@ -24,7 +24,7 @@ export interface BaseEvent<Payload, META = undefined> extends BaseEventInput<Pay
 
 export interface CreatedEvent<Payload, META = undefined> extends BaseEvent<Payload, META> {
   id: string;
-  readonly created?: Date;
+  readonly created: Date;
 }
 
 export interface StoredEvent<Payload, META = undefined> extends CreatedEvent<Payload, META> {}
