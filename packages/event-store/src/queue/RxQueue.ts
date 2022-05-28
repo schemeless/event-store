@@ -1,16 +1,17 @@
 import * as Queue from 'better-queue';
 import { ProcessFunction } from 'better-queue';
-import { Observable, Subject } from 'rxjs';
+import { BehaviorSubject, Observable, Subject } from 'rxjs';
 import { logger } from '../util/logger';
 import * as Rx from 'rxjs/operators';
 import * as R from 'ramda';
+import { scan } from 'ramda';
 
 const makeEventQueueObservable = <TASK, RESULT, RETURN = [Queue<TASK, RESULT>]>(
   queue: Queue<TASK, RESULT>,
   queueEventType: Queue.QueueEvent,
   queueId = 'unnamed'
 ): Observable<RETURN> => {
-  return new Observable<RETURN>(observer => {
+  return new Observable<RETURN>((observer) => {
     queue.on(queueEventType, (...args) => {
       logger.debug(`Queue Event: ${queueId} - ${queueEventType}`);
       observer.next(args.length === 0 ? [queue] : ([queue, ...args] as any));
@@ -21,7 +22,7 @@ const makeEventQueueObservable = <TASK, RESULT, RETURN = [Queue<TASK, RESULT>]>(
 const makeFailedEventQueueObservable = <TASK, RESULT, RETURN = [Queue<TASK, RESULT>]>(
   queue: Queue<TASK, RESULT>
 ): Observable<RETURN> => {
-  return new Observable<RETURN>(observer => {
+  return new Observable<RETURN>((observer) => {
     queue.on('task_failed', (id, error) => {
       logger.warn('EventQueueObservable error');
       // logger.fatal('%o', error);
@@ -45,16 +46,35 @@ export const createRxQueue = <TASK = any, RESULT = TASK>(
   const callback: Queue.ProcessFunction<TASK, RESULT> = (task, done) => {
     process$.next({ task, done });
   };
+
+  const queueSizeInput$ = new Subject<number>();
+  const queueSizeOutput$ = new BehaviorSubject<number | null>(null);
+
+  queueSizeInput$.pipe(Rx.scan((acc, curr) => (acc || 0) + curr, null)).subscribe(queueSizeOutput$);
+
+  const customPush = (task: any, cb?: (err: any, result: any) => void) => {
+    queueSizeInput$.next(+1);
+    queue
+      .push(task, cb)
+      .on('finish', () => {
+        queueSizeInput$.next(-1);
+      })
+      .on('failed', () => {
+        queueSizeInput$.next(-1);
+      });
+  };
+
   const queue = makeQueue<TASK, RESULT>(callback, Object.assign(queueOptions || {}, { id: id }));
   return {
     id,
     queueInstance: queue,
-    push: queue.push.bind(queue) as typeof queue.push,
+    push: customPush as typeof queue.push,
     process$,
     task$: process$.pipe(Rx.map(R.prop('task'))),
     done$: process$.pipe(Rx.map(R.prop('done'))),
     drained$: makeEventQueueObservable<TASK, RESULT>(queue, 'drain', id),
     empty$: makeEventQueueObservable<TASK, RESULT>(queue, 'empty', id),
-    taskFailed$: makeFailedEventQueueObservable<TASK, RESULT>(queue)
+    taskFailed$: makeFailedEventQueueObservable<TASK, RESULT>(queue),
+    queueSize$: queueSizeOutput$,
   };
 };

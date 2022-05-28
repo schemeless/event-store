@@ -1,8 +1,10 @@
+import * as Rx from 'rxjs/operators';
 import { getTestEventStore } from './util/testHelpers';
 import { NestedTwiceEvent, StandardEvent, testEventFlows, testObservers } from './mocks';
 import { storeGet } from './mocks/mockStore';
 import { mockObserverApply } from './mocks/Standard.observer';
 import delay from 'delay.ts';
+import { sideEffectFinishedPromise } from './util/sideEffectFinishedPromise';
 
 describe('make eventStore', () => {
   beforeEach(() => jest.clearAllMocks());
@@ -13,8 +15,8 @@ describe('make eventStore', () => {
       StandardEvent.receive(eventStore)({
         payload: {
           key: 'eventStore1',
-          positiveNumber: 1
-        }
+          positiveNumber: 1,
+        },
       })
     ).resolves.toHaveLength(1);
 
@@ -30,8 +32,8 @@ describe('make eventStore', () => {
       StandardEvent.receive(eventStore)({
         payload: {
           key: 'eventStore2',
-          positiveNumber: -1
-        }
+          positiveNumber: -1,
+        },
       })
     ).rejects.toThrowError(/Invalid positive number/);
 
@@ -44,8 +46,8 @@ describe('make eventStore', () => {
     const events = await NestedTwiceEvent.receive(eventStore)({
       payload: {
         key: 'eventStore3',
-        positiveNumber: 4
-      }
+        positiveNumber: 4,
+      },
     });
     await expect(events).toHaveLength(7); // 1 NestedTwice, 2 NestedOnce, 4 Standard
 
@@ -61,12 +63,31 @@ describe('make eventStore', () => {
       NestedTwiceEvent.receive(eventStore)({
         payload: {
           key: 'eventStore4',
-          positiveNumber: 1
-        }
+          positiveNumber: 1,
+        },
       })
     ).rejects.toThrowError(/Invalid positive number/);
 
     expect(storeGet('eventStore4')).toBe(0);
     expect(mockObserverApply.mock.calls.length).toBe(0);
+  });
+
+  it('should have a sign to drain side effect queue', async () => {
+    const eventStore = await getTestEventStore(testEventFlows, testObservers);
+
+    const p1 = NestedTwiceEvent.receive(eventStore)({
+      payload: {
+        key: 'eventStore5',
+        positiveNumber: 4,
+      },
+    });
+
+    await delay(10);
+
+    await p1;
+
+    await sideEffectFinishedPromise(eventStore);
+
+    expect(storeGet('eventStore5')).toBe(18);
   });
 });

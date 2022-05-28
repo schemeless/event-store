@@ -3,7 +3,7 @@ import { of, zip } from 'rxjs';
 import * as Rx from 'rxjs/operators';
 
 describe('Rx Queue', () => {
-  it('should run work on done and task', cb => {
+  it('should run work on done and task', (cb) => {
     const rxQueue = createRxQueue<number>('test');
     zip(rxQueue.task$, rxQueue.done$).subscribe(([task, done]) => {
       done(null, task);
@@ -13,7 +13,7 @@ describe('Rx Queue', () => {
     });
   });
 
-  it('should allow push and down', cb => {
+  it('should allow push and down', (cb) => {
     const rxQueue = createRxQueue<string, string>('pushTest');
     const taskVal = 'taskVal';
     const resultVal = 'resultVal';
@@ -28,7 +28,7 @@ describe('Rx Queue', () => {
     });
   });
 
-  it('should receive drain ', cb => {
+  it('should receive drain ', (cb) => {
     const rxQueue = createRxQueue<string, string>('drainTest');
     rxQueue.process$.subscribe(({ task, done }) => {
       done();
@@ -44,7 +44,7 @@ describe('Rx Queue', () => {
     });
   });
 
-  it('should receive empty ', cb => {
+  it('should receive empty ', (cb) => {
     const rxQueue = createRxQueue<string, string>('emptyTest');
     rxQueue.process$.subscribe(({ task, done }) => {
       done();
@@ -60,7 +60,7 @@ describe('Rx Queue', () => {
     });
   });
 
-  it('should receive failed ', cb => {
+  it('should receive failed ', (cb) => {
     const rxQueue = createRxQueue<string, string>('failedTest');
     rxQueue.process$.subscribe(({ task, done }) => {
       done('failed');
@@ -77,9 +77,31 @@ describe('Rx Queue', () => {
           return of('done');
         })
       )
-      .subscribe(end => {
+      .subscribe((end) => {
         expect(end).toBe('done');
         cb();
       });
+  });
+
+  it('should be able to get queue size', async () => {
+    const rxQueue = createRxQueue<string, string>('basicTest');
+
+    rxQueue.process$.subscribe(({ task, done }) => {
+      done();
+    });
+
+    let arr = [];
+    rxQueue.queueSize$.subscribe((size) => {
+      arr.push(size);
+    });
+
+    rxQueue.push('1');
+    rxQueue.push('2');
+    rxQueue.push('3');
+
+    const delay = (ms) => new Promise((res) => setTimeout(res, ms));
+    await delay(10);
+
+    expect(arr).toEqual([null, 1, 2, 3, 2, 1, 0]);
   });
 });

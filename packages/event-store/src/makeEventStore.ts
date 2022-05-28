@@ -8,12 +8,11 @@ import {
   SuccessEventObserver,
 } from '@schemeless/event-store-types';
 import { makeMainQueue } from './queue/makeMainQueue';
-import { makeObserverQueue } from './queue/makeObserverQueue';
 import { makeReceive } from './queue/makeReceive';
 import { makeReplay } from './makeReplay';
 import { makeSideEffectQueue } from './queue/makeSideEffectQueue';
-import { from, merge, Observable } from 'rxjs';
-import { EventOutput, EventStore } from './EventStore.types';
+import { from, merge } from 'rxjs';
+import { EventStore } from './EventStore.types';
 
 export const makeEventStore = (eventStoreRepo: IEventStoreRepo) => async (
   eventFlows: EventFlow[],
@@ -61,6 +60,7 @@ export const makeEventStore = (eventStoreRepo: IEventStoreRepo) => async (
 
   return {
     mainQueue,
+    sideEffectQueue,
     receive: makeReceive(mainQueue, successEventObservers),
     replay: makeReplay(eventFlows, successEventObservers, eventStoreRepo),
     eventStoreRepo: eventStoreRepo,

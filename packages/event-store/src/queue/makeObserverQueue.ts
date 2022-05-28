@@ -6,11 +6,9 @@ import { logEvent } from '../util/logEvent';
 import { Observable } from 'rxjs';
 import { EventOutput } from '../EventStore.types';
 
-export const makeObserverQueue = (successEventObservers: SuccessEventObserver<any>[]) => {
-  const observerQueue = createRxQueue<CreatedEvent<any>, any>('applySuccessEventObservers', {
-    concurrent: 1,
-  });
-  type ObserverMap = { [domainType: string]: SuccessEventObserver<any>[] };
+type ObserverMap = { [domainType: string]: SuccessEventObserver[] };
+
+const makeObserverMap = (successEventObservers: SuccessEventObserver[]) => {
   const observerMap: ObserverMap = successEventObservers.reduce((acc, observer) => {
     observer.filters.forEach((filter) => {
       const domainType = filter.domain + '__' + filter.type;
@@ -20,12 +18,22 @@ export const makeObserverQueue = (successEventObservers: SuccessEventObserver<an
     return acc;
   }, {});
 
+  return observerMap;
+};
+
+export const makeObserverQueue = (successEventObservers: SuccessEventObserver<any>[]) => {
+  const observerQueue = createRxQueue<CreatedEvent<any>, any>('applySuccessEventObservers', {
+    concurrent: 1,
+  });
+
+  const observerMap = makeObserverMap(successEventObservers);
+
   const processed$: Observable<EventOutput> = observerQueue.process$.pipe(
     Rx.mergeMap(async ({ done, task: createdEvent }) => {
       const thisDomainType = createdEvent.domain + '__' + createdEvent.type;
       const observersToApply = observerMap[thisDomainType];
       if (!observersToApply || observersToApply.length === 0) {
-        logEvent(createdEvent, '👀', 'OB:NA');
+        logEvent(createdEvent, '👀', 'No observers to apply');
         done();
         return null;
       } else {
@@ -34,7 +42,7 @@ export const makeObserverQueue = (successEventObservers: SuccessEventObserver<an
         for (const observerToApply of orderedObserversToApply) {
           await observerToApply.apply(createdEvent);
         }
-        logEvent(createdEvent, '👀', 'OB:OK');
+        logEvent(createdEvent, '👀', 'Applied observers');
         done();
         return { state: EventObserverState.success, event: createdEvent };
       }
