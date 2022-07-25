@@ -10,7 +10,7 @@ export const makeReplay = (
   eventFlows: EventFlow[],
   successEventObservers: SuccessEventObserver<any>[] = [],
   eventStoreRepo: IEventStoreRepo
-) => async (startFromId: string | undefined) => {
+) => async (startFromId?: string) => {
   const eventFlowMap = registerEventFlowTypes({}, eventFlows);
   let pageSize = 200;
   logger.info('replay starting');
