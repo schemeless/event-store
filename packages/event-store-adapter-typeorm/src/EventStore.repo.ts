@@ -26,9 +26,12 @@ export class EventStoreRepo implements IEventStoreRepo {
     }
   }
 
-  async getAllEvents(pageSize: number = 100): Promise<AsyncIterableIterator<Array<IEventStoreEntity>>> {
+  async getAllEvents(
+    pageSize: number = 100,
+    startFromId?: string
+  ): Promise<AsyncIterableIterator<Array<IEventStoreEntity>>> {
     await this.init();
-    return new EventStoreIterator(this.repo, pageSize);
+    return new EventStoreIterator(this.repo, pageSize, startFromId);
   }
 
   createEventEntity = (event: CreatedEvent<any>): GeneralEventStoreEntity => {

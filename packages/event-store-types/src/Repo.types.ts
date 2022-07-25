@@ -20,7 +20,10 @@ interface GetAllEventsResult<PAYLOAD, META> {
 
 export interface IEventStoreRepo<PAYLOAD = any, META = any> {
   init: () => Promise<void>;
-  getAllEvents: (pageSize: number) => Promise<AsyncIterableIterator<Array<IEventStoreEntity<PAYLOAD, META>>>>;
+  getAllEvents: (
+    pageSize: number,
+    startFromId?: string
+  ) => Promise<AsyncIterableIterator<Array<IEventStoreEntity<PAYLOAD, META>>>>;
   createEventEntity: (event: CreatedEvent<any>) => IEventStoreEntity<PAYLOAD, META>;
   storeEvents: (events: CreatedEvent<any>[]) => Promise<void>;
   resetStore: () => Promise<void>;

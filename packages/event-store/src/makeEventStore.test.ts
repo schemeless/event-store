@@ -1,4 +1,3 @@
-import * as Rx from 'rxjs/operators';
 import { getTestEventStore } from './util/testHelpers';
 import { NestedTwiceEvent, StandardEvent, testEventFlows, testObservers } from './mocks';
 import { storeGet } from './mocks/mockStore';

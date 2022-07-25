@@ -9,12 +9,13 @@ import { makeObserverQueue } from './queue/makeObserverQueue';
 export const makeReplay = (
   eventFlows: EventFlow[],
   successEventObservers: SuccessEventObserver<any>[] = [],
-  eventStoreRepo: IEventStoreRepo
+  eventStoreRepo: IEventStoreRepo,
+  startFromId: string | undefined
 ) => async () => {
   const eventFlowMap = registerEventFlowTypes({}, eventFlows);
   let pageSize = 200;
   logger.info('replay starting');
-  const eventStoreIterator = await eventStoreRepo.getAllEvents(pageSize);
+  const eventStoreIterator = await eventStoreRepo.getAllEvents(pageSize, startFromId);
   const observerQueue = makeObserverQueue(successEventObservers);
   const subscription = observerQueue.processed$.subscribe();
   observerQueue.queueInstance.drained$.subscribe(() => logger.debug(`observerQueue drained`));

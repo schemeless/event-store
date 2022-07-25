@@ -12,14 +12,17 @@ const defaultInMemDBOption = {
   logging: ['error', 'warn'],
 } as ConnectionOptions;
 
-const makeEvent = (): CreatedEvent<any, any> => ({
-  id: uuid(),
-  domain: 'test',
-  type: 'test',
-  payload: { id: 'test' },
+const makeEvent = (num: number): CreatedEvent<any, any> => {
+  const d = new Date(Date.now() + Math.round(1000 * 1000 * Math.random()));
+  return {
+    id: 'a' + +d,
+    domain: 'test',
+    type: 'test',
+    payload: { id: num },
 
-  created: new Date(Date.now() + Math.round(1000 * 1000 * Math.random())),
-});
+    created: d,
+  };
+};
 describe('EventStore Typeorm', () => {
   it('should make 500 events works', async () => {
     const eventStoreRepo = new EventStoreRepo(defaultInMemDBOption);
@@ -39,5 +42,23 @@ describe('EventStore Typeorm', () => {
       return nextEvent.created >= currentEvent.created;
     });
     expect(rightOrder).toBe(true);
+  });
+  it('should make replay after works', async () => {
+    const eventStoreRepo = new EventStoreRepo(defaultInMemDBOption);
+    const eventsToStore = [...new Array(500).keys()].map(makeEvent);
+    await eventStoreRepo.init();
+    await eventStoreRepo.storeEvents(eventsToStore);
+    let pages = await eventStoreRepo.getAllEvents(100);
+    let allEvents: CreatedEvent<any, any>[] = [];
+    for await (const events of pages) {
+      allEvents = allEvents.concat(events);
+    }
+    const stopped = allEvents[199];
+    pages = await eventStoreRepo.getAllEvents(100, stopped.id);
+    allEvents = [];
+    for await (const events of pages) {
+      allEvents = allEvents.concat(events);
+    }
+    expect(allEvents.length).toBe(300);
   });
 });
