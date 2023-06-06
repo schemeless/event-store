@@ -41,6 +41,7 @@ export interface EventFlow<PartialPayload = any, Payload extends PartialPayload 
   };
 
   readonly eventType?: CreatedEvent<Payload>;
+  readonly baseEventType?: BaseEvent<Payload>;
   readonly payloadType?: PartialPayload | Payload;
 
   readonly samplePayload?: PartialPayload | Payload;

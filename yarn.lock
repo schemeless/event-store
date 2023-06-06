@@ -1426,6 +1426,11 @@
   dependencies:
     "@types/node" ">= 8"
 
+"@schemeless/event-store-types@^2.1.0", "@schemeless/event-store-types@^2.3.0":
+  version "2.3.0"
+  resolved "https://registry.yarnpkg.com/@schemeless/event-store-types/-/event-store-types-2.3.0.tgz#d10d0b9e5a8c8c790cbc4c93898fb8af254761dc"
+  integrity sha512-lvL8HuQVd8uxMIWlEJtSyh+kBjfsoTujDQRmpGfx7AAFUKl/n3y+/tI0LK+RmF/J2Pe27TL8bN/hWOM40Hpz5w==
+
 "@sinonjs/commons@^1.7.0":
   version "1.8.0"
   resolved "https://registry.yarnpkg.com/@sinonjs/commons/-/commons-1.8.0.tgz#c8d68821a854c555bba172f3b06959a0039b236d"
