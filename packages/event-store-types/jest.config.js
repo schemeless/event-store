@@ -3,4 +3,7 @@ module.exports = {
   transform: {
     '^.+\\.tsx?$': 'ts-jest',
   },
+  moduleNameMapper: {
+    '^@schemeless/(.*)$': '<rootDir>/../$1/src',
+  },
 };

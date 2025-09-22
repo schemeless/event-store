@@ -1,5 +1,5 @@
 import type { BaseEvent, BaseEventInput, CreatedEvent, EventFlow, StoredEvent } from '@schemeless/event-store-types';
-import { StandardEvent } from './standard.event';
+import { StandardEvent } from './Standard.event';
 import { storeGet, storeSet } from './mockStore';
 
 const DOMAIN = 'test';
