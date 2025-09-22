@@ -1,6 +1,7 @@
+import 'reflect-metadata';
+
 import { EventStoreRepo } from './EventStore.repo';
 import { CreatedEvent } from '@schemeless/event-store-types';
-import { v4 as uuid } from 'uuid';
 import { ConnectionOptions } from 'typeorm';
 
 const defaultInMemDBOption = {
@@ -13,9 +14,9 @@ const defaultInMemDBOption = {
 } as ConnectionOptions;
 
 const makeEvent = (num: number): CreatedEvent<any, any> => {
-  const d = new Date(Date.now() + Math.round(1000 * 1000 * Math.random()));
+  const d = new Date(Date.now() + num * 1000);
   return {
-    id: 'a' + +d,
+    id: `event-${num.toString().padStart(6, '0')}`,
     domain: 'test',
     type: 'test',
     payload: { id: num },
