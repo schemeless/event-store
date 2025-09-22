@@ -1,8 +1,8 @@
-import { StandardEvent } from './standard.event';
+import { StandardEvent } from './Standard.event';
 import { NestedOnceEvent } from './NestedOnce.event';
 import { NestedTwiceEvent } from './NestedTwice.event';
 import { StandardObserver } from './Standard.observer';
-export { StandardEvent } from './standard.event';
+export { StandardEvent } from './Standard.event';
 export { NestedOnceEvent } from './NestedOnce.event';
 export { NestedTwiceEvent } from './NestedTwice.event';
 export { StandardObserver } from './Standard.observer';

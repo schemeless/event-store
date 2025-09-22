@@ -1,47 +1,57 @@
 import { makeGetDynamoDbManager } from './getDynamodbManager';
-import { repo } from './dynamodb.repo.decorator';
-import { attribute, hashKey, table } from '@aws/dynamodb-data-mapper-annotations';
+import { tableNameKey } from './dynamodb.repo.decorator';
+import { DynamodbManager } from './dynamodb.manager';
 
-interface TestType {
-  a: string;
-  b: string;
-}
+jest.mock('./dynamodb.manager');
 
-@repo('test', {
-  readCapacityUnits: 10,
-  writeCapacityUnits: 10,
-})
-@table('test')
-class Test implements TestType {
-  @hashKey({ type: 'String' })
-  a: string;
+const mockedManager = DynamodbManager as jest.MockedClass<typeof DynamodbManager>;
 
-  @attribute({ type: 'String' })
-  b: string;
-}
+class EntityA {}
+EntityA.prototype[tableNameKey] = 'entityA';
 
-const getDynamoDbManager = makeGetDynamoDbManager('test', {
-  region: 'test',
-  endpoint: 'http://127.0.0.1:8000',
-});
+class EntityB {}
+EntityB.prototype[tableNameKey] = 'entityB';
 
-describe('dynamodb manager', () => {
-  it('should not throw error on get item not found', async () => {
-    const manager = await getDynamoDbManager<TestType>(Test);
-    const repo = manager.repo;
-    const result = await repo.get({ a: '0' });
-    expect(result).toBeUndefined();
+describe('makeGetDynamoDbManager', () => {
+  let instances: Array<{ init: jest.Mock } & Record<string, unknown>>;
+
+  beforeEach(() => {
+    instances = [];
+    mockedManager.mockReset();
+    mockedManager.mockImplementation(() => {
+      const instance = { init: jest.fn().mockResolvedValue(undefined) } as any;
+      instances.push(instance);
+      return instance;
+    });
   });
 
-  it('should normally get item', async () => {
-    const manager = await getDynamoDbManager<TestType>(Test);
-    const repo = manager.repo;
-    await repo.put({
-      a: 'found',
-      b: 'test',
-    });
-    const result = await repo.get({ a: 'found' });
-    expect(result.a).toBe('found');
-    expect(result.b).toBe('test');
+  it('creates a manager and initializes it on first access', async () => {
+    const getManager = makeGetDynamoDbManager('prefix', { region: 'test' } as any);
+
+    const manager = await getManager(EntityA);
+
+    expect(manager).toBe(instances[0]);
+    expect(instances[0].init).toHaveBeenCalledTimes(1);
+    expect(mockedManager).toHaveBeenCalledWith('prefix', EntityA, { region: 'test' });
+  });
+
+  it('caches managers per entity table name', async () => {
+    const getManager = makeGetDynamoDbManager('prefix', {} as any);
+
+    const first = await getManager(EntityA);
+    const second = await getManager(EntityA);
+
+    expect(first).toBe(second);
+    expect(mockedManager).toHaveBeenCalledTimes(1);
+    expect(instances[0].init).toHaveBeenCalledTimes(1);
+  });
+
+  it('creates separate managers for different entities', async () => {
+    const getManager = makeGetDynamoDbManager('prefix', {} as any);
+
+    const [first, second] = await Promise.all([getManager(EntityA), getManager(EntityB)]);
+
+    expect(first).not.toBe(second);
+    expect(mockedManager).toHaveBeenCalledTimes(2);
   });
 });

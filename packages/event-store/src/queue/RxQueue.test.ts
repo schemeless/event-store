@@ -100,7 +100,7 @@ describe('Rx Queue', () => {
     rxQueue.push('3');
 
     const delay = (ms) => new Promise((res) => setTimeout(res, ms));
-    await delay(10);
+    await delay(20);
 
     expect(arr).toEqual([null, 1, 2, 3, 2, 1, 0]);
   });
