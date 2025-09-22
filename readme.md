@@ -6,9 +6,9 @@ A batteries-included event sourcing toolkit for Node.js services. The monorepo p
 
 Event sourced systems thrive on consistent lifecycle handling. This project focuses on:
 
-- **Event flows as the source of truth.** Each flow describes how a domain event is received, validated, persisted, and fanned out into consequent events or side effects.【F:packages/event-store-types/src/EventStore.types.ts†L26-L76】【F:packages/event-store/src/eventLifeCycle/makeValidateAndApply.ts†L1-L13】
-- **Deterministic processing pipelines.** The core runtime coordinates a single `mainQueue` for authoring events, a `sideEffectQueue` for asynchronous work with retry semantics, and observer queues for notifying subscribers.【F:packages/event-store/src/makeEventStore.ts†L17-L54】【F:packages/event-store/src/queue/makeMainQueue.ts†L1-L36】【F:packages/event-store/src/queue/makeSideEffectQueue.ts†L1-L49】
-- **Replayable state.** Any `IEventStoreRepo` implementation can stream historical events back through your flows so projections and observers stay consistent.【F:packages/event-store/src/makeReplay.ts†L1-L36】【F:packages/event-store-types/src/Repo.types.ts†L18-L26】
+- **Event flows as the source of truth.** Each flow describes how a domain event is received, validated, persisted, and fanned out into consequent events or side effects ([EventStore.types.ts](packages/event-store-types/src/EventStore.types.ts#L26-L76), [makeValidateAndApply.ts](packages/event-store/src/eventLifeCycle/makeValidateAndApply.ts#L1-L13)).
+- **Deterministic processing pipelines.** The core runtime coordinates a single `mainQueue` for authoring events, a `sideEffectQueue` for asynchronous work with retry semantics, and observer queues for notifying subscribers ([makeEventStore.ts](packages/event-store/src/makeEventStore.ts#L17-L54), [makeMainQueue.ts](packages/event-store/src/queue/makeMainQueue.ts#L1-L36), [makeSideEffectQueue.ts](packages/event-store/src/queue/makeSideEffectQueue.ts#L1-L49)).
+- **Replayable state.** Any `IEventStoreRepo` implementation can stream historical events back through your flows so projections and observers stay consistent ([makeReplay.ts](packages/event-store/src/makeReplay.ts#L1-L36), [Repo.types.ts](packages/event-store-types/src/Repo.types.ts#L18-L26)).
 
 ## Core Concepts
 
@@ -16,29 +16,29 @@ Event sourced systems thrive on consistent lifecycle handling. This project focu
 
 An event flow couples domain semantics with lifecycle hooks:
 
-- `receive` defines how raw input is transformed into one or more created events (including consequent events via `createConsequentEvents`).【F:packages/event-store-types/src/EventStore.types.ts†L42-L74】【F:packages/event-store/src/operators/applyRootEventAndCollectSucceed.ts†L1-L27】
-- `validate`, `preApply`, and `apply` execute sequentially to guarantee each created event is consistent and side-effect free before it is committed.【F:packages/event-store/src/eventLifeCycle/validate.ts†L1-L13】【F:packages/event-store/src/eventLifeCycle/preApply.ts†L1-L9】【F:packages/event-store/src/eventLifeCycle/apply.ts†L1-L8】
-- `sideEffect` handles asynchronous integrations, automatically retrying according to `meta.sideEffectFailedRetryAllowed` and enqueueing additional root events if necessary.【F:packages/event-store/src/EventStore.types.ts†L31-L59】【F:packages/event-store/src/queue/makeSideEffectQueue.ts†L10-L43】
-- `createConsequentEvents` lets a successful event spawn more work that re-enters the main queue with preserved causation metadata.【F:packages/event-store-types/src/EventStore.types.ts†L61-L74】【F:packages/event-store/src/operators/defaultEventCreator.ts†L1-L21】
+- `receive` defines how raw input is transformed into one or more created events (including consequent events via `createConsequentEvents`) ([EventStore.types.ts](packages/event-store-types/src/EventStore.types.ts#L42-L74), [applyRootEventAndCollectSucceed.ts](packages/event-store/src/operators/applyRootEventAndCollectSucceed.ts#L1-L27)).
+- `validate`, `preApply`, and `apply` execute sequentially to guarantee each created event is consistent and side-effect free before it is committed ([validate.ts](packages/event-store/src/eventLifeCycle/validate.ts#L1-L13), [preApply.ts](packages/event-store/src/eventLifeCycle/preApply.ts#L1-L9), [apply.ts](packages/event-store/src/eventLifeCycle/apply.ts#L1-L8)).
+- `sideEffect` handles asynchronous integrations, automatically retrying according to `meta.sideEffectFailedRetryAllowed` and enqueueing additional root events if necessary ([EventStore.types.ts](packages/event-store/src/EventStore.types.ts#L31-L59), [makeSideEffectQueue.ts](packages/event-store/src/queue/makeSideEffectQueue.ts#L10-L43)).
+- `createConsequentEvents` lets a successful event spawn more work that re-enters the main queue with preserved causation metadata ([EventStore.types.ts](packages/event-store-types/src/EventStore.types.ts#L61-L74), [defaultEventCreator.ts](packages/event-store/src/operators/defaultEventCreator.ts#L1-L21)).
 
-Every event passes through a default creator that assigns ULID-based identifiers, correlation IDs, and causation IDs so downstream consumers always have traceability.【F:packages/event-store/src/operators/defaultEventCreator.ts†L1-L21】【F:packages/event-store/src/util/ulid.ts†L1-L8】
+Every event passes through a default creator that assigns ULID-based identifiers, correlation IDs, and causation IDs so downstream consumers always have traceability ([defaultEventCreator.ts](packages/event-store/src/operators/defaultEventCreator.ts#L1-L21), [ulid.ts](packages/event-store/src/util/ulid.ts#L1-L8)).
 
 ### Persistence adapters
 
-Adapters implement the `IEventStoreRepo` contract so the runtime can initialise storage, persist created events, paginate through history, and reset state during tests.【F:packages/event-store-types/src/Repo.types.ts†L1-L26】 This repository includes:
+Adapters implement the `IEventStoreRepo` contract so the runtime can initialise storage, persist created events, paginate through history, and reset state during tests ([Repo.types.ts](packages/event-store-types/src/Repo.types.ts#L1-L26)). This repository includes:
 
-- `@schemeless/event-store` – Core runtime that exposes `makeEventStore`, queues, and the `output$` observable stream for monitoring progress.【F:packages/event-store/src/makeEventStore.ts†L17-L54】【F:packages/event-store/src/EventStore.types.ts†L13-L28】
-- `@schemeless/event-store-types` – Shared TypeScript definitions for events, event flows, observers, and repository interfaces.【F:packages/event-store-types/src/EventStore.types.ts†L1-L78】【F:packages/event-store-types/src/Repo.types.ts†L1-L26】
-- `@schemeless/event-store-adapter-typeorm` – SQL-backed repository that persists events through TypeORM, supports SQLite quirks, and resets schemas via migrations.【F:packages/event-store-adapter-typeorm/src/EventStore.repo.ts†L1-L65】
-- `@schemeless/event-store-adapter-dynamodb` – DynamoDB + S3 repository that transparently offloads oversized payloads while keeping table size under AWS limits.【F:packages/event-store-adapter-dynamodb/src/EventStore.dynamodb.repo.ts†L1-L97】
-- `@schemeless/event-store-adapter-null` – No-op adapter useful for unit tests and dry runs where persistence is unnecessary.【F:packages/event-store-adapter-null/src/EventStore.repo.ts†L1-L19】
-- `@schemeless/dynamodb-orm` – Lightweight helpers around the AWS Data Mapper used by the DynamoDB adapter.【F:packages/dynamodb-orm/src/index.ts†L1-L3】
+- `@schemeless/event-store` – Core runtime that exposes `makeEventStore`, queues, and the `output$` observable stream for monitoring progress ([makeEventStore.ts](packages/event-store/src/makeEventStore.ts#L17-L54), [EventStore.types.ts](packages/event-store/src/EventStore.types.ts#L13-L28)).
+- `@schemeless/event-store-types` – Shared TypeScript definitions for events, event flows, observers, and repository interfaces ([EventStore.types.ts](packages/event-store-types/src/EventStore.types.ts#L1-L78), [Repo.types.ts](packages/event-store-types/src/Repo.types.ts#L1-L26)).
+- `@schemeless/event-store-adapter-typeorm` – SQL-backed repository that persists events through TypeORM, supports SQLite quirks, and resets schemas via migrations ([EventStore.repo.ts](packages/event-store-adapter-typeorm/src/EventStore.repo.ts#L1-L65)).
+- `@schemeless/event-store-adapter-dynamodb` – DynamoDB + S3 repository that transparently offloads oversized payloads while keeping table size under AWS limits ([EventStore.dynamodb.repo.ts](packages/event-store-adapter-dynamodb/src/EventStore.dynamodb.repo.ts#L1-L97)).
+- `@schemeless/event-store-adapter-null` – No-op adapter useful for unit tests and dry runs where persistence is unnecessary ([EventStore.repo.ts](packages/event-store-adapter-null/src/EventStore.repo.ts#L1-L19)).
+- `@schemeless/dynamodb-orm` – Lightweight helpers around the AWS Data Mapper used by the DynamoDB adapter ([index.ts](packages/dynamodb-orm/src/index.ts#L1-L3)).
 
 Feel free to add your own adapter by implementing the same interface.
 
 ### Observability and replay
 
-The `output$` observable emits every success, validation error, cancellation, and side-effect result in order, enabling custom metrics or logging pipelines.【F:packages/event-store/src/makeEventStore.ts†L41-L54】【F:packages/event-store/src/EventStore.types.ts†L13-L28】 For long-running services, `replay` rehydrates projections by running stored events back through each flow and its success observers.【F:packages/event-store/src/makeReplay.ts†L1-L36】 Success observers process completed events in priority order using a dedicated queue so they can remain isolated from the main command pipeline.【F:packages/event-store/src/queue/makeReceive.ts†L1-L27】
+The `output$` observable emits every success, validation error, cancellation, and side-effect result in order, enabling custom metrics or logging pipelines ([makeEventStore.ts](packages/event-store/src/makeEventStore.ts#L41-L54), [EventStore.types.ts](packages/event-store/src/EventStore.types.ts#L13-L28)). For long-running services, `replay` rehydrates projections by running stored events back through each flow and its success observers ([makeReplay.ts](packages/event-store/src/makeReplay.ts#L1-L36)). Success observers process completed events in priority order using a dedicated queue so they can remain isolated from the main command pipeline ([makeReceive.ts](packages/event-store/src/queue/makeReceive.ts#L1-L27)).
 
 ## Monorepo layout
 
