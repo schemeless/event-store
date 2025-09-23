@@ -38,7 +38,9 @@ Feel free to add your own adapter by implementing the same interface.
 
 ### Observability and replay
 
-The `output$` observable emits every success, validation error, cancellation, and side-effect result in order, enabling custom metrics or logging pipelines ([makeEventStore.ts](packages/event-store/src/makeEventStore.ts#L41-L54), [EventStore.types.ts](packages/event-store/src/EventStore.types.ts#L13-L28)). For long-running services, `replay` rehydrates projections by running stored events back through each flow and its success observers ([makeReplay.ts](packages/event-store/src/makeReplay.ts#L1-L36)). Success observers process completed events in priority order using a dedicated queue so they can remain isolated from the main command pipeline ([makeReceive.ts](packages/event-store/src/queue/makeReceive.ts#L1-L27)).
+The `output$` observable emits every success, validation error, cancellation, and side-effect result in order, enabling custom metrics or logging pipelines ([makeEventStore.ts](packages/event-store/src/makeEventStore.ts#L41-L69), [EventStore.types.ts](packages/event-store/src/EventStore.types.ts#L13-L28)). The queues only drain while `output$` has an active subscription—`makeEventStore` installs an internal subscriber so processing starts immediately, but if you ever tear it down you must attach your own subscriber right away or new commands will stall.
+
+For long-running services, `replay` rehydrates projections by running stored events back through each flow and its success observers ([makeReplay.ts](packages/event-store/src/makeReplay.ts#L1-L36)). Success observers process completed events in priority order using a dedicated queue so they can remain isolated from the main command pipeline ([makeReceive.ts](packages/event-store/src/queue/makeReceive.ts#L1-L27)).
 
 ## Monorepo layout
 

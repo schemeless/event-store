@@ -54,9 +54,11 @@ export const makeEventStore = (eventStoreRepo: IEventStoreRepo) => async (
     })
   );
 
-  const doneAndSideEffect$ = merge(mainQueueProcessed$, sideEffectQueue.processed$);
+  const doneAndSideEffect$ = merge(mainQueueProcessed$, sideEffectQueue.processed$).pipe(Rx.share());
   // const { result$, observerQueue } = assignObserver(doneAndSideEffect$, successEventObservers);
   const output$ = doneAndSideEffect$;
+  // Ensure queues start draining even if callers only subscribe later.
+  output$.subscribe(() => undefined);
 
   return {
     mainQueue,
