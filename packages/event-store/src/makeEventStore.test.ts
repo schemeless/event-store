@@ -89,4 +89,30 @@ describe('make eventStore', () => {
 
     expect(storeGet('eventStore5')).toBe(18);
   });
+
+  it('should process events exactly once when multiple subscribers listen to output$', async () => {
+    const eventStore = await getTestEventStore(testEventFlows, testObservers);
+    const observed: any[] = [];
+    const subscription = eventStore.output$.subscribe((entry) => {
+      if (entry.event.payload?.key === 'eventStore-multi-sub') {
+        observed.push(entry);
+      }
+    });
+
+    try {
+      await StandardEvent.receive(eventStore)({
+        payload: {
+          key: 'eventStore-multi-sub',
+          positiveNumber: 3,
+        },
+      });
+
+      await delay(100);
+
+      expect(storeGet('eventStore-multi-sub')).toBe(3);
+      expect(observed.length).toBeGreaterThan(0);
+    } finally {
+      subscription.unsubscribe();
+    }
+  });
 });

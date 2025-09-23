@@ -62,6 +62,8 @@ The returned object exposes:
 - `output$` – an RxJS stream of every processed event with a success, invalid, canceled, or side-effect state.
 - `replay` – streams stored events back through the flows and success observers, enabling projection rebuilds.
 
+> **Important:** The queues only drain while `output$` has at least one active subscriber. `makeEventStore` keeps an internal subscription alive so processing starts immediately, but if you ever tear that subscription down (for example, when customising the stream in tests) be sure to attach your own subscriber right away or new commands will hang in the queue.
+
 ## Observers and replay
 
 Register success observers when constructing the store to react to committed events without interfering with the main execution path. During replays the same observer queue is used, so you can reuse the exact logic for live and historical processing.

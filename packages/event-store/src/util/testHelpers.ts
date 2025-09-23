@@ -33,7 +33,6 @@ export const getTestEventStore = async (
     //   endpoint: 'http://127.0.0.1:8000',
     // });
     eventStore = await makeEventStore(eventStoreRepo)(allEventFlows, successEventObservers);
-    eventStore.output$.subscribe(console.log);
     return eventStore;
   }
 };
