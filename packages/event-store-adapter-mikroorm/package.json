@@ -1,6 +1,6 @@
 {
   "name": "@schemeless/event-store-adapter-mikroorm",
-  "version": "2.4.0",
+  "version": "2.4.2",
   "typescript:main": "src/index.ts",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@mikro-orm/core": "^6.0.0",
-    "@schemeless/event-store-types": "^2.4.0"
+    "@schemeless/event-store-types": "^2.4.2"
   },
   "devDependencies": {
     "@mikro-orm/sqlite": "^6.0.0",
