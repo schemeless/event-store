@@ -1,6 +1,6 @@
 {
   "name": "@schemeless/event-store-adapter-typeorm",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "typescript:main": "src/index.ts",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -21,7 +21,7 @@
     "url": "https://github.com/schemeless/event-store/issues"
   },
   "dependencies": {
-    "@schemeless/event-store-types": "^2.4.0",
+    "@schemeless/event-store-types": "^2.4.1",
     "debug": "^4.2.0",
     "typeorm": "^0.2.29"
   },
