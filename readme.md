@@ -1,6 +1,6 @@
 # Schemeless Event Store
 
-A batteries-included event sourcing toolkit for Node.js services. The monorepo provides the core event store runtime, strongly typed definitions for authoring event flows, and persistence adapters that let you capture and replay events through DynamoDB, TypeORM-backed SQL databases, or in-memory stubs.
+A batteries-included event sourcing toolkit for Node.js services. The monorepo provides the core event store runtime, strongly typed definitions for authoring event flows, and persistence adapters that let you capture and replay events through DynamoDB, Prisma-managed SQL databases, TypeORM-backed SQL databases, MikroORM, or in-memory stubs.
 
 ## Why Schemeless?
 
@@ -30,6 +30,7 @@ Adapters implement the `IEventStoreRepo` contract so the runtime can initialise 
 - `@schemeless/event-store` – Core runtime that exposes `makeEventStore`, queues, and the `output$` observable stream for monitoring progress ([makeEventStore.ts](packages/event-store/src/makeEventStore.ts#L17-L54), [EventStore.types.ts](packages/event-store/src/EventStore.types.ts#L13-L28)).
 - `@schemeless/event-store-types` – Shared TypeScript definitions for events, event flows, observers, and repository interfaces ([EventStore.types.ts](packages/event-store-types/src/EventStore.types.ts#L1-L78), [Repo.types.ts](packages/event-store-types/src/Repo.types.ts#L1-L26)).
 - `@schemeless/event-store-adapter-typeorm` – SQL-backed repository that persists events through TypeORM, supports SQLite quirks, and resets schemas via migrations ([EventStore.repo.ts](packages/event-store-adapter-typeorm/src/EventStore.repo.ts#L1-L65)).
+- `@schemeless/event-store-adapter-prisma` – Prisma ORM adapter that consumes an existing `PrismaClient`, persists events inside interactive transactions, and streams ordered history without running schema migrations for you ([EventStore.repo.ts](packages/event-store-adapter-prisma/src/EventStore.repo.ts#L1-L64)).
 - `@schemeless/event-store-adapter-mikroorm` – MikroORM-based SQL adapter that wraps transactions, streams paginated history, and works across PostgreSQL, MySQL, SQLite, and other MikroORM drivers ([EventStore.repo.ts](packages/event-store-adapter-mikroorm/src/EventStore.repo.ts#L1-L97)).
 - `@schemeless/event-store-adapter-dynamodb` – DynamoDB + S3 repository that transparently offloads oversized payloads while keeping table size under AWS limits ([EventStore.dynamodb.repo.ts](packages/event-store-adapter-dynamodb/src/EventStore.dynamodb.repo.ts#L1-L97)).
 - `@schemeless/event-store-adapter-null` – No-op adapter useful for unit tests and dry runs where persistence is unnecessary ([EventStore.repo.ts](packages/event-store-adapter-null/src/EventStore.repo.ts#L1-L19)).
@@ -49,7 +50,7 @@ For long-running services, `replay` rehydrates projections by running stored eve
 packages/
   event-store/                 Core runtime implementation
   event-store-types/           Shared type definitions
-  event-store-adapter-*/       Persistence implementations (TypeORM, DynamoDB, null)
+  event-store-adapter-*/       Persistence implementations (Prisma, TypeORM, DynamoDB, null)
   dynamodb-orm/                AWS Data Mapper helpers
 examples/
   example-domain-pacakges/     Sample event flows and domains

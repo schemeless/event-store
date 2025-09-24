@@ -1,0 +1,25 @@
+// Test schema for @schemeless/event-store-adapter-prisma
+// This schema is used exclusively for the automated test suite.
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model EventStoreEntity {
+  id            String   @id
+  domain        String
+  type          String
+  meta          String?
+  payload       String
+  identifier    String?
+  correlationId String?
+  causationId   String?
+  created       DateTime
+
+  @@index([created, id])
+}

@@ -1,0 +1,24 @@
+// In your own prisma/schema.prisma file
+
+datasource db {
+  provider = "postgresql" // or "mysql", "sqlite", etc.
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model EventStoreEntity {
+  id            String   @id @db.VarChar(36)
+  domain        String   @db.VarChar(15)
+  type          String   @db.VarChar(32)
+  meta          String?  @db.Text
+  payload       String   @db.Text
+  identifier    String?  @db.VarChar(64)
+  correlationId String?  @db.VarChar(36)
+  causationId   String?  @db.VarChar(36)
+  created       DateTime @db.Timestamp(6)
+
+  @@index([created, id]) // For ordered replay
+}
