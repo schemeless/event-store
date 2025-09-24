@@ -7,15 +7,12 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "outDir": "./dist",
+    "rootDir": "./src",
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "skipLibCheck": true,
-    "strictPropertyInitialization": false,
-    "baseUrl": ".",
-    "paths": {
-      "@schemeless/*": ["../*/src"]
-    }
+    "strictPropertyInitialization": false
   },
-  "exclude": ["node_modules"],
+  "exclude": ["node_modules", "**/*.test.ts", "**/testHelpers.ts"],
   "include": ["src/**/*.ts"]
 }
