@@ -21,7 +21,7 @@ export class EventStoreRepo implements IEventStoreRepo {
   constructor(private readonly prisma: PrismaClient) {}
 
   async init(): Promise<void> {
-    // Prisma manages connections on client instantiation.
+    await this.prisma.$connect();
   }
 
   async getAllEvents(
@@ -68,6 +68,6 @@ export class EventStoreRepo implements IEventStoreRepo {
   }
 
   async resetStore(): Promise<void> {
-    await this.prisma.$executeRawUnsafe('DELETE FROM "EventStoreEntity"');
+    await this.prisma.eventStoreEntity.deleteMany({});
   }
 }
