@@ -3,7 +3,7 @@ import { Observable, of } from 'rxjs';
 export function completeOn<T>() {
   return (observable: Observable<T>) =>
     new Observable<T>((subscriber) => {
-      let lastNum: undefined | null | number = undefined;
+      let lastNum: undefined | null | T = undefined;
       const subscription = observable.subscribe({
         next(value) {
           if (lastNum === value && (lastNum === null || lastNum === 0)) {
