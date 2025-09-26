@@ -56,6 +56,16 @@ The adapter will automatically create and migrate the schema on `init()`.
 
 ## API
 
+`EventStoreRepo` implements the shared `IEventStoreRepo` interface and provides:
+
+- `constructor(options)` – Accepts standard MikroORM options. The adapter adds the `EventStoreEntity` to whatever entities you configure so you can continue to manage your own domain models.
+- `init()` – Lazily initialises MikroORM, updates the schema if required, and keeps the `MikroORM` instance cached for subsequent calls.
+- `storeEvents(events)` – Persists events inside a single transaction, ensuring either all events succeed or the batch is rolled back.
+- `getAllEvents(pageSize, startFromId?)` – Streams ordered events using a paginated async iterator for efficient replays.
+- `resetStore()` – Drops and recreates the event store schema, ideal for keeping tests isolated.
+
+## API
+
 `EventStoreRepo` implements the shared `IEventStoreRepo` interface:
 
 - `constructor(options)` – Accepts a standard MikroORM options object. The adapter automatically registers its `EventStoreEntity` alongside any entities you provide.

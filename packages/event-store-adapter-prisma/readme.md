@@ -33,7 +33,7 @@ import { EventStoreRepo } from '@schemeless/event-store-adapter-prisma';
 const prisma = new PrismaClient();
 const repo = new EventStoreRepo(prisma);
 
-await repo.init();
+await repo.init(); // ensures the Prisma client is connected
 
 const eventStore = await makeEventStore({
   repo,
@@ -43,3 +43,13 @@ const eventStore = await makeEventStore({
 ```
 
 The adapter never runs migrations or schema updates for you. Make sure your deployment pipeline runs the appropriate `prisma migrate` or `prisma db push` commands before the application starts.
+
+## API
+
+`EventStoreRepo` implements the shared `IEventStoreRepo` interface and exposes the following methods:
+
+- `constructor(prismaClient)` – Accepts an existing `PrismaClient` instance so you can share connection pooling with the rest of your application.
+- `init()` – Calls `prisma.$connect()` to ensure the adapter has an active database connection before persisting events.
+- `storeEvents(events)` – Persists the provided events inside a Prisma interactive transaction, maintaining write ordering.
+- `getAllEvents(pageSize, startFromId?)` – Returns an async iterator that replays events ordered by creation time and identifier.
+- `resetStore()` – Clears all persisted events via `deleteMany`, useful for tests.
