@@ -1,52 +1,18 @@
 import type { CreatedEvent, IEventStoreEntity, IEventStoreRepo } from '@schemeless/event-store-types';
-import { MikroORM, type EntityManager } from '@mikro-orm/core';
+import type { EntityManager } from '@mikro-orm/core';
 import { EventStoreEntity } from './EventStore.entity';
 import { EventStoreIterator } from './EventStoreIterator';
 
-type EventStoreOptions = Parameters<typeof MikroORM.init>[0];
-
-const ensureEntityRegistered = (options: EventStoreOptions): EventStoreOptions => {
-  const providedEntities = options.entities ?? [];
-  const entityList = Array.isArray(providedEntities) ? providedEntities : [providedEntities];
-
-  if (entityList.includes(EventStoreEntity)) {
-    return {
-      ...options,
-      entities: [...entityList],
-    };
-  }
-
-  return {
-    ...options,
-    entities: [...entityList, EventStoreEntity],
-  };
-};
-
 export class EventStoreRepo implements IEventStoreRepo<any, any> {
-  private orm?: MikroORM;
+  constructor(private readonly em: EntityManager) {}
 
-  constructor(private readonly options: EventStoreOptions) {}
-
-  private async getOrm(): Promise<MikroORM> {
-    if (!this.orm) {
-      const config = ensureEntityRegistered(this.options);
-      this.orm = await MikroORM.init(config);
-      await this.orm.getSchemaGenerator().updateSchema();
-    }
-
-    return this.orm;
-  }
-
-  async init(): Promise<void> {
-    await this.getOrm();
-  }
+  async init(): Promise<void> {}
 
   async getAllEvents(
     pageSize: number = 100,
     startFromId?: string
   ): Promise<AsyncIterableIterator<Array<IEventStoreEntity>>> {
-    const orm = await this.getOrm();
-    const iteratorEntityManager = orm.em.fork({ useContext: false });
+    const iteratorEntityManager = this.em.fork();
     return new EventStoreIterator(iteratorEntityManager, pageSize, startFromId);
   }
 
@@ -75,20 +41,19 @@ export class EventStoreRepo implements IEventStoreRepo<any, any> {
       return;
     }
 
-    const orm = await this.getOrm();
     const entities = events.map((event) => this.createEventEntity(event));
-    await orm.em.transactional(async (transaction: EntityManager) => {
+    const forkedEm = this.em.fork();
+    await forkedEm.transactional(async (transactionalEm) => {
       for (const entity of entities) {
-        transaction.persist(entity);
+        transactionalEm.persist(entity);
       }
-      await transaction.flush();
+      await transactionalEm.flush();
     });
   }
 
   async resetStore(): Promise<void> {
-    const orm = await this.getOrm();
-    const generator = orm.getSchemaGenerator();
-    await generator.dropSchema();
-    await generator.createSchema();
+    throw new Error(
+      'EventStoreRepo no longer manages schema. Schema reset should be handled by the application-level ORM instance.'
+    );
   }
 }

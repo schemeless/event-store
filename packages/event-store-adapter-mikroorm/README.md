@@ -10,22 +10,93 @@ Install the adapter alongside MikroORM and the SQL driver for your database:
 yarn add @schemeless/event-store @schemeless/event-store-adapter-mikroorm @schemeless/event-store-types @mikro-orm/core @mikro-orm/postgresql
 ```
 
-Replace `@mikro-orm/postgresql` with the driver for your database (e.g. `@mikro-orm/mysql`, `@mikro-orm/mariadb`, `@mikro-orm/sqlite`). The adapter will register its entity automatically, so you do not have to list it in your own MikroORM configuration.
+Replace `@mikro-orm/postgresql` with the driver for your database (e.g. `@mikro-orm/mysql`, `@mikro-orm/mariadb`, `@mikro-orm/sqlite`).
+
+## ⚠️ Migration Guide: Upgrading to v2.5.0
+
+Version 2.5.0 introduces a significant architectural improvement that requires changes in how you integrate this library. We've moved away from creating an internal MikroORM instance to prevent conflicts with your main application's ORM.
+
+**The Core Change:** `EventStoreRepo` no longer accepts `MikroORMOptions`. Instead, it now requires an active `EntityManager` instance to be passed to its constructor.
+
+This change makes the library framework-agnostic and solves potential context-related errors.
+
+### **Steps to Migrate**
+
+Here’s a typical migration example for a NestJS application:
+
+**1. Update Your MikroORM Configuration**
+
+You are now responsible for managing the `EventStoreEntity`. Add it to the `entities` array in your main MikroORM configuration. If you use a separate database for the event store, configure it as a second connection.
+
+```typescript
+// in your app.module.ts or mikro-orm.config.ts
+import { EventStoreEntity } from '@schemeless/event-store-adapter-mikroorm';
+import { YourOtherEntity } from './entities';
+
+MikroOrmModule.forRoot({
+  // ... your main database configuration
+  entities: [YourOtherEntity, EventStoreEntity], // <-- Add EventStoreEntity here
+}),
+```
+
+**2. Update `EventStoreRepo` Instantiation**
+
+You must now provide the `EntityManager` to the `EventStoreRepo` constructor. In NestJS, this is easily done with a `useFactory` provider.
+
+- **Before (v2.4.x):**
+
+  ```typescript
+  // In your event-store.module.ts
+  const eventStoreRepoProvider = {
+    provide: EventStoreRepo,
+    useFactory: () => {
+      // You were creating a full config object here
+      const mikroOrmOptions = {
+        driver: SqliteDriver,
+        dbName: ':memory:',
+        entities: [EventStoreEntity],
+      };
+      return new EventStoreRepo(mikroOrmOptions); // <-- Passing options
+    },
+  };
+  ```
+
+- **After (v2.5.0):**
+
+  ```typescript
+  // In your event-store.module.ts
+  import { EntityManager } from '@mikro-orm/core';
+  import { EventStoreRepo } from '@schemeless/event-store-adapter-mikroorm';
+
+  const eventStoreRepoProvider = {
+    provide: EventStoreRepo,
+    useFactory: (em: EntityManager) => new EventStoreRepo(em), // <-- Pass the EntityManager
+    inject: [EntityManager], // <-- Inject the default EntityManager from NestJS DI
+  };
+  ```
+
+**3. Schema Management**
+
+The library no longer automatically creates or updates the database schema. You are now in full control of your database migrations, which is the standard practice. Ensure your migration tool or `schema:update` command is aware of the `EventStoreEntity`.
+
+<br>
+
+---
 
 ## Usage
 
 ```ts
 import { makeEventStore } from '@schemeless/event-store';
-import type { Options } from '@mikro-orm/core';
-import { EventStoreRepo } from '@schemeless/event-store-adapter-mikroorm';
+import { MikroORM } from '@mikro-orm/core';
+import { EventStoreEntity, EventStoreRepo } from '@schemeless/event-store-adapter-mikroorm';
 
-const ormOptions: Options = {
+const orm = await MikroORM.init({
   type: 'postgresql',
   clientUrl: process.env.DATABASE_URL,
-  // you can still register your own entities here if you need them
-};
+  entities: [EventStoreEntity],
+});
 
-const repo = new EventStoreRepo(ormOptions);
+const repo = new EventStoreRepo(orm.em);
 
 const buildEventStore = makeEventStore(repo);
 const eventStore = await buildEventStore([
@@ -43,35 +114,31 @@ await eventStore.replay();
 
 ### Testing with SQLite
 
-For unit/integration tests you can pass the in-memory SQLite driver:
+For unit/integration tests you can create your own in-memory MikroORM instance and reuse the entity manager:
 
 ```ts
-const repo = new EventStoreRepo({
-  type: 'sqlite',
+import { MikroORM } from '@mikro-orm/core';
+import { SqliteDriver } from '@mikro-orm/sqlite';
+import { EventStoreEntity, EventStoreRepo } from '@schemeless/event-store-adapter-mikroorm';
+
+const orm = await MikroORM.init({
+  driver: SqliteDriver,
   dbName: ':memory:',
+  entities: [EventStoreEntity],
 });
+await orm.getSchemaGenerator().createSchema();
+
+const repo = new EventStoreRepo(orm.em);
 ```
-
-The adapter will automatically create and migrate the schema on `init()`.
-
-## API
-
-`EventStoreRepo` implements the shared `IEventStoreRepo` interface and provides:
-
-- `constructor(options)` – Accepts standard MikroORM options. The adapter adds the `EventStoreEntity` to whatever entities you configure so you can continue to manage your own domain models.
-- `init()` – Lazily initialises MikroORM, updates the schema if required, and keeps the `MikroORM` instance cached for subsequent calls.
-- `storeEvents(events)` – Persists events inside a single transaction, ensuring either all events succeed or the batch is rolled back.
-- `getAllEvents(pageSize, startFromId?)` – Streams ordered events using a paginated async iterator for efficient replays.
-- `resetStore()` – Drops and recreates the event store schema, ideal for keeping tests isolated.
 
 ## API
 
 `EventStoreRepo` implements the shared `IEventStoreRepo` interface:
 
-- `constructor(options)` – Accepts a standard MikroORM options object. The adapter automatically registers its `EventStoreEntity` alongside any entities you provide.
-- `init()` – Lazily initialises MikroORM and updates the schema.
-- `storeEvents(events)` – Persists the provided events inside a transaction.
+- `constructor(entityManager)` – Accepts an active MikroORM `EntityManager`. The host application is responsible for configuring connections, entities, and schema management.
+- `init()` – No-op retained for interface compatibility.
+- `storeEvents(events)` – Persists the provided events inside a transaction using a forked entity manager.
 - `getAllEvents(pageSize, startFromId?)` – Returns an async iterator that paginates results ordered by creation time and identifier.
-- `resetStore()` – Drops and recreates the event store schema, useful for tests.
+- `resetStore()` – Throws an error because schema management must be handled by the host application.
 
 See the tests in [`src/EventStore.test.ts`](./src/EventStore.test.ts) for more usage examples, including pagination and transactional guarantees.
