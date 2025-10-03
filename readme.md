@@ -49,6 +49,7 @@ For long-running services, `replay` rehydrates projections by running stored eve
 ```
 packages/
   event-store/                 Core runtime implementation
+  event-store-react-native/    React Native build of the core runtime
   event-store-types/           Shared type definitions
   event-store-adapter-*/       Persistence implementations (Prisma, TypeORM, DynamoDB, null)
   dynamodb-orm/                AWS Data Mapper helpers
