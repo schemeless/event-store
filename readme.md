@@ -34,6 +34,7 @@ Adapters implement the `IEventStoreRepo` contract so the runtime can initialise 
 - `@schemeless/event-store-adapter-mikroorm` – MikroORM-based SQL adapter that wraps transactions, streams paginated history, and works across PostgreSQL, MySQL, SQLite, and other MikroORM drivers ([EventStore.repo.ts](packages/event-store-adapter-mikroorm/src/EventStore.repo.ts#L1-L97)).
 - `@schemeless/event-store-adapter-dynamodb` – DynamoDB + S3 repository that transparently offloads oversized payloads while keeping table size under AWS limits ([EventStore.dynamodb.repo.ts](packages/event-store-adapter-dynamodb/src/EventStore.dynamodb.repo.ts#L1-L97)).
 - `@schemeless/event-store-adapter-null` – No-op adapter useful for unit tests and dry runs where persistence is unnecessary ([EventStore.repo.ts](packages/event-store-adapter-null/src/EventStore.repo.ts#L1-L19)).
+- `@schemeless/event-store-adapter-watermelondb` – WatermelonDB-backed adapter tailored for React Native applications that need an offline-first event store backed by SQLite on device ([EventStore.repo.ts](packages/event-store-adapter-watermelondb/src/EventStore.repo.ts#L1-L156)).
 - `@schemeless/dynamodb-orm` – Lightweight helpers around the AWS Data Mapper used by the DynamoDB adapter ([index.ts](packages/dynamodb-orm/src/index.ts#L1-L3)).
 
 Feel free to add your own adapter by implementing the same interface.
@@ -51,7 +52,7 @@ packages/
   event-store/                 Core runtime implementation
   event-store-react-native/    React Native build of the core runtime
   event-store-types/           Shared type definitions
-  event-store-adapter-*/       Persistence implementations (Prisma, TypeORM, DynamoDB, null)
+  event-store-adapter-*/       Persistence implementations (Prisma, TypeORM, MikroORM, DynamoDB, WatermelonDB, null)
   dynamodb-orm/                AWS Data Mapper helpers
 examples/
   example-domain-pacakges/     Sample event flows and domains
