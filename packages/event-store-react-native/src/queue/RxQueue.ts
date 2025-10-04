@@ -44,7 +44,7 @@ export const createRxQueue = <TASK = any, RESULT = TASK>(
 ) => {
   const process$ = new Subject<{ task: TASK; done: Queue.ProcessFunctionCb<RESULT> }>();
   const callback: Queue.ProcessFunction<TASK, RESULT> = (task, done) => {
-    process$.next({ task, done });
+    process$.next({ task: task as any, done }); // todo fixme
   };
 
   const queueSizeInput$ = new Subject<number>();
