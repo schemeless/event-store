@@ -10,6 +10,13 @@ These instructions apply to the entire repository.
   - Optionally `yarn lerna-test` if you need to exercise package-specific scripts.
 - Documentation-only updates do not require running tests.
 
+## Release workflow
+
+- Bump the target package version in its `package.json` and commit the change alongside any pending release files.
+- Build the package artefacts with `yarn workspace <package-name> run compile` to refresh `dist/` prior to publishing.
+- Publish with `npm publish --otp <two-factor-code>` from the package directory; reuse the provided OTP only once per npm prompt.
+- Push the release commit (and tag if applicable) after a successful publish so the repository state matches the registry.
+
 ## Code style
 
 - Follow the existing Prettier-driven formatting; do not add manual lint overrides or wrap imports in `try/catch` blocks.
