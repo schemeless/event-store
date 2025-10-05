@@ -12,6 +12,25 @@ import { makeEventStore } from '@schemeless/event-store-react-native';
 
 All public APIs match the original package, so existing event flows and adapters can be reused. The only difference is the queue dependency, which now targets React Native environments.
 
+### React Native prerequisites
+
+Some consumers rely on `crypto.getRandomValues` (for example the `uuid` package). React Native apps should polyfill it with [`react-native-get-random-values`](https://github.com/Luka967/react-native-get-random-values):
+
+```sh
+npm install react-native-get-random-values
+npx pod-install
+```
+
+If you use the Expo managed workflow you will see "CocoaPods is not supported in this project"—that is expected and safe to ignore.
+
+Then import the polyfill once at the root of your app (e.g. `index.js`):
+
+```js
+import 'react-native-get-random-values';
+```
+
+After this, libraries that depend on `crypto.getRandomValues` (such as `uuid`) continue to work as expected.
+
 ## Development
 
 This package is generated from the Node.js implementation and will be kept in sync as part of the monorepo. Build scripts and test commands mirror the original package:
