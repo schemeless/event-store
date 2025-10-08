@@ -26,3 +26,4 @@ These instructions apply to the entire repository.
 
 - Update `readme.md` when adding new packages, scripts, or high-level concepts so the monorepo overview stays current.
 - Keep examples under `examples/` in sync with any breaking API changes.
+- When making significant changes to code under `src/domains`, ensure the corresponding docs in `docs/domains` are updated accordingly.
