@@ -43,4 +43,10 @@ export interface IEventStoreRepo<PAYLOAD = any, META = any> {
    * performance. Without a GSI, this will result in a table scan.
    */
   findByCausationId?: (causationId: string) => Promise<IEventStoreEntity<PAYLOAD, META>[]>;
+
+  /**
+   * Closes the database connection and releases resources.
+   * Called during graceful shutdown.
+   */
+  close?: () => Promise<void>;
 }

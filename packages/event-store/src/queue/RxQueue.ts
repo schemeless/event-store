@@ -1,6 +1,6 @@
 import * as Queue from 'better-queue';
 import { ProcessFunction } from 'better-queue';
-import { BehaviorSubject, Observable, Subject } from 'rxjs';
+import { BehaviorSubject, Observable, Subject, firstValueFrom } from 'rxjs';
 import { logger } from '../util/logger';
 import * as Rx from 'rxjs/operators';
 import * as R from 'ramda';
@@ -65,6 +65,8 @@ export const createRxQueue = <TASK = any, RESULT = TASK>(
   };
 
   const queue = makeQueue<TASK, RESULT>(callback, Object.assign(queueOptions || {}, { id: id }));
+  const drained$ = makeEventQueueObservable<TASK, RESULT>(queue, 'drain', id);
+
   return {
     id,
     queueInstance: queue,
@@ -72,9 +74,23 @@ export const createRxQueue = <TASK = any, RESULT = TASK>(
     process$,
     task$: process$.pipe(Rx.map(R.prop('task'))),
     done$: process$.pipe(Rx.map(R.prop('done'))),
-    drained$: makeEventQueueObservable<TASK, RESULT>(queue, 'drain', id),
+    drained$,
     empty$: makeEventQueueObservable<TASK, RESULT>(queue, 'empty', id),
     taskFailed$: makeFailedEventQueueObservable<TASK, RESULT>(queue),
     queueSize$: queueSizeOutput$,
+    // Lifecycle methods for graceful shutdown
+    pause: (): void => queue.pause(),
+    resume: (): void => queue.resume(),
+    drain: (): Promise<void> => {
+      // Check if queue is already empty (getStats has more fields than typed)
+      const stats = queue.getStats() as any;
+      const isIdle = (stats.waiting ?? 0) === 0 && (stats.running ?? 0) === 0;
+      if (isIdle) {
+        return Promise.resolve();
+      }
+      // Wait for next drain event
+      return firstValueFrom(drained$).then(() => undefined);
+    },
+    destroy: (): Promise<void> => new Promise((resolve) => queue.destroy(() => resolve())),
   };
 };

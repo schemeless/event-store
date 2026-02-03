@@ -104,4 +104,28 @@ describe('Rx Queue', () => {
 
     expect(arr).toEqual([null, 1, 2, 3, 2, 1, 0]);
   });
+
+  it('should support pause, drain, and destroy lifecycle', async () => {
+    const rxQueue = createRxQueue<string, string>('lifecycleTest');
+    const processed: string[] = [];
+
+    rxQueue.process$.subscribe(({ task, done }) => {
+      processed.push(task);
+      done(); // Call done synchronously
+    });
+
+    rxQueue.push('a');
+    rxQueue.push('b');
+
+    // Wait a tick for push to be processed by the queue
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // Wait for queue to drain
+    await rxQueue.drain();
+    expect(processed).toContain('a');
+    expect(processed).toContain('b');
+
+    // Destroy should complete without error
+    await rxQueue.destroy();
+  });
 });

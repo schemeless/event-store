@@ -115,4 +115,16 @@ describe('make eventStore', () => {
       subscription.unsubscribe();
     }
   });
+
+  it('should shutdown gracefully', async () => {
+    const eventStore = await getTestEventStore(testEventFlows, testObservers);
+
+    // Process an event first
+    await StandardEvent.receive(eventStore)({
+      payload: { key: 'shutdown-test', positiveNumber: 1 },
+    });
+
+    // Shutdown should complete without error
+    await expect(eventStore.shutdown(2000)).resolves.toBeUndefined();
+  });
 });

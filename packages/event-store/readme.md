@@ -110,6 +110,20 @@ await eventStore.replay();
 
 `replay` batches historical records, ensures each event is re-applied in chronological order, and pushes them through the observer queue so read models stay consistent after deployments or migrations.
 
+## Graceful Shutdown
+
+To prevent data loss or resource leaks during application shutdown (or testing), use the `shutdown` method. This stops accepting new events, drains existing queues, and closes repository connections.
+
+```ts
+// 30 second timeout
+await eventStore.shutdown(30000);
+```
+
+This is particularly useful for:
+- **Jest Tests**: Preventing "Store is not a constructor" or "file after teardown" errors.
+- **Kubernetes**: Handling `SIGTERM` signals gracefully.
+- **Updates**: Ensuring queues are empty before deploying new versions.
+
 ## Cascading Revert
 
 Sometimes you need to undo an event and all its derived effects. The framework provides a built-in **revert** mechanism that traverses the causal chain and generates compensating events.

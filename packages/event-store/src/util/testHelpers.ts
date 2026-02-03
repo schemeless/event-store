@@ -36,3 +36,14 @@ export const getTestEventStore = async (
     return eventStore;
   }
 };
+
+/**
+ * Shuts down the cached test event store instance.
+ * Should be called in afterAll() of test files.
+ */
+export const shutdownEventStore = async (): Promise<void> => {
+  if (eventStore) {
+    await eventStore.shutdown(2000);
+    eventStore = null as any;
+  }
+};

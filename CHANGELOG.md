@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.7.0] - Unreleased
+
+### Added
+
+- **Graceful Shutdown**: Added `shutdown()` method to `EventStore` to gracefully stop event processing, wait for queues to drain, and release resources.
+  - New `shutdown(timeout?: number)` API.
+  - New `close()` optional method on `IEventStoreRepo`.
+
 ## [2.6.0] - 2026-02-03
 
 ### Added

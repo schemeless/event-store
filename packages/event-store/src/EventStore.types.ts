@@ -48,6 +48,17 @@ export interface EventStore {
    * @throws Error if the event is not a root event or any event lacks a compensate hook
    */
   revert: (eventId: string) => Promise<RevertResult>;
+
+  /**
+   * Gracefully shuts down the event store.
+   * - Stops accepting new events
+   * - Waits for queued events to complete (up to timeout)
+   * - Releases all resources
+   *
+   * @param timeout - Maximum time to wait for shutdown in ms (default: 5000)
+   * @throws Error if shutdown times out
+   */
+  shutdown: (timeout?: number) => Promise<void>;
 }
 
 export * from '@schemeless/event-store-types';
