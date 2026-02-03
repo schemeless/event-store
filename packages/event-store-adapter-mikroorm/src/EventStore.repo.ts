@@ -56,4 +56,39 @@ export class EventStoreRepo implements IEventStoreRepo<any, any> {
       'EventStoreRepo no longer manages schema. Schema reset should be handled by the application-level ORM instance.'
     );
   }
+
+  async getEventById(id: string): Promise<IEventStoreEntity | null> {
+    const forkedEm = this.em.fork();
+    const entity = await forkedEm.findOne(EventStoreEntity, { id });
+    if (!entity) {
+      return null;
+    }
+    return {
+      id: entity.id,
+      domain: entity.domain,
+      type: entity.type,
+      identifier: entity.identifier ?? undefined,
+      correlationId: entity.correlationId ?? undefined,
+      causationId: entity.causationId ?? undefined,
+      created: entity.created,
+      payload: entity.payload != null ? JSON.parse(entity.payload) : undefined,
+      meta: entity.meta != null ? JSON.parse(entity.meta) : undefined,
+    };
+  }
+
+  async findByCausationId(causationId: string): Promise<IEventStoreEntity[]> {
+    const forkedEm = this.em.fork();
+    const entities = await forkedEm.find(EventStoreEntity, { causationId }, { orderBy: { created: 'asc', id: 'asc' } });
+    return entities.map((entity) => ({
+      id: entity.id,
+      domain: entity.domain,
+      type: entity.type,
+      identifier: entity.identifier ?? undefined,
+      correlationId: entity.correlationId ?? undefined,
+      causationId: entity.causationId ?? undefined,
+      created: entity.created,
+      payload: entity.payload != null ? JSON.parse(entity.payload) : undefined,
+      meta: entity.meta != null ? JSON.parse(entity.meta) : undefined,
+    }));
+  }
 }

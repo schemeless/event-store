@@ -19,4 +19,12 @@ export class EventStoreRepo implements IEventStoreRepo {
   resetStore = async () => {
     logger.info('not needed');
   };
+
+  getEventById = async (id: string): Promise<IEventStoreEntity | null> => {
+    return null;
+  };
+
+  findByCausationId = async (causationId: string): Promise<IEventStoreEntity[]> => {
+    return [];
+  };
 }

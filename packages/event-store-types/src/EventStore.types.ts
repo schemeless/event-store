@@ -4,6 +4,11 @@ export interface BaseEventInput<Payload, META = undefined> {
 
   identifier?: string;
   correlationId?: string;
+  /**
+   * @deprecated Will be removed in v3.0.
+   * causationId is now managed exclusively by the framework.
+   * Do not set this field manually.
+   */
   causationId?: string;
 
   created?: Date;
@@ -68,6 +73,19 @@ export interface EventFlow<PartialPayload = any, Payload extends PartialPayload 
   readonly createConsequentEvents?: (
     causalEvent: CreatedEvent<Payload>
   ) => Promise<BaseEvent<any>[]> | BaseEvent<any>[];
+
+  /**
+   * Generates compensating event(s) to reverse this event's effects.
+   * Called by the framework during revert operations.
+   *
+   * If this hook is not defined, the event cannot be reverted.
+   * If any event in a causal chain lacks this hook, the entire chain
+   * cannot be reverted.
+   *
+   * @param originalEvent - The event being reverted
+   * @returns Compensating event(s) to persist
+   */
+  readonly compensate?: (originalEvent: CreatedEvent<Payload>) => BaseEvent<any> | BaseEvent<any>[];
 }
 
 export type EventTaskAndError = { task: CreatedEvent<any>; error: Error };
@@ -100,6 +118,8 @@ export enum EventOutputState {
   success = 'Event:success',
   invalid = 'Event:invalid',
   canceled = 'Event:canceled',
+  reverted = 'Event:reverted',
+  revertFailed = 'Event:revertFailed',
 }
 
 export enum EventObserverState {

@@ -27,4 +27,20 @@ export interface IEventStoreRepo<PAYLOAD = any, META = any> {
   createEventEntity: (event: CreatedEvent<any>) => IEventStoreEntity<PAYLOAD, META>;
   storeEvents: (events: CreatedEvent<any>[]) => Promise<void>;
   resetStore: () => Promise<void>;
+
+  /**
+   * Retrieves a single event by its ID.
+   * Required for revert operations.
+   */
+  getEventById?: (id: string) => Promise<IEventStoreEntity<PAYLOAD, META> | null>;
+
+  /**
+   * Finds all events directly caused by the specified event.
+   * Returns events where causationId equals the given eventId.
+   * Required for revert operations to traverse the event tree.
+   *
+   * Note for DynamoDB: Consider adding a GSI on causationId for better
+   * performance. Without a GSI, this will result in a table scan.
+   */
+  findByCausationId?: (causationId: string) => Promise<IEventStoreEntity<PAYLOAD, META>[]>;
 }

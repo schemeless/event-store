@@ -82,4 +82,30 @@ export class EventStoreRepo implements IEventStoreRepo {
     await eventStoreConn.synchronize(true);
     logger.info('Event Store reset finished');
   };
+
+  getEventById = async (id: string): Promise<IEventStoreEntity | null> => {
+    await this.init();
+    const entity = await this.repo.findOne({ where: { id } });
+    if (!entity) {
+      return null;
+    }
+    return {
+      ...entity,
+      meta: entity.meta ? JSON.parse(entity.meta) : undefined,
+      payload: entity.payload ? JSON.parse(entity.payload) : undefined,
+    };
+  };
+
+  findByCausationId = async (causationId: string): Promise<IEventStoreEntity[]> => {
+    await this.init();
+    const entities = await this.repo.find({
+      where: { causationId },
+      order: { created: 'ASC', id: 'ASC' },
+    });
+    return entities.map((entity) => ({
+      ...entity,
+      meta: entity.meta ? JSON.parse(entity.meta) : undefined,
+      payload: entity.payload ? JSON.parse(entity.payload) : undefined,
+    }));
+  };
 }

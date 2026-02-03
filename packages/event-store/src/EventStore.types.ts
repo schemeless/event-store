@@ -1,9 +1,12 @@
 import type { Observable } from 'rxjs';
 import type {
+  CanRevertResult,
   CreatedEvent,
   EventObserverState,
   EventOutputState,
   IEventStoreRepo,
+  PreviewRevertResult,
+  RevertResult,
   SideEffectsState,
 } from '@schemeless/event-store-types';
 
@@ -25,6 +28,26 @@ export interface EventStore {
   replay: ReturnType<typeof makeReplay>;
   eventStoreRepo: IEventStoreRepo;
   output$: Observable<EventOutput>;
+
+  /**
+   * Checks if an event and all its descendants can be reverted.
+   * Returns information about missing compensate hooks.
+   */
+  canRevert: (eventId: string) => Promise<CanRevertResult>;
+
+  /**
+   * Preview which events would be affected by a revert operation.
+   * Does not execute any changes.
+   */
+  previewRevert: (eventId: string) => Promise<PreviewRevertResult>;
+
+  /**
+   * Reverts a root event and all its descendants.
+   * Generates compensating events for each reverted event.
+   *
+   * @throws Error if the event is not a root event or any event lacks a compensate hook
+   */
+  revert: (eventId: string) => Promise<RevertResult>;
 }
 
 export * from '@schemeless/event-store-types';

@@ -130,6 +130,23 @@ export class EventStoreRepo<PAYLOAD = any, META = any> implements IEventStoreRep
     });
   }
 
+  async getEventById(id: string): Promise<IEventStoreEntity<PAYLOAD, META> | null> {
+    try {
+      const model = await this.collection.find(id);
+      return this.mapModelToEntity(model);
+    } catch (error) {
+      // WatermelonDB throws when record is not found
+      return null;
+    }
+  }
+
+  async findByCausationId(causationId: string): Promise<IEventStoreEntity<PAYLOAD, META>[]> {
+    const models = await this.collection
+      .query(Q.where('causation_id', causationId), Q.sortBy('created', Q.asc))
+      .fetch();
+    return models.map((model) => this.mapModelToEntity(model));
+  }
+
   private mapModelToEntity(model: EventModel): IEventStoreEntity<PAYLOAD, META> {
     return {
       id: model.id,

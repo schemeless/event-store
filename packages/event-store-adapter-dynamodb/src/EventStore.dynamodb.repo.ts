@@ -131,4 +131,44 @@ export class EventStoreRepo implements IEventStoreRepo {
     this.initialized = false;
     await this.init(true);
   };
+
+  getEventById = async (id: string): Promise<EventStoreEntity | null> => {
+    await this.init();
+    try {
+      const event = await this.mapper.get(Object.assign(new EventStoreEntity(), { id }));
+      return await this.getFullEvent(event);
+    } catch (e) {
+      if (e.name === 'ItemNotFoundException') {
+        return null;
+      }
+      throw e;
+    }
+  };
+
+  findByCausationId = async (causationId: string): Promise<EventStoreEntity[]> => {
+    await this.init();
+    console.warn(
+      '[event-store-adapter-dynamodb] findByCausationId without a GSI on causationId will scan the entire table. ' +
+        'Consider adding a Global Secondary Index on causationId for better performance in production.'
+    );
+
+    const results: EventStoreEntity[] = [];
+    for await (const item of this.mapper.scan(EventStoreEntity, {
+      filter: {
+        type: 'Equals',
+        subject: 'causationId',
+        object: causationId,
+      },
+    })) {
+      const fullEvent = await this.getFullEvent(item);
+      results.push(fullEvent);
+    }
+
+    // Sort by created date
+    return results.sort((a, b) => {
+      const dateA = a.created instanceof Date ? a.created.getTime() : new Date(a.created).getTime();
+      const dateB = b.created instanceof Date ? b.created.getTime() : new Date(b.created).getTime();
+      return dateA - dateB;
+    });
+  };
 }

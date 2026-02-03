@@ -70,4 +70,42 @@ export class EventStoreRepo implements IEventStoreRepo {
   async resetStore(): Promise<void> {
     await this.prisma.eventStoreEntity.deleteMany({});
   }
+
+  async getEventById(id: string): Promise<IEventStoreEntity | null> {
+    const entity = await this.prisma.eventStoreEntity.findUnique({
+      where: { id },
+    });
+    if (!entity) {
+      return null;
+    }
+    return {
+      id: entity.id,
+      domain: entity.domain,
+      type: entity.type,
+      identifier: entity.identifier ?? undefined,
+      correlationId: entity.correlationId ?? undefined,
+      causationId: entity.causationId ?? undefined,
+      created: entity.created,
+      payload: JSON.parse(entity.payload),
+      meta: entity.meta != null ? JSON.parse(entity.meta) : undefined,
+    };
+  }
+
+  async findByCausationId(causationId: string): Promise<IEventStoreEntity[]> {
+    const entities = await this.prisma.eventStoreEntity.findMany({
+      where: { causationId },
+      orderBy: [{ created: 'asc' }, { id: 'asc' }],
+    });
+    return entities.map((entity) => ({
+      id: entity.id,
+      domain: entity.domain,
+      type: entity.type,
+      identifier: entity.identifier ?? undefined,
+      correlationId: entity.correlationId ?? undefined,
+      causationId: entity.causationId ?? undefined,
+      created: entity.created,
+      payload: JSON.parse(entity.payload),
+      meta: entity.meta != null ? JSON.parse(entity.meta) : undefined,
+    }));
+  }
 }
