@@ -137,3 +137,6 @@ $RECYCLE.BIN/
 
 # dist
 dist
+
+# npm auth
+.npmrc
