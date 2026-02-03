@@ -2,6 +2,7 @@ import * as Rx from 'rxjs/operators';
 import {
   CreatedEvent,
   EventFlow,
+  EventFlowMap,
   EventOutputState,
   EventTaskAndError,
   IEventStoreRepo,
@@ -13,6 +14,7 @@ import { makeReplay } from './makeReplay';
 import { makeSideEffectQueue } from './queue/makeSideEffectQueue';
 import { from, merge } from 'rxjs';
 import { EventStore } from './EventStore.types';
+import { makeRevert } from './revert/makeRevert';
 
 export const makeEventStore =
   (eventStoreRepo: IEventStoreRepo) =>
@@ -21,6 +23,13 @@ export const makeEventStore =
     const sideEffectQueue = makeSideEffectQueue(eventFlows, mainQueue);
 
     await eventStoreRepo.init();
+
+    // Build event flow map for revert lookups
+    const eventFlowMap: EventFlowMap = {};
+    for (const flow of eventFlows) {
+      const key = `${flow.domain}__${flow.type}`;
+      eventFlowMap[key] = flow;
+    }
 
     const mainQueueProcessed$ = mainQueue.processed$.pipe(
       Rx.concatMap(async ([doneEvents, eventTaskAndError]): Promise<[CreatedEvent<any>[], EventTaskAndError]> => {
@@ -57,6 +66,13 @@ export const makeEventStore =
     // Ensure queues start draining even if callers only subscribe later.
     output$.subscribe(() => undefined);
 
+    // Create revert functions
+    const { canRevert, previewRevert, revert } = makeRevert({
+      repo: eventStoreRepo,
+      eventFlowMap,
+      storeEvents: (events) => eventStoreRepo.storeEvents(events),
+    });
+
     return {
       mainQueue,
       sideEffectQueue,
@@ -64,5 +80,8 @@ export const makeEventStore =
       replay: makeReplay(eventFlows, successEventObservers, eventStoreRepo),
       eventStoreRepo: eventStoreRepo,
       output$,
+      canRevert,
+      previewRevert,
+      revert,
     };
   };

@@ -11,7 +11,11 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "skipLibCheck": true,
-    "strictPropertyInitialization": false
+    "strictPropertyInitialization": false,
+    "baseUrl": ".",
+    "paths": {
+      "@schemeless/*": ["../*/src"]
+    }
   },
   "exclude": ["node_modules", "**/*.test.ts", "**/testHelpers.ts"],
   "include": ["src/**/*.ts"]

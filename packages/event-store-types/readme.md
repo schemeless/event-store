@@ -60,3 +60,36 @@ class CustomRepo implements IEventStoreRepo {
 ```
 
 The iterator returned by `getAllEvents` yields arrays of `IEventStoreEntity` records. Each record includes identifiers, correlation/causation metadata, and the `created` timestamp so replays can process history in order.
+
+### Revert support
+
+To enable revert operations, adapters should also implement two additional optional methods:
+
+```ts
+class CustomRepo implements IEventStoreRepo {
+  // ... existing methods ...
+
+  async getEventById(id: string) {
+    // Return a single event by ID, or null if not found
+  }
+
+  async findByCausationId(causationId: string) {
+    // Return all events where causationId equals the given value
+    // Used to traverse the event tree during reverts
+  }
+}
+```
+
+> **Note:** For DynamoDB adapters, consider adding a Global Secondary Index on `causationId` for better performance.
+
+## Revert types
+
+The package exports types for the revert API:
+
+```ts
+import { CanRevertResult, PreviewRevertResult, RevertResult } from '@schemeless/event-store-types';
+```
+
+- `CanRevertResult` – Indicates whether an event can be reverted, with reasons if not
+- `PreviewRevertResult` – Shows which events would be affected by a revert
+- `RevertResult` – Contains the outcome of a revert operation, including generated compensating events

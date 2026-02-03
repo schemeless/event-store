@@ -190,6 +190,24 @@ An `EventFlow` models the complete lifecycle of a domain event. Each property on
 | `sideEffect`                        | `(event) => Promise<void \| BaseEvent<any>[]> \| void \| BaseEvent<any>[]`           |          | Runs after `apply`. Use this to trigger asynchronous workflows (such as sending emails). Returning additional base events queues them for processing.                                          |
 | `cancelApply`                       | `(event) => Promise<void> \| void`                                                   |          | Optional compensating action executed when an event is cancelled during cleanup.                                                                                                               |
 | `createConsequentEvents`            | `(causalEvent) => Promise<BaseEvent<any>[]> \| BaseEvent<any>[]`                     |          | Generates follow-up events that should be enqueued as a direct consequence of the causal event.                                                                                                |
+| `compensate`                        | `(event) => BaseEvent<any> \| BaseEvent<any>[]`                                      |          | Returns compensating event(s) to reverse the effect of this event. Required for revert operations.                                                                                             |
+
+### Reverting events
+
+The event store provides APIs to undo an event and all its descendants:
+
+```ts
+// Check if the event tree can be reverted
+const check = await eventStore.canRevert(eventId);
+
+// Preview what would be affected
+const preview = await eventStore.previewRevert(eventId);
+
+// Execute the revert (generates compensating events)
+const result = await eventStore.revert(eventId);
+```
+
+Only root events (events without a `causationId`) can be reverted. All events in the tree must define a `compensate` hook or the operation fails.
 
 ## Examples and local tooling
 

@@ -1,9 +1,12 @@
 import type { Observable } from 'rxjs';
 import type {
+  CanRevertResult,
   CreatedEvent,
   EventObserverState,
   EventOutputState,
   IEventStoreRepo,
+  PreviewRevertResult,
+  RevertResult,
   SideEffectsState,
 } from '@schemeless/event-store-types';
 
@@ -25,6 +28,9 @@ export interface EventStore {
   replay: ReturnType<typeof makeReplay>;
   eventStoreRepo: IEventStoreRepo;
   output$: Observable<EventOutput>;
+  canRevert: (eventId: string) => Promise<CanRevertResult>;
+  previewRevert: (eventId: string) => Promise<PreviewRevertResult>;
+  revert: (eventId: string) => Promise<RevertResult>;
 }
 
 export * from '@schemeless/event-store-types';

@@ -109,3 +109,73 @@ await eventStore.replay();
 ```
 
 `replay` batches historical records, ensures each event is re-applied in chronological order, and pushes them through the observer queue so read models stay consistent after deployments or migrations.
+
+## Cascading Revert
+
+Sometimes you need to undo an event and all its derived effects. The framework provides a built-in **revert** mechanism that traverses the causal chain and generates compensating events.
+
+### Define the compensate hook
+
+Each event flow can define a `compensate` hook that returns one or more compensating events:
+
+```ts
+export const orderPlacedFlow: EventFlow = {
+  domain: 'order',
+  type: 'placed',
+  receive: (es) => es.receive(orderPlacedFlow),
+
+  compensate: (originalEvent) => ({
+    domain: 'order',
+    type: 'voided',
+    payload: {
+      orderId: originalEvent.payload.orderId,
+      reason: 'Reverted via framework',
+    },
+  }),
+};
+```
+
+The framework adds metadata to each compensating event (`meta.isCompensating = true`, `meta.compensatesEventId`).
+
+### Check if an event can be reverted
+
+Before attempting a revert, check if the event tree is fully covered:
+
+```ts
+const result = await eventStore.canRevert(eventId);
+
+if (!result.canRevert) {
+  console.log('Cannot revert:', result.reason);
+  console.log('Missing hooks:', result.missingCompensateEvents);
+}
+```
+
+> **Strict mode:** If any event in the tree (including descendants) lacks a `compensate` hook, the revert will fail. This ensures data consistency.
+
+### Preview a revert
+
+See what would be affected without making changes:
+
+```ts
+const preview = await eventStore.previewRevert(eventId);
+
+console.log('Root event:', preview.rootEvent.id);
+console.log('Descendants:', preview.descendantEvents.length);
+console.log('Total affected:', preview.totalEventCount);
+```
+
+### Execute a revert
+
+Revert the event and all its descendants:
+
+```ts
+const result = await eventStore.revert(eventId);
+
+console.log('Reverted:', result.revertedEventId);
+console.log('Compensation events:', result.compensatingEvents);
+console.log('Child results:', result.childResults); // Nested results
+```
+
+The revert processes events depth-first, starting from the leaves and working up to the root. This ensures that dependent events are compensated before their parents.
+
+> **Root events only:** Only events without a `causationId` (root events) can be reverted. Attempting to revert intermediate events will throw an error.
