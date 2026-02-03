@@ -20,8 +20,7 @@ import { EventFlow } from '@schemeless/event-store';
 export const userRegisteredFlow: EventFlow = {
   domain: 'user',
   type: 'registered',
-  receive: (eventStore) => async (eventInput) =>
-    eventStore.receive(userRegisteredFlow)(eventInput),
+  receive: (eventStore) => async (eventInput) => eventStore.receive(userRegisteredFlow)(eventInput),
   validate: async (event) => {
     if (!event.payload.email) {
       throw new Error('email is required');
@@ -34,6 +33,34 @@ export const userRegisteredFlow: EventFlow = {
 ```
 
 You can attach additional hooks such as `sideEffect` (retryable asynchronous work) or `createConsequentEvents` (fan out new root events) by setting the corresponding properties on the flow object.
+
+### Creating consequent events
+
+When an event spawns additional events via `createConsequentEvents`, the framework automatically maintains the causal relationship:
+
+```ts
+export const orderPlacedFlow: EventFlow = {
+  domain: 'order',
+  type: 'placed',
+  createConsequentEvents: (parentEvent) => [
+    {
+      domain: 'account',
+      type: 'transfer',
+      payload: {
+        fromAccountId: parentEvent.payload.buyerAccountId,
+        toAccountId: parentEvent.payload.sellerAccountId,
+        amount: parentEvent.payload.total,
+      },
+      // No need to set causationId or correlationId
+      // The framework handles this automatically:
+      // - causationId = parentEvent.id
+      // - correlationId = parentEvent.correlationId
+    },
+  ],
+};
+```
+
+This ensures all derived events share the same `correlationId` (for grouping) while each maintains a `causationId` pointer to its immediate parent (for chain traversal).
 
 ## Build the store
 

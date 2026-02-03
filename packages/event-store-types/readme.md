@@ -28,6 +28,17 @@ const eventFlow: EventFlow = {
 
 `CreatedEvent` extends the base shape with generated identifiers and timestamps, while `SideEffectsState`, `EventOutputState`, and `EventObserverState` describe the possible outcomes emitted by the runtime.
 
+### Traceability IDs
+
+The event store uses several ID fields to track causation and correlation across event chains:
+
+- **`correlationId`** – Groups all events originating from the same root command. The framework inherits this from parent events or creates it for root events. Developers can optionally pass this from external systems (e.g., HTTP request headers).
+- **`causationId`** – Links each event to its immediate parent. This field is **managed exclusively by the framework** via `createConsequentEvents` or `sideEffect` handlers.
+- **`identifier`** – Developer-provided field to record who or what triggered the event (e.g., user ID, service name).
+- **`trackingId`** – Developer-provided external reference for cross-system tracing.
+
+> **Important:** Do not manually set `causationId` in your event inputs. The framework automatically populates this field based on the event creation context to ensure chain integrity.
+
 ## Repository contracts
 
 `Repo.types` exposes the `IEventStoreRepo` and `IEventStoreEntity` interfaces. Adapters implement these to integrate with the core runtime.
