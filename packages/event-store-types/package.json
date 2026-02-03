@@ -1,6 +1,6 @@
 {
   "name": "@schemeless/event-store-types",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "typescript:main": "src/index.ts",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
