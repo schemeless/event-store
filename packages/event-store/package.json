@@ -1,6 +1,6 @@
 {
   "name": "@schemeless/event-store",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "typescript:main": "src/index.ts",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -21,7 +21,7 @@
     "url": "https://github.com/schemeless/event-store/issues"
   },
   "dependencies": {
-    "@schemeless/event-store-types": "^2.6.0",
+    "@schemeless/event-store-types": "^2.7.0",
     "better-queue": "^3.8.10",
     "debug": "^4.2.0",
     "ramda": "^0.27.1",
@@ -30,8 +30,8 @@
     "uuid": "^8.3.1"
   },
   "devDependencies": {
-    "@schemeless/event-store-adapter-dynamodb": "^2.6.0",
-    "@schemeless/event-store-adapter-typeorm": "^2.6.0",
+    "@schemeless/event-store-adapter-dynamodb": "^2.7.0",
+    "@schemeless/event-store-adapter-typeorm": "^2.7.0",
     "@types/better-queue": "^3.8.2",
     "@types/debug": "^4.1.5",
     "@types/jest": "^30.0.0",

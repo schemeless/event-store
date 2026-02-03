@@ -1,10 +1,13 @@
 {
-  "version": "2.6.0",
+  "version": "2.7.0",
   "npmClient": "yarn",
   "useWorkspaces": true,
   "command": {
     "publish": {
-      "ignoreChanges": ["ignored-file", "*.md"],
+      "ignoreChanges": [
+        "ignored-file",
+        "*.md"
+      ],
       "message": "chore(release): publish",
       "registry": "https://registry.npmjs.org"
     },
@@ -12,5 +15,7 @@
       "ignore": "component-*"
     }
   },
-  "packages": ["packages/*"]
+  "packages": [
+    "packages/*"
+  ]
 }
