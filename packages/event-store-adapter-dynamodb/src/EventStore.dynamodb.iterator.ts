@@ -1,49 +1,76 @@
-import { dateIndexName, EventStoreEntity } from './EventStore.dynamodb.entity';
+import { TIME_BUCKET_INDEX, EventStoreEntity } from './EventStore.dynamodb.entity';
 import { EventStoreRepo } from './EventStore.dynamodb.repo';
 
 export class EventStoreDynamodbIterator implements AsyncIterableIterator<EventStoreEntity[]> {
-  protected currentPage = 0;
-  public allItems: { id: string; created: Date }[];
 
-  constructor(protected repo: EventStoreRepo, protected pageSize = 100) {
-    this.allItems = [];
-  }
+  // Default start date for replay. 
+  // Ideally this should be configurable or stored in metadata.
+  private startDate = new Date('2020-01-01');
+
+  constructor(protected repo: EventStoreRepo, protected pageSize = 100) { }
 
   public async init() {
-    const pages = this.repo.mapper
-      .scan(EventStoreEntity, {
-        indexName: dateIndexName,
-        pageSize: 5000,
-      })
-      .pages();
-    for await (const items of pages) {
-      this.allItems = this.allItems.concat(items);
-    }
-    this.allItems.sort((a, b) => +a.created - +b.created);
+    // No initialization needed for Query-based approach
+    // (Old implementation sorted in memory here)
   }
 
   public async next(): Promise<IteratorResult<EventStoreEntity[]>> {
-    const take = this.pageSize;
-    const skip = take * this.currentPage;
-    const entities = this.allItems.slice(skip, skip + take);
+    // Use the generator defined in [Symbol.asyncIterator]
+    // However, since we implement both next() manually and Symbol.asyncIterator, 
+    // it's tricky to map the generator back to next() without a wrapper.
+    // Given the consumption pattern usually uses `for await (const batch of iterator)`,
+    // the Symbol.asyncIterator is key.
+    // If explicit next() calls are used, this won't work well unless we instantiate the generator.
 
-    const _gets = entities.map((attrs) => Object.assign(new EventStoreEntity(), attrs));
-    let items: EventStoreEntity[] = [];
-    for await (const _result of this.repo.mapper.batchGet(_gets)) {
-      items = items.concat(_result);
+    // For compatibility, let's just throw or return done if called directly?
+    // Actually, AsyncIterableIterator requires next() to be implemented.
+    // We can delegate to an internal generator.
+    if (!this.internalIterator) {
+      this.internalIterator = this.generator();
     }
+    return this.internalIterator.next();
+  }
 
-    items.sort((a, b) => +a.created - +b.created);
+  private internalIterator: AsyncIterator<EventStoreEntity[]>;
 
-    const fullItems = await Promise.all(items.map((_) => this.repo.getFullEvent(_)));
+  private async *generator(): AsyncIterator<EventStoreEntity[]> {
+    let currentMonth = new Date(this.startDate);
+    const now = new Date();
 
-    const isDone = this.currentPage * this.pageSize >= this.allItems.length;
-    this.currentPage = this.currentPage + 1;
+    // Loop through months from StartDate to Now
+    while (currentMonth <= now) {
+      const timeBucket = currentMonth.toISOString().slice(0, 7); // YYYY-MM
 
-    return {
-      done: isDone,
-      value: fullItems,
-    };
+      const queryIterator = this.repo.mapper.query(
+        EventStoreEntity,
+        { timeBucket },
+        {
+          indexName: TIME_BUCKET_INDEX,
+          limit: this.pageSize,
+          scanIndexForward: true // Oldest first
+        }
+      );
+
+      let buffer: EventStoreEntity[] = [];
+
+      for await (const item of queryIterator) {
+        // Hydrate full event (S3 checks etc)
+        const fullEvent = await this.repo.getFullEvent(item);
+        buffer.push(fullEvent);
+
+        if (buffer.length >= this.pageSize) {
+          yield buffer;
+          buffer = [];
+        }
+      }
+
+      if (buffer.length > 0) {
+        yield buffer;
+      }
+
+      // Move to next month
+      currentMonth.setMonth(currentMonth.getMonth() + 1);
+    }
   }
 
   [Symbol.asyncIterator](): AsyncIterableIterator<EventStoreEntity[]> {

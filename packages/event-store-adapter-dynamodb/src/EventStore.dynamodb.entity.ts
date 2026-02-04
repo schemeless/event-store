@@ -23,7 +23,8 @@ const PayloadType: CustomType<any> = {
   },
 };
 
-export const dateIndexName = 'eventCreated';
+export const TIME_BUCKET_INDEX = 'timeBucketIndex';
+export const CAUSATION_INDEX = 'causationIndex';
 
 export const dateIndexGSIOptions: GlobalSecondaryIndexOptions = {
   type: 'global',
@@ -34,14 +35,12 @@ export const dateIndexGSIOptions: GlobalSecondaryIndexOptions = {
 
 @table('schemeless-event-store')
 export class EventStoreEntity implements IEventStoreEntity<any, any> {
+  // Main Table PK: EventID (Preserve O(1) Lookup)
   @hashKey({
     type: 'Custom',
     attributeType: 'S',
     marshall: (str) => ({ S: `EventID#${str}` }),
     unmarshall: (persisted) => persisted.S!.replace(/^EventID#/, ''),
-    indexKeyConfigurations: {
-      [dateIndexName]: 'RANGE',
-    },
   })
   id: string;
 
@@ -64,17 +63,41 @@ export class EventStoreEntity implements IEventStoreEntity<any, any> {
   identifier?: string;
 
   @attribute({ type: 'String' })
-  correlationId?: string; //uuid
+  correlationId?: string;
 
-  @attribute({ type: 'String' })
-  causationId?: string; //uuid
+  @attribute({
+    type: 'String',
+    indexKeyConfigurations: {
+      [CAUSATION_INDEX]: 'HASH',
+    }
+  })
+  causationId?: string;
+
+  // Global TimeBucket for Replay
+  @attribute({
+    type: 'String',
+    indexKeyConfigurations: {
+      [TIME_BUCKET_INDEX]: 'HASH',
+    }
+  })
+  timeBucket: string;
 
   @rangeKey(
     Object.assign(DateType, {
       indexKeyConfigurations: {
-        [dateIndexName]: 'HASH',
+        [TIME_BUCKET_INDEX]: 'RANGE',
+        [CAUSATION_INDEX]: 'RANGE'
       },
     })
   )
   created: Date;
+
+  // Helper to generate bucket ID
+  generateTimeBucket() {
+    // Bucket by Month to reduce partition count for global replay
+    // Format: YYYY-MM
+    if (this.created) {
+      this.timeBucket = this.created.toISOString().slice(0, 7);
+    }
+  }
 }

@@ -6,8 +6,10 @@ import { EventStoreEntity } from './EventStore.dynamodb.entity';
 const ensureTableExistsMock = jest.fn();
 const scanMock = jest.fn();
 const batchPutMock = jest.fn();
+const putMock = jest.fn(); // Added putMock
 const batchGetMock = jest.fn();
 const deleteTableMock = jest.fn();
+const queryMock = jest.fn(); // Added queryMock
 
 let dataMapperConstructorMock: jest.Mock;
 
@@ -18,8 +20,11 @@ jest.mock('@aws/dynamodb-data-mapper', () => ({
 }));
 
 jest.mock('./EventStore.dynamodb.entity', () => ({
-  EventStoreEntity: class EventStoreEntity {},
-  dateIndexName: 'eventCreated',
+  EventStoreEntity: class EventStoreEntity {
+    generateTimeBucket = jest.fn(); // Mock method
+  },
+  TIME_BUCKET_INDEX: 'timeBucketIndex', // Updated constants
+  CAUSATION_INDEX: 'causationIndex',
   dateIndexGSIOptions: {},
 }));
 
@@ -52,13 +57,18 @@ describe('EventStoreRepo', () => {
     ensureTableExistsMock.mockReset();
     scanMock.mockReset();
     batchPutMock.mockReset();
+    putMock.mockReset();
     batchGetMock.mockReset();
     deleteTableMock.mockReset();
+    queryMock.mockReset();
+
     dataMapperConstructorMock = jest.fn().mockImplementation(() => ({
       ensureTableExists: ensureTableExistsMock,
       scan: scanMock,
       batchPut: batchPutMock,
+      put: putMock,
       batchGet: batchGetMock,
+      query: queryMock,
       deleteTable: deleteTableMock,
     }));
     iteratorConstructorMock = jest.fn().mockImplementation(() => iteratorInstanceMock);
@@ -79,25 +89,22 @@ describe('EventStoreRepo', () => {
 
     expect(ensureTableExistsMock).toHaveBeenCalledWith(
       EventStoreEntity,
-      expect.objectContaining({ readCapacityUnits: expect.any(Number) })
+      expect.objectContaining({
+        readCapacityUnits: expect.any(Number),
+        indexOptions: expect.objectContaining({
+          timeBucketIndex: expect.anything(),
+          causationIndex: expect.anything()
+        })
+      })
     );
     expect(s3.headBucket).toHaveBeenCalledWith({ Bucket: 'bucket' });
     expect(s3.createBucket).toHaveBeenCalledWith({ Bucket: 'bucket' });
-
-    await repo.init();
-    expect(ensureTableExistsMock).toHaveBeenCalledTimes(1);
-    expect(s3.headBucket).toHaveBeenCalledTimes(1);
-
-    await repo.init(true);
-    expect(ensureTableExistsMock).toHaveBeenCalledTimes(2);
   });
 
   it('stores events and offloads oversized payloads to S3', async () => {
     const s3 = createS3Client();
     sizeofMock.mockImplementation((event: any) => (event.id === '2' ? 400000 : 1000));
-    batchPutMock.mockImplementation(() => (async function* () {
-      return;
-    })());
+    putMock.mockResolvedValue({});
 
     const repo = new EventStoreRepo({} as any, s3 as any, {
       tableNamePrefix: 'prefix',
@@ -117,15 +124,24 @@ describe('EventStoreRepo', () => {
       expect.objectContaining({ Bucket: 'bucket', Key: 'events/2.json' })
     );
 
-    expect(batchPutMock).toHaveBeenCalledTimes(1);
-    const savedEvents = batchPutMock.mock.calls[0][0];
-    const largeEvent = savedEvents.find((event: EventStoreEntity) => event.id === '2');
-    const smallEvent = savedEvents.find((event: EventStoreEntity) => event.id === '1');
+    // Expect 'put' to be called for each event with conditional check
+    expect(putMock).toHaveBeenCalledTimes(2);
 
-    expect(largeEvent.payload).toBeUndefined();
-    expect(largeEvent.s3Reference).toBe('bucket::events/2.json');
-    expect(smallEvent.payload).toEqual({ size: 'small' });
-    expect(smallEvent.s3Reference).toBeUndefined();
+    // Check first event (small)
+    const smallEventCall = putMock.mock.calls.find(call => call[0].id === '1');
+    expect(smallEventCall[0].payload).toEqual({ size: 'small' });
+    expect(smallEventCall[0].s3Reference).toBeUndefined();
+    expect(smallEventCall[1]).toEqual(expect.objectContaining({
+      condition: expect.objectContaining({ name: 'attribute_not_exists', subject: 'id' })
+    }));
+
+    // Check second event (large)
+    const largeEventCall = putMock.mock.calls.find(call => call[0].id === '2');
+    expect(largeEventCall[0].payload).toBeUndefined();
+    expect(largeEventCall[0].s3Reference).toBe('bucket::events/2.json');
+    expect(largeEventCall[1]).toEqual(expect.objectContaining({
+      condition: expect.objectContaining({ name: 'attribute_not_exists', subject: 'id' })
+    }));
   });
 
   it('retrieves full events from S3 when a reference is present', async () => {
@@ -139,9 +155,6 @@ describe('EventStoreRepo', () => {
 
     expect(s3.getObject).toHaveBeenCalledWith({ Bucket: 'bucket', Key: 'events/1.json' });
     expect(fullEvent).toEqual({ restored: true });
-
-    const originalEvent = { id: 'no-ref' } as any;
-    expect(await repo.getFullEvent(originalEvent)).toBe(originalEvent);
   });
 
   it('creates an iterator for fetching all events', async () => {

@@ -3,7 +3,12 @@ import type { S3 } from 'aws-sdk';
 import type * as Dynamodb from 'aws-sdk/clients/dynamodb';
 import * as sizeof from 'object-sizeof';
 import { DataMapper } from '@aws/dynamodb-data-mapper';
-import { dateIndexGSIOptions, dateIndexName, EventStoreEntity } from './EventStore.dynamodb.entity';
+import {
+  TIME_BUCKET_INDEX,
+  CAUSATION_INDEX,
+  dateIndexGSIOptions,
+  EventStoreEntity,
+} from './EventStore.dynamodb.entity';
 import { logger } from './utils/logger';
 import { EventStoreDynamodbIterator } from './EventStore.dynamodb.iterator';
 
@@ -48,18 +53,16 @@ export class EventStoreRepo implements IEventStoreRepo {
         readCapacityUnits: this.options.eventStoreTableReadCapacityUnits,
         writeCapacityUnits: this.options.eventStoreTableWriteCapacityUnits,
         indexOptions: {
-          [dateIndexName]: dateIndexGSIOptions,
+          [TIME_BUCKET_INDEX]: dateIndexGSIOptions,
+          [CAUSATION_INDEX]: dateIndexGSIOptions,
         },
       });
     }
     if (!this.options.skipS3BucketCreation) {
       try {
-        console.log('heading');
-        const result = await this.s3Client.headBucket({ Bucket: this.options.s3BucketName }).promise();
-        console.log(result);
+        await this.s3Client.headBucket({ Bucket: this.options.s3BucketName }).promise();
       } catch (err) {
-        console.log(err);
-        console.log('creating bucket' + this.options.s3BucketName);
+        logger.info('creating bucket' + this.options.s3BucketName);
         await this.s3Client.createBucket({ Bucket: this.options.s3BucketName }).promise();
       }
     }
@@ -69,6 +72,7 @@ export class EventStoreRepo implements IEventStoreRepo {
 
   async getAllEvents(pageSize: number = 100): Promise<AsyncIterableIterator<Array<EventStoreEntity>>> {
     await this.init();
+    // Use the optimized TimeBucket iterator
     const pages = new EventStoreDynamodbIterator(this, pageSize);
     await pages.init();
     return pages;
@@ -87,12 +91,13 @@ export class EventStoreRepo implements IEventStoreRepo {
       ContentEncoding: 'base64',
       ACL: this.options.s3Acl,
     };
-    console.log('data', data);
     return this.s3Client.upload(data).promise();
   }
 
   createEventEntity = (event: CreatedEvent<any>): EventStoreEntity => {
-    return Object.assign(new EventStoreEntity(), event);
+    const entity = Object.assign(new EventStoreEntity(), event);
+    entity.generateTimeBucket(); // Important: Populate Bucket
+    return entity;
   };
 
   async getFullEvent(event: EventStoreEntity): Promise<EventStoreEntity> {
@@ -122,12 +127,28 @@ export class EventStoreRepo implements IEventStoreRepo {
           : undefined,
       })
     );
-    for await (const saved of this.mapper.batchPut(reshapedEvents)) {
-    }
+
+    // Use Promise.all with Conditional Puts instead of batchPut to ensure idempotency/locking
+    // This effectively prevents overwriting existing events with the same ID
+    await Promise.all(
+      reshapedEvents.map((event) =>
+        this.mapper.put(event, {
+          condition: {
+            type: 'Function',
+            name: 'attribute_not_exists',
+            subject: 'id',
+          },
+        })
+      )
+    );
   };
 
   resetStore = async () => {
-    await this.mapper.deleteTable(EventStoreEntity);
+    try {
+      await this.mapper.deleteTable(EventStoreEntity);
+    } catch (e) {
+      // ignore
+    }
     this.initialized = false;
     await this.init(true);
   };
@@ -147,28 +168,20 @@ export class EventStoreRepo implements IEventStoreRepo {
 
   findByCausationId = async (causationId: string): Promise<EventStoreEntity[]> => {
     await this.init();
-    console.warn(
-      '[event-store-adapter-dynamodb] findByCausationId without a GSI on causationId will scan the entire table. ' +
-        'Consider adding a Global Secondary Index on causationId for better performance in production.'
+    const results: EventStoreEntity[] = [];
+
+    // Use Query on GSI instead of Scan
+    const iterator = this.mapper.query(
+      EventStoreEntity,
+      { causationId }, // KeyCondition
+      { indexName: CAUSATION_INDEX }
     );
 
-    const results: EventStoreEntity[] = [];
-    for await (const item of this.mapper.scan(EventStoreEntity, {
-      filter: {
-        type: 'Equals',
-        subject: 'causationId',
-        object: causationId,
-      },
-    })) {
+    for await (const item of iterator) {
       const fullEvent = await this.getFullEvent(item);
       results.push(fullEvent);
     }
 
-    // Sort by created date
-    return results.sort((a, b) => {
-      const dateA = a.created instanceof Date ? a.created.getTime() : new Date(a.created).getTime();
-      const dateB = b.created instanceof Date ? b.created.getTime() : new Date(b.created).getTime();
-      return dateA - dateB;
-    });
+    return results; // Results are already sorted by 'created' (SortKey of GSI)
   };
 }
