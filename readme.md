@@ -96,6 +96,48 @@ The `output$` observable emits every success, validation error, cancellation, an
 
 For long-running services, `replay` rehydrates projections by running stored events back through each flow and its success observers ([makeReplay.ts](packages/event-store/src/makeReplay.ts#L1-L36)). Success observers process completed events in priority order using a dedicated queue so they can remain isolated from the main command pipeline ([makeReceive.ts](packages/event-store/src/queue/makeReceive.ts#L1-L27)).
 
+## Performance & Concurrency
+
+You can configure the concurrency level for the internal queues to optimize throughput. By default, all queues run sequentially (`concurrent: 1`) to guarantee strict ordering.
+
+### Configurable Concurrency
+
+Pass `EventStoreOptions` to `makeEventStore` to enable parallel processing:
+
+```ts
+const eventStore = await makeEventStore(repo, {
+  mainQueueConcurrent: 5,       // Process 5 main events in parallel
+  sideEffectQueueConcurrent: 10, // Process 10 side effects in parallel
+  observerQueueConcurrent: 5,    // Process 5 observers in parallel
+})([userRegisteredFlow]);
+```
+
+### `EventStoreOptions` Reference
+
+| property                    | type     | default | description                                                                                                      |
+| --------------------------- | -------- | ------- | ---------------------------------------------------------------------------------------------------------------- |
+| `mainQueueConcurrent`       | `number` | `1`     | Number of events processed in parallel by the main queue. Set > 1 for high throughput at the cost of strict ordering. |
+| `sideEffectQueueConcurrent` | `number` | `1`     | Number of side effects processed in parallel. Safe to increase as side effects are retryable and asynchronous.    |
+| `observerQueueConcurrent`   | `number` | `1`     | Number of observers processed in parallel. Safe to increase if observers are independent.                         |
+
+### Fire-and-Forget Observers
+
+For observers that perform non-critical, time-consuming tasks (like sending analytics or notifications) where you don't want to block the main event processing flow, use `fireAndForget: true`.
+
+```ts
+const analyticsObserver: SuccessEventObserver = {
+  filters: [{ domain: 'user', type: 'registered' }],
+  priority: 1,
+  fireAndForget: true, // Run asynchronously, do not wait
+  apply: async (event) => {
+      await sendAnalytics(event);
+  },
+};
+```
+
+- **Non-blocking**: The main `receive()` call returns immediately after persistence, without waiting for this observer.
+- **Error Isolation**: If this observer throws an error, it is logged but does **not** fail the main event flow.
+
 ## Monorepo layout
 
 ```

@@ -100,6 +100,15 @@ const eventStore = await makeEventStore(repo, {
 
 > **Warning:** increasing `mainQueueConcurrent` > 1 effectively processes events in parallel. While `better-queue` attempts to respect order, high concurrency may affect strict sequential consistency for dependent events if they arrive simultaneously. Use with caution/testing if your event logic depends on strict global ordering.
 
+### `EventStoreOptions` Reference
+
+| property                    | type     | default | description                                                                                                      |
+| --------------------------- | -------- | ------- | ---------------------------------------------------------------------------------------------------------------- |
+| `mainQueueConcurrent`       | `number` | `1`     | Number of events processed in parallel by the main queue. Set > 1 for high throughput at the cost of strict ordering. |
+| `sideEffectQueueConcurrent` | `number` | `1`     | Number of side effects processed in parallel. Safe to increase as side effects are retryable and asynchronous.    |
+| `observerQueueConcurrent`   | `number` | `1`     | Number of observers processed in parallel. Safe to increase if observers are independent.                         |
+
+
 ### Fire-and-Forget Observers
 
 For observers that perform non-critical, time-consuming tasks (like sending analytics or notifications) where you don't want to block the main event processing flow, use `fireAndForget: true`.
