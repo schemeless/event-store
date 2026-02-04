@@ -1,6 +1,6 @@
 {
   "name": "@schemeless/event-store-adapter-mikroorm",
-  "version": "2.7.0",
+  "version": "2.8.0",
   "typescript:main": "src/index.ts",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -22,7 +22,7 @@
     "url": "https://github.com/schemeless/event-store/issues"
   },
   "dependencies": {
-    "@schemeless/event-store-types": "^2.7.0"
+    "@schemeless/event-store-types": "^2.8.0"
   },
   "peerDependencies": {
     "@mikro-orm/core": ">=6.0.0"

@@ -82,6 +82,44 @@ const [created] = await eventStore.receive(userRegisteredFlow)({
 await sideEffectFinishedPromise(eventStore); // Wait until the side-effect queue drains.
 ```
 
+## Performance & Concurrency
+
+You can configure the concurrency level for the internal queues to optimize throughput. By default, all queues run sequentially (`concurrent: 1`) to guarantee strict ordering.
+
+### Configurable Concurrency
+
+Pass `EventStoreOptions` to `makeEventStore` to enable parallel processing:
+
+```ts
+const eventStore = await makeEventStore(repo, {
+  mainQueueConcurrent: 5,       // Process 5 main events in parallel
+  sideEffectQueueConcurrent: 10, // Process 10 side effects in parallel
+  observerQueueConcurrent: 5,    // Process 5 observers in parallel
+})([userRegisteredFlow]);
+```
+
+> **Warning:** increasing `mainQueueConcurrent` > 1 effectively processes events in parallel. While `better-queue` attempts to respect order, high concurrency may affect strict sequential consistency for dependent events if they arrive simultaneously. Use with caution/testing if your event logic depends on strict global ordering.
+
+### Fire-and-Forget Observers
+
+For observers that perform non-critical, time-consuming tasks (like sending analytics or notifications) where you don't want to block the main event processing flow, use `fireAndForget: true`.
+
+```ts
+const analyticsObserver: SuccessEventObserver = {
+  filters: [{ domain: 'user', type: 'registered' }],
+  priority: 1,
+  fireAndForget: true, // Run asynchronously, do not wait
+  apply: async (event) => {
+      await sendAnalytics(event);
+  },
+};
+```
+
+- **Non-blocking**: The main `receive()` call returns immediately after persistence, without waiting for this observer.
+- **Error Isolation**: If this observer throws an error, it is logged but does **not** fail the main event flow.
+
+
+
 The returned object exposes:
 
 - `receive` – enqueues events and persists them once every validation step passes.

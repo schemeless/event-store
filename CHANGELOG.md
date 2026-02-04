@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.8.0] - 2026-02-04
+
+### Added
+
+- **Concurrent Queue Processing**: Added support for configurable concurrency in `mainQueue`, `sideEffectQueue`, and `observerQueue`.
+  - New `EventStoreOptions` interface for `makeEventStore`.
+  - Significant performance improvements for high-volume event processing when enabled.
+- **Fire-and-Forget Observers**: Added `fireAndForget` option to `SuccessEventObserver`.
+  - Allows observers to execute asynchronously without blocking the main event flow.
+  - Failures in fire-and-forget observers are isolated and logged, preventing main flow interruption.
+
 ## [2.7.0] - 2026-02-04
 
 ### Added
