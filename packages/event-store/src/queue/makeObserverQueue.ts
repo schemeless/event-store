@@ -21,9 +21,17 @@ const makeObserverMap = (successEventObservers: SuccessEventObserver[]) => {
   return observerMap;
 };
 
-export const makeObserverQueue = (successEventObservers: SuccessEventObserver<any>[]) => {
+export interface ObserverQueueOptions {
+  concurrent?: number;
+}
+
+export const makeObserverQueue = (
+  successEventObservers: SuccessEventObserver<any>[],
+  options: ObserverQueueOptions = {}
+) => {
+  const { concurrent = 1 } = options;
   const observerQueue = createRxQueue<CreatedEvent<any>, any>('applySuccessEventObservers', {
-    concurrent: 1,
+    concurrent,
   });
 
   const observerMap = makeObserverMap(successEventObservers);
@@ -40,7 +48,19 @@ export const makeObserverQueue = (successEventObservers: SuccessEventObserver<an
         // apply observers
         const orderedObserversToApply = R.sortBy(R.prop('priority'))(observersToApply);
         for (const observerToApply of orderedObserversToApply) {
-          await observerToApply.apply(createdEvent);
+          if (observerToApply.fireAndForget) {
+            // Fire and forget: execute without waiting
+            Promise.resolve()
+              .then(() => observerToApply.apply(createdEvent))
+              .catch((err) => {
+                // We use console.error here because we can't easily import logger from here if it creates a cycle,
+                // but checking imports: logEvent uses logger inside.
+                // Assuming we can log it or just ignore. Ideally log.
+                console.error(`Fire-and-forget observer failed: ${err}`);
+              });
+          } else {
+            await observerToApply.apply(createdEvent);
+          }
         }
         logEvent(createdEvent, '👀', 'Applied observers');
         done();

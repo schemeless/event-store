@@ -32,7 +32,7 @@ export interface CreatedEvent<Payload, META = undefined> extends BaseEvent<Paylo
   readonly created: Date;
 }
 
-export interface StoredEvent<Payload, META = undefined> extends CreatedEvent<Payload, META> {}
+export interface StoredEvent<Payload, META = undefined> extends CreatedEvent<Payload, META> { }
 
 export type Event<Payload, META = undefined> = StoredEvent<Payload, META>;
 
@@ -104,6 +104,13 @@ type EventObserverFilter = EventObserverStaticFilter;
 export interface SuccessEventObserver<Payload = any> {
   filters: EventObserverFilter[];
   priority: number;
+
+  /**
+   * If true, the observer will be executed asynchronously without blocking.
+   * The main flow will not wait for this observer to complete.
+   * @default false
+   */
+  fireAndForget?: boolean;
 
   readonly apply?: (event: CreatedEvent<Payload>) => Promise<void> | void;
 }

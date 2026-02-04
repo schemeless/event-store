@@ -13,14 +13,20 @@ import { makeReceive } from './queue/makeReceive';
 import { makeReplay } from './makeReplay';
 import { makeSideEffectQueue } from './queue/makeSideEffectQueue';
 import { from, merge } from 'rxjs';
-import { EventStore } from './EventStore.types';
+import { EventStore, EventStoreOptions } from './EventStore.types';
 import { makeRevert } from './revert/makeRevert';
 
 export const makeEventStore =
-  (eventStoreRepo: IEventStoreRepo) =>
+  (eventStoreRepo: IEventStoreRepo, options: EventStoreOptions = {}) =>
     async (eventFlows: EventFlow[], successEventObservers: SuccessEventObserver<any>[] = []): Promise<EventStore> => {
-      const mainQueue = makeMainQueue(eventFlows);
-      const sideEffectQueue = makeSideEffectQueue(eventFlows, mainQueue);
+      const {
+        mainQueueConcurrent = 1,
+        sideEffectQueueConcurrent = 1,
+        observerQueueConcurrent = 1,
+      } = options;
+
+      const mainQueue = makeMainQueue(eventFlows, { concurrent: mainQueueConcurrent });
+      const sideEffectQueue = makeSideEffectQueue(eventFlows, mainQueue, { concurrent: sideEffectQueueConcurrent });
 
       await eventStoreRepo.init();
 
@@ -103,7 +109,9 @@ export const makeEventStore =
       return {
         mainQueue,
         sideEffectQueue,
-        receive: makeReceive(mainQueue, successEventObservers),
+        receive: makeReceive(mainQueue, successEventObservers, {
+          observerQueueConcurrent,
+        }),
         replay: makeReplay(eventFlows, successEventObservers, eventStoreRepo),
         eventStoreRepo: eventStoreRepo,
         output$,

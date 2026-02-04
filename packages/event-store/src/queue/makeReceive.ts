@@ -3,9 +3,14 @@ import { makeMainQueue } from './makeMainQueue';
 import { makeObserverQueue } from './makeObserverQueue';
 import { SuccessEventObserver } from '@schemeless/event-store-types';
 
+export interface ReceiveOptions {
+  observerQueueConcurrent?: number;
+}
+
 export const makeReceive = (
   mainQueue: ReturnType<typeof makeMainQueue>,
-  successEventObservers: SuccessEventObserver<any>[] = []
+  successEventObservers: SuccessEventObserver<any>[] = [],
+  options: ReceiveOptions = {}
 ) => <PartialPayload, Payload extends PartialPayload>(eventFlow: EventFlow<PartialPayload, Payload>) => (
   eventInput: BaseEventInput<PartialPayload>
 ): Promise<[CreatedEvent<Payload>, ...Array<CreatedEvent<any>>]> => {
@@ -21,7 +26,9 @@ export const makeReceive = (
         if (err) {
           reject(err.error);
         } else {
-          const observerQueue = makeObserverQueue(successEventObservers);
+          const observerQueue = makeObserverQueue(successEventObservers, {
+            concurrent: options.observerQueueConcurrent ?? 1,
+          });
           observerQueue.processed$.subscribe();
           observerQueue.queueInstance.drained$.subscribe(() => resolve(doneEvents));
           doneEvents.forEach((event) => observerQueue.push(event));

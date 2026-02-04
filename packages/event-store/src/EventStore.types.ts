@@ -21,6 +21,26 @@ export interface EventOutput<Payload = any> {
   event: CreatedEvent<Payload>;
 }
 
+export interface EventStoreOptions {
+  /**
+   * Concurrency for the main event queue.
+   * @default 1 (sequential processing to maintain event ordering)
+   */
+  mainQueueConcurrent?: number;
+
+  /**
+   * Concurrency for the side effect queue.
+   * @default 1
+   */
+  sideEffectQueueConcurrent?: number;
+
+  /**
+   * Concurrency for the observer queue.
+   * @default 1
+   */
+  observerQueueConcurrent?: number;
+}
+
 export interface EventStore {
   mainQueue: ReturnType<typeof makeMainQueue>;
   sideEffectQueue: ReturnType<typeof makeSideEffectQueue>;

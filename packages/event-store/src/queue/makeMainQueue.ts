@@ -9,8 +9,13 @@ import { cleanupAndCancelFailedEvent } from '../operators/cleanupAndCancelFailed
 import { racedQueueFailedOrDrained } from '../operators/racedQueueFailedOrDrained';
 import { makeApplyQueue } from './makeApplyQueue';
 
-export const makeMainQueue = (eventFlows: EventFlow<any>[]) => {
-  const mainQueue = createRxQueue<BaseEvent<any>, any>('main', { concurrent: 1 });
+export interface MainQueueOptions {
+  concurrent?: number;
+}
+
+export const makeMainQueue = (eventFlows: EventFlow<any>[], options: MainQueueOptions = {}) => {
+  const { concurrent = 1 } = options;
+  const mainQueue = createRxQueue<BaseEvent<any>, any>('main', { concurrent });
   const eventFlowMap = registerEventFlowTypes({}, eventFlows);
 
   const processed$ = mainQueue.process$.pipe(

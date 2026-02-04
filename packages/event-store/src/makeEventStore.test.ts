@@ -34,7 +34,7 @@ describe('make eventStore', () => {
           positiveNumber: -1,
         },
       })
-    ).rejects.toThrowError(/Invalid positive number/);
+    ).rejects.toThrow(/Invalid positive number/);
 
     expect(storeGet('eventStore2')).toBeUndefined();
     expect(mockObserverApply.mock.calls.length).toBe(0);
@@ -65,7 +65,7 @@ describe('make eventStore', () => {
           positiveNumber: 1,
         },
       })
-    ).rejects.toThrowError(/Invalid positive number/);
+    ).rejects.toThrow(/Invalid positive number/);
 
     expect(storeGet('eventStore4')).toBe(0);
     expect(mockObserverApply.mock.calls.length).toBe(0);

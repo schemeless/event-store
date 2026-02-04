@@ -7,9 +7,18 @@ import { getEventFlow } from '../operators/getEventFlow';
 import { logger } from '../util/logger';
 import { mainQueueType } from './makeMainQueue';
 
-export const makeSideEffectQueue = (eventFlows: EventFlow[], mainQueue: mainQueueType) => {
+export interface SideEffectQueueOptions {
+  concurrent?: number;
+}
+
+export const makeSideEffectQueue = (
+  eventFlows: EventFlow[],
+  mainQueue: mainQueueType,
+  options: SideEffectQueueOptions = {}
+) => {
+  const { concurrent = 1 } = options;
   const sideEffectQueue = createRxQueue<{ retryCount: number; event: CreatedEvent<any> }, any>('sideEffect', {
-    concurrent: 1,
+    concurrent,
   });
   const eventFlowMap = registerEventFlowTypes({}, eventFlows);
 
