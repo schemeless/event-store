@@ -1,6 +1,14 @@
 # Changelog
 
-## [2.8.0] - 2026-02-04
+## [2.8.1] - 2026-02-05
+
+### Changed
+- **@schemeless/event-store-adapter-dynamodb**: Major reconstruction (v2).
+  - Switched from full table scans to efficient **Time Bucket** iteration for global replay.
+  - Introduced **Conditional Writes** to ensure event uniqueness and concurrency safety.
+  - Redigned schema with new Global Secondary Indexes (`timeBucketIndex`, `causationIndex`).
+  - Added transparent S3 offloading support for large payloads (improved logic).
+- Internal dependency synchronization to ^2.8.1.
 
 ### Added
 
