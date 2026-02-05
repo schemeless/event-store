@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.8.2] - 2026-02-05
+
+### Changed
+- **@schemeless/event-store-adapter-dynamodb**: Migrated from AWS SDK v2 to **AWS SDK v3** (`@aws-sdk/client-dynamodb`, `@aws-sdk/lib-dynamodb`).
+- Internal dependency synchronization to ^2.8.2.
+
 ## [2.8.1] - 2026-02-05
 
 ### Changed
