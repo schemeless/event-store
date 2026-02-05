@@ -1,8 +1,19 @@
 import type { CreatedEvent, IEventStoreRepo } from '@schemeless/event-store-types';
-import type { S3 } from 'aws-sdk';
-import type * as Dynamodb from 'aws-sdk/clients/dynamodb';
-import * as sizeof from 'object-sizeof';
-import { DataMapper } from '@aws/dynamodb-data-mapper';
+import { S3Client, HeadBucketCommand, CreateBucketCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
+import {
+  DynamoDBClient,
+  DescribeTableCommand,
+  CreateTableCommand,
+  DeleteTableCommand,
+} from '@aws-sdk/client-dynamodb';
+import {
+  DynamoDBDocumentClient,
+  PutCommand,
+  GetCommand,
+  QueryCommand,
+} from '@aws-sdk/lib-dynamodb';
+import sizeof from 'object-sizeof';
 import {
   TIME_BUCKET_INDEX,
   CAUSATION_INDEX,
@@ -35,35 +46,82 @@ const defaultOptions = {
 };
 
 export class EventStoreRepo implements IEventStoreRepo {
-  public mapper: DataMapper;
+  public ddbDocClient: DynamoDBDocumentClient;
   public initialized: boolean;
+  public tableName: string;
 
-  constructor(public dynamodbClient: Dynamodb, public s3Client: S3, public options: Options) {
-    this.mapper = new DataMapper({
-      client: this.dynamodbClient as any,
-      tableNamePrefix: this.options.tableNamePrefix,
+  constructor(public dynamodbClient: DynamoDBClient, public s3Client: S3Client, public options: Options) {
+    this.ddbDocClient = DynamoDBDocumentClient.from(this.dynamodbClient, {
+      marshallOptions: { removeUndefinedValues: true },
     });
     this.options = Object.assign({}, defaultOptions, options);
+    this.tableName = `${this.options.tableNamePrefix}schemeless-event-store`;
   }
 
   async init(force = false) {
     if (this.initialized && !force) return;
     if (!this.options.skipDynamoDBTableCreation) {
-      await this.mapper.ensureTableExists(EventStoreEntity, {
-        readCapacityUnits: this.options.eventStoreTableReadCapacityUnits,
-        writeCapacityUnits: this.options.eventStoreTableWriteCapacityUnits,
-        indexOptions: {
-          [TIME_BUCKET_INDEX]: dateIndexGSIOptions,
-          [CAUSATION_INDEX]: dateIndexGSIOptions,
-        },
-      });
+      try {
+        await this.dynamodbClient.send(new DescribeTableCommand({ TableName: this.tableName }));
+      } catch (err) {
+        if (err.name === 'ResourceNotFoundException') {
+          logger.info('creating table ' + this.tableName);
+          await this.dynamodbClient.send(
+            new CreateTableCommand({
+              TableName: this.tableName,
+              AttributeDefinitions: [
+                { AttributeName: 'id', AttributeType: 'S' },
+                { AttributeName: 'timeBucket', AttributeType: 'S' },
+                { AttributeName: 'causationId', AttributeType: 'S' },
+                { AttributeName: 'created', AttributeType: 'S' },
+              ],
+              KeySchema: [
+                { AttributeName: 'id', KeyType: 'HASH' },
+                { AttributeName: 'created', KeyType: 'RANGE' },
+              ],
+              GlobalSecondaryIndexes: [
+                {
+                  IndexName: TIME_BUCKET_INDEX,
+                  KeySchema: [
+                    { AttributeName: 'timeBucket', KeyType: 'HASH' },
+                    { AttributeName: 'created', KeyType: 'RANGE' },
+                  ],
+                  Projection: { ProjectionType: 'KEYS_ONLY' },
+                  ProvisionedThroughput: {
+                    ReadCapacityUnits: this.options.eventStoreTableReadCapacityUnits || 10,
+                    WriteCapacityUnits: this.options.eventStoreTableWriteCapacityUnits || 10,
+                  },
+                },
+                {
+                  IndexName: CAUSATION_INDEX,
+                  KeySchema: [
+                    { AttributeName: 'causationId', KeyType: 'HASH' },
+                    { AttributeName: 'created', KeyType: 'RANGE' },
+                  ],
+                  Projection: { ProjectionType: 'KEYS_ONLY' },
+                  ProvisionedThroughput: {
+                    ReadCapacityUnits: this.options.eventStoreTableReadCapacityUnits || 10,
+                    WriteCapacityUnits: this.options.eventStoreTableWriteCapacityUnits || 10,
+                  },
+                },
+              ],
+              ProvisionedThroughput: {
+                ReadCapacityUnits: this.options.eventStoreTableReadCapacityUnits || 10,
+                WriteCapacityUnits: this.options.eventStoreTableWriteCapacityUnits || 10,
+              },
+            })
+          );
+        } else {
+          throw err;
+        }
+      }
     }
     if (!this.options.skipS3BucketCreation) {
       try {
-        await this.s3Client.headBucket({ Bucket: this.options.s3BucketName }).promise();
+        await this.s3Client.send(new HeadBucketCommand({ Bucket: this.options.s3BucketName }));
       } catch (err) {
-        logger.info('creating bucket' + this.options.s3BucketName);
-        await this.s3Client.createBucket({ Bucket: this.options.s3BucketName }).promise();
+        logger.info('creating bucket ' + this.options.s3BucketName);
+        await this.s3Client.send(new CreateBucketCommand({ Bucket: this.options.s3BucketName }));
       }
     }
     logger.info('initialized');
@@ -72,7 +130,6 @@ export class EventStoreRepo implements IEventStoreRepo {
 
   async getAllEvents(pageSize: number = 100): Promise<AsyncIterableIterator<Array<EventStoreEntity>>> {
     await this.init();
-    // Use the optimized TimeBucket iterator
     const pages = new EventStoreDynamodbIterator(this, pageSize);
     await pages.init();
     return pages;
@@ -82,29 +139,32 @@ export class EventStoreRepo implements IEventStoreRepo {
     return this.options.s3KeyPrefix + eventId + '.json';
   }
 
-  saveS3Object(event: EventStoreEntity) {
-    const data = {
-      Bucket: this.options.s3BucketName,
-      Key: this.createBucketKeyForEvent(event.id),
-      Body: Buffer.from(JSON.stringify(event)),
-      ContentType: 'application/json',
-      ContentEncoding: 'base64',
-      ACL: this.options.s3Acl,
-    };
-    return this.s3Client.upload(data).promise();
+  async saveS3Object(event: EventStoreEntity) {
+    const upload = new Upload({
+      client: this.s3Client,
+      params: {
+        Bucket: this.options.s3BucketName,
+        Key: this.createBucketKeyForEvent(event.id),
+        Body: JSON.stringify(event),
+        ContentType: 'application/json',
+        ACL: this.options.s3Acl as any,
+      },
+    });
+    return upload.done();
   }
 
   createEventEntity = (event: CreatedEvent<any>): EventStoreEntity => {
     const entity = Object.assign(new EventStoreEntity(), event);
-    entity.generateTimeBucket(); // Important: Populate Bucket
+    entity.generateTimeBucket();
     return entity;
   };
 
   async getFullEvent(event: EventStoreEntity): Promise<EventStoreEntity> {
     if (event.s3Reference) {
       const [Bucket, Key] = event.s3Reference.split('::');
-      const result = await this.s3Client.getObject({ Bucket, Key }).promise();
-      return JSON.parse(result.Body.toString());
+      const result = await this.s3Client.send(new GetObjectCommand({ Bucket, Key }));
+      const body = await result.Body?.transformToString();
+      return JSON.parse(body || '{}');
     }
     return event;
   }
@@ -112,40 +172,36 @@ export class EventStoreRepo implements IEventStoreRepo {
   storeEvents = async (events: CreatedEvent<any>[]) => {
     await this.init();
     const allEventEntities = events.map(this.createEventEntity);
-    // @ts-ignore
     const overSizedEvents = allEventEntities.filter((event) => sizeof(event) > SIZE_LIMIT);
 
-    // store all s3 objects
     await Promise.all(overSizedEvents.map((_) => this.saveS3Object(_)));
 
-    // reshape for saving
-    const reshapedEvents = allEventEntities.map((event) =>
-      Object.assign(event, {
-        payload: overSizedEvents.includes(event) ? undefined : event.payload,
-        s3Reference: overSizedEvents.includes(event)
+    const reshapedEvents = allEventEntities.map((event) => {
+      const isOversized = overSizedEvents.includes(event);
+      return Object.assign(event, {
+        payload: isOversized ? undefined : event.payload,
+        s3Reference: isOversized
           ? this.options.s3BucketName + '::' + this.createBucketKeyForEvent(event.id)
           : undefined,
-      })
-    );
+      });
+    });
 
-    // Use Promise.all with Conditional Puts instead of batchPut to ensure idempotency/locking
-    // This effectively prevents overwriting existing events with the same ID
     await Promise.all(
       reshapedEvents.map((event) =>
-        this.mapper.put(event, {
-          condition: {
-            type: 'Function',
-            name: 'attribute_not_exists',
-            subject: 'id',
-          },
-        })
+        this.ddbDocClient.send(
+          new PutCommand({
+            TableName: this.tableName,
+            Item: event.toItem(),
+            ConditionExpression: 'attribute_not_exists(id)',
+          })
+        )
       )
     );
   };
 
   resetStore = async () => {
     try {
-      await this.mapper.deleteTable(EventStoreEntity);
+      await this.dynamodbClient.send(new DeleteTableCommand({ TableName: this.tableName }));
     } catch (e) {
       // ignore
     }
@@ -156,12 +212,16 @@ export class EventStoreRepo implements IEventStoreRepo {
   getEventById = async (id: string): Promise<EventStoreEntity | null> => {
     await this.init();
     try {
-      const event = await this.mapper.get(Object.assign(new EventStoreEntity(), { id }));
+      const response = await this.ddbDocClient.send(
+        new GetCommand({
+          TableName: this.tableName,
+          Key: { id: `EventID#${id}` },
+        })
+      );
+      if (!response.Item) return null;
+      const event = EventStoreEntity.fromItem(response.Item);
       return await this.getFullEvent(event);
     } catch (e) {
-      if (e.name === 'ItemNotFoundException') {
-        return null;
-      }
       throw e;
     }
   };
@@ -170,18 +230,24 @@ export class EventStoreRepo implements IEventStoreRepo {
     await this.init();
     const results: EventStoreEntity[] = [];
 
-    // Use Query on GSI instead of Scan
-    const iterator = this.mapper.query(
-      EventStoreEntity,
-      { causationId }, // KeyCondition
-      { indexName: CAUSATION_INDEX }
+    const response = await this.ddbDocClient.send(
+      new QueryCommand({
+        TableName: this.tableName,
+        IndexName: CAUSATION_INDEX,
+        KeyConditionExpression: 'causationId = :causationId',
+        ExpressionAttributeValues: {
+          ':causationId': causationId,
+        },
+      })
     );
 
-    for await (const item of iterator) {
-      const fullEvent = await this.getFullEvent(item);
-      results.push(fullEvent);
+    if (response.Items) {
+      for (const item of response.Items) {
+        const fullEvent = await this.getFullEvent(EventStoreEntity.fromItem(item));
+        results.push(fullEvent);
+      }
     }
 
-    return results; // Results are already sorted by 'created' (SortKey of GSI)
+    return results;
   };
 }
