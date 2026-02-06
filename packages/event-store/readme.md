@@ -100,6 +100,28 @@ const eventStore = await makeEventStore(repo, {
 
 > **Warning:** increasing `mainQueueConcurrent` > 1 effectively processes events in parallel. While `better-queue` attempts to respect order, high concurrency may affect strict sequential consistency for dependent events if they arrive simultaneously. Use with caution/testing if your event logic depends on strict global ordering.
 
+
+### Key-Based Partitioning (Sharding)
+
+To solve race conditions with global parallelism, we support **Key-Based Partitioning**. This ensures events for the same entity (e.g., `userId`) are processed sequentially, while different entities are processed in parallel.
+
+1.  **Define Shard Key**: Implement `getShardKey` in your `EventFlow`:
+    ```typescript
+    const UserFlow: EventFlow = {
+      // ...
+      getShardKey: (event) => event.payload.userId,
+    };
+    ```
+
+2.  **Enable Concurrency**:
+    ```typescript
+    const store = await makeEventStore(..., {
+      mainQueueConcurrent: 10, // 10 parallel shards
+    });
+    ```
+
+👉 **[Read the Full Migration Guide](MIGRATION.md)** for detailed implementation steps.
+
 ### `EventStoreOptions` Reference
 
 | property                    | type     | default | description                                                                                                      |

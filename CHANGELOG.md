@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.9.0] - 2026-02-07
+
+### Breaking Changes
+
+- **Concurrency Behavior**: When `mainQueueConcurrent > 1`, events are now sharded by key (via `getShardKey` or `identifier`) instead of processing in naive global parallel.
+  - **Before**: Random/Race condition parallel processing.
+  - **After**: Strict sequential processing per key, parallel across keys.
+
+### Added
+
+- **Key-Based Partitioning (Sharding)**: First-class support for sharded event processing.
+  - New `getShardKey` method on `EventFlow`.
+  - Intelligent routing to `mainQueue` and `sideEffectQueue` partitions.
+  - Guarantees strict ordering for events with the same key.
+  - See [MIGRATION.md](packages/event-store/MIGRATION.md) for details.
+
 ## [2.8.2] - 2026-02-05
 
 ### Changed
