@@ -1,26 +1,25 @@
 # @schemeless/event-store-adapter-dynamodb
 
-A production-ready DynamoDB-backed implementation of the `IEventStoreRepo` contract. It pairs the AWS Data Mapper with optional S3 offloading and an efficient time-bucketed iteration strategy.
+A production-ready DynamoDB-backed implementation of the `IEventStoreRepo` contract. It pairs AWS SDK v3 with optional S3 offloading and an efficient time-bucketed iteration strategy.
 
 ## Installation
 
 ```bash
-yarn add @schemeless/event-store-adapter-dynamodb @aws/dynamodb-data-mapper @aws/dynamodb-data-mapper-annotations aws-sdk
+yarn add @schemeless/event-store-adapter-dynamodb @aws-sdk/client-dynamodb @aws-sdk/lib-dynamodb @aws-sdk/client-s3 @aws-sdk/lib-storage
 ```
-
-The package expects `aws-sdk` clients for DynamoDB and S3. You can reuse existing credentials, region, or endpoint overrides when constructing those clients.
 
 ## Usage
 
 ```ts
-import { DynamoDB, S3 } from 'aws-sdk';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { S3Client } from '@aws-sdk/client-s3';
 import { EventStoreRepo as EventStoreDynamoRepo } from '@schemeless/event-store-adapter-dynamodb';
 import { makeEventStore } from '@schemeless/event-store';
 
-const dynamodb = new DynamoDB({ region: 'us-east-1' });
-const s3 = new S3({ region: 'us-east-1' });
+const dynamodbClient = new DynamoDBClient({ region: 'us-east-1' });
+const s3Client = new S3Client({ region: 'us-east-1' });
 
-const repo = new EventStoreDynamoRepo(dynamodb, s3, {
+const repo = new EventStoreDynamoRepo(dynamodbClient, s3Client, {
   tableNamePrefix: 'prod-',
   s3BucketName: 'my-event-archive',
   eventStoreTableReadCapacityUnits: 20,
@@ -44,6 +43,12 @@ When `init` runs, the repository ensures the DynamoDB table and the new Global S
 
 `getAllEvents` returns an async iterator that uses **Time Bucketing** (partitioned by month). Instead of scanning the entire table, it queries specific time buckets, making it safe to replay millions of events without excessive memory consumption or timing out.
 
+The iterator includes:
+- **Automatic retry with exponential backoff** for transient DynamoDB errors
+- **UnprocessedKeys handling** to ensure no data is lost during BatchGet throttling
+- **Parallel S3 fetching** for events with large payloads stored in S3
+
 ## Resetting state
 
 Call `resetStore` to drop and recreate the DynamoDB table. This is handy for integration tests where you need a clean slate.
+

@@ -25,6 +25,7 @@ jest.mock('@aws-sdk/lib-dynamodb', () => ({
   PutCommand: jest.fn(),
   GetCommand: jest.fn(),
   QueryCommand: jest.fn(),
+  BatchGetCommand: jest.fn(),
 }));
 
 jest.mock('@aws-sdk/client-s3', () => ({

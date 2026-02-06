@@ -164,7 +164,9 @@ export class EventStoreRepo implements IEventStoreRepo {
       const [Bucket, Key] = event.s3Reference.split('::');
       const result = await this.s3Client.send(new GetObjectCommand({ Bucket, Key }));
       const body = await result.Body?.transformToString();
-      return JSON.parse(body || '{}');
+      const rawData = JSON.parse(body || '{}');
+      // Ensure the S3 data is properly deserialized through EventStoreEntity.fromItem
+      return EventStoreEntity.fromItem(rawData);
     }
     return event;
   }

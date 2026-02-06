@@ -57,22 +57,44 @@ describe('EventStoreDynamodbIterator', () => {
 
     const repo = makeRepo();
 
-    // Setup send mock for QueryCommand
+    // Setup send mock for QueryCommand and BatchGetCommand
     repo.ddbDocClient.send.mockImplementation((command) => {
-      const { ExpressionAttributeValues } = command.input;
-      const timeBucket = ExpressionAttributeValues[':timeBucket'];
+      // Handle QueryCommand
+      if (command.input.KeyConditionExpression) {
+        const { ExpressionAttributeValues } = command.input;
+        const timeBucket = ExpressionAttributeValues[':timeBucket'];
 
-      if (timeBucket === '2020-01') {
+        if (timeBucket === '2020-01') {
+          return Promise.resolve({
+            Items: [{ id: '1', created: '2020-01-05T00:00:00.000Z' }],
+          });
+        }
+        if (timeBucket === '2020-02') {
+          return Promise.resolve({
+            Items: [{ id: '2', created: '2020-02-10T00:00:00.000Z' }],
+          });
+        }
+        return Promise.resolve({ Items: [] });
+      }
+
+      // Handle BatchGetCommand
+      if (command.input.RequestItems) {
+        const tableName = Object.keys(command.input.RequestItems)[0];
+        const keys = command.input.RequestItems[tableName].Keys;
+        const responses = keys.map((key: any) => ({
+          ...key,
+          loaded: true, // Simulating a hydrated event
+          domain: 'test',
+          type: 'test',
+          payload: {}
+        }));
         return Promise.resolve({
-          Items: [{ id: '1', created: '2020-01-05T00:00:00.000Z' }],
+          Responses: {
+            [tableName]: responses
+          }
         });
       }
-      if (timeBucket === '2020-02') {
-        return Promise.resolve({
-          Items: [{ id: '2', created: '2020-02-10T00:00:00.000Z' }],
-        });
-      }
-      return Promise.resolve({ Items: [] });
+      return Promise.resolve({});
     });
 
     const iterator = new EventStoreDynamodbIterator(repo as any, 10);
@@ -103,6 +125,44 @@ describe('EventStoreDynamodbIterator', () => {
     // Note: In SDK v3 implementation, we yield the whole batch from response.Items
     // If we want exact batching by pageSize, we'd need to handle it in the generator.
     // My new implementation yields each response.Items as a batch.
+
+    // Simple test: 1 Query -> 1 BatchGet
+    // But `send` is a generic mock. We can use mockImplementation to switch on command input 
+    // or just chain mockResolvedValueOnce correctly.
+    // Ideally we reuse the smart mock from earlier, but this test resets mocks or uses a new repo.
+    // makeRepo() creates a new object but send mock is defined inside makeRepo ??
+    // No, makeRepo creates: { ddbDocClient: { send: jest.fn() } ... }
+    // The previous test logic updated `repo.ddbDocClient.send`.
+    // Here we have a new `repo` from `makeRepo()`.
+
+    // Let's implement a smart mock for this repo too, or simpler sequence.
+    repo.ddbDocClient.send.mockImplementation((command) => {
+      if (command.input.KeyConditionExpression) {
+        // Query
+        // We can simulate the paged responses here or simple ones.
+        // This `mockResolvedValue` at 120 was intended for the first part of this test?
+        // Actually lines 106-111 run `for await (const batch of iterator)`.
+        // But wait, the test creates `iterator` at 106, runs loop, then checks results.
+        // THEN it sets up NEW mocks at 127 and creates `iteratorPaged`.
+
+        // So lines 120 is for first part.
+        return Promise.resolve({
+          Items: [{ id: 'a' }, { id: 'b' }, { id: 'c' }],
+        });
+      }
+      if (command.input.RequestItems) {
+        // BatchGet
+        const tableName = Object.keys(command.input.RequestItems)[0];
+        const keys = command.input.RequestItems[tableName].Keys;
+        return Promise.resolve({
+          Responses: {
+            [tableName]: keys.map((k: any) => ({ ...k, loaded: true }))
+          }
+        });
+      }
+      return Promise.resolve({});
+    });
+
     const iterator = new EventStoreDynamodbIterator(repo as any, 2);
 
     const batches = [];
@@ -110,29 +170,40 @@ describe('EventStoreDynamodbIterator', () => {
       batches.push(batch);
     }
 
-    // Since our mock returns all 3 in one query response, it will be 1 batch of 3.
-    // Wait, let's check my iterator implementation.
-    /*
-        if (response.Items && response.Items.length > 0) {
-          const buffer: EventStoreEntity[] = [];
-          for (const item of response.Items) {
-            const fullEvent = await this.repo.getFullEvent(EventStoreEntity.fromItem(item));
-            buffer.push(fullEvent);
-          }
-          yield buffer;
+    // -------------------------------------------------------------------
+    // Now setup for the Paged test.
+    // We need to define behavior that returns items + LastEvaluatedKey, then next batch.
+
+    let callCount = 0;
+    repo.ddbDocClient.send.mockImplementation((command) => {
+      if (command.input.KeyConditionExpression) {
+        // Query
+        if (callCount === 0) {
+          callCount++;
+          return Promise.resolve({
+            Items: [{ id: 'a' }, { id: 'b' }],
+            LastEvaluatedKey: { id: 'b' },
+          });
         }
-    */
-    // Yes, it yields the whole response.Items.
-    // If we want to test pagination with LastEvaluatedKey:
-    repo.ddbDocClient.send
-      .mockResolvedValueOnce({
-        Items: [{ id: 'a' }, { id: 'b' }],
-        LastEvaluatedKey: { id: 'b' },
-      })
-      .mockResolvedValueOnce({
-        Items: [{ id: 'c' }],
-      })
-      .mockResolvedValue({ Items: [] });
+        if (callCount === 1) {
+          callCount++;
+          return Promise.resolve({
+            Items: [{ id: 'c' }],
+          });
+        }
+        return Promise.resolve({ Items: [] });
+      }
+      if (command.input.RequestItems) {
+        // BatchGet
+        const tableName = Object.keys(command.input.RequestItems)[0];
+        const keys = command.input.RequestItems[tableName].Keys;
+        return Promise.resolve({
+          Responses: {
+            [tableName]: keys.map((k: any) => ({ ...k, loaded: true }))
+          }
+        });
+      }
+    });
 
     const iteratorPaged = new EventStoreDynamodbIterator(repo as any, 2);
     const batchesPaged = [];
@@ -143,5 +214,81 @@ describe('EventStoreDynamodbIterator', () => {
     expect(batchesPaged).toHaveLength(2);
     expect(batchesPaged[0]).toHaveLength(2); // a, b
     expect(batchesPaged[1]).toHaveLength(1); // c
+  });
+
+  it('handles missing items in main table gracefully', async () => {
+    mockDate('2020-01-15T00:00:00.000Z');
+    const repo = makeRepo();
+
+    repo.ddbDocClient.send.mockImplementation((command) => {
+      if (command.input.KeyConditionExpression) {
+        return Promise.resolve({
+          Items: [{ id: '1' }, { id: '2' }], // 1 exists, 2 missing
+        });
+      }
+      if (command.input.RequestItems) {
+        const tableName = Object.keys(command.input.RequestItems)[0];
+        // Only return item 1
+        return Promise.resolve({
+          Responses: {
+            [tableName]: [{ id: '1', loaded: true }],
+          },
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    const iterator = new EventStoreDynamodbIterator(repo as any, 10);
+    const results = [];
+    for await (const batch of iterator) {
+      results.push(...batch);
+    }
+
+    expect(results).toHaveLength(1);
+    expect(results[0].id).toBe('1');
+  });
+
+  it('chunks batch requests when hydrating more than 100 items', async () => {
+    mockDate('2020-01-15T00:00:00.000Z');
+    const repo = makeRepo();
+
+    // Create 150 items
+    const manyItems = Array.from({ length: 150 }, (_, i) => ({ id: `${i}`, created: '2020-01-01' }));
+
+    let batchGetCallCount = 0;
+
+    repo.ddbDocClient.send.mockImplementation((command) => {
+      if (command.input.KeyConditionExpression) {
+        return Promise.resolve({
+          Items: manyItems,
+        });
+      }
+      if (command.input.RequestItems) {
+        batchGetCallCount++;
+        const tableName = Object.keys(command.input.RequestItems)[0];
+        const keys = command.input.RequestItems[tableName].Keys;
+
+        // ensure keys length is <= 100
+        if (keys.length > 100) {
+          throw new Error('BatchGet request had more than 100 keys');
+        }
+
+        return Promise.resolve({
+          Responses: {
+            [tableName]: keys.map((k: any) => ({ ...k, loaded: true })),
+          },
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    const iterator = new EventStoreDynamodbIterator(repo as any, 200); // larger page size
+    const results = [];
+    for await (const batch of iterator) {
+      results.push(...batch);
+    }
+
+    expect(results).toHaveLength(150);
+    expect(batchGetCallCount).toBeGreaterThanOrEqual(2); // Should be 2 calls (100 + 50)
   });
 });
