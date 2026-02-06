@@ -50,6 +50,18 @@ export interface EventFlow<PartialPayload = any, Payload extends PartialPayload 
 
   readonly samplePayload?: PartialPayload | Payload;
 
+  /**
+   * Extract the shard key for event routing.
+   * Events with the same shard key will be processed sequentially in the same partition.
+   * Events with different shard keys can be processed in parallel.
+   * 
+   * @param event - The event to extract the shard key from
+   * @returns The shard key string, or undefined to use fallback (identifier)
+   * @example
+   * getShardKey: (event) => event.payload.userId
+   */
+  readonly getShardKey?: (event: BaseEvent<Payload>) => string | undefined;
+
   readonly receive: (eventStore: {
     receive: (
       eventFlow: EventFlow<PartialPayload, Payload>
