@@ -36,6 +36,14 @@ export interface ISnapshotEntity<STATE = any> {
   created: Date;
 }
 
+export interface IEventStoreRepoCapabilities {
+  /**
+   * Supports aggregate reconstruction through eventStore.getAggregate().
+   * Requires getStreamEvents(domain, identifier, fromSequence).
+   */
+  aggregate?: boolean;
+}
+
 export interface IEventStoreRepo<PAYLOAD = any, META = any> {
   init: () => Promise<void>;
   getAllEvents: (
@@ -45,6 +53,11 @@ export interface IEventStoreRepo<PAYLOAD = any, META = any> {
   createEventEntity: (event: CreatedEvent<any>) => IEventStoreEntity<PAYLOAD, META>;
   storeEvents: (events: CreatedEvent<any>[], options?: StoreEventsOptions) => Promise<void>;
   resetStore: () => Promise<void>;
+  /**
+   * Optional explicit capability declaration.
+   * If omitted, runtime infers support from implemented methods for backwards compatibility.
+   */
+  capabilities?: IEventStoreRepoCapabilities;
 
   /**
    * Get events for a specific stream (domain + identifier).

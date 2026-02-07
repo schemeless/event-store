@@ -181,6 +181,26 @@ To use `getAggregate`, your `IEventStoreRepo` adapter must implement:
 1.  **`getStreamEvents(domain, identifier, fromSequence)`** (Required)
 2.  **`getSnapshot` / `saveSnapshot`** (Optional, for performance)
 
+### Capability Detection
+
+`eventStore` now exposes `capabilities.aggregate` so callers can branch safely before invoking `getAggregate`:
+
+```typescript
+if (!eventStore.capabilities.aggregate) {
+  // Fallback to projection/CQRS read model validation
+}
+```
+
+Adapters can also declare support explicitly with `repo.capabilities.aggregate`.
+If omitted, support is inferred from the presence of `repo.getStreamEvents`.
+
+### Adapter Capability Matrix (v3.x)
+
+| Adapter | `capabilities.aggregate` | `getAggregate` Support |
+|--------|---------------------------|------------------------|
+| `@schemeless/event-store-adapter-dynamodb` | `false` (declared) | ❌ No |
+| Other adapters | inferred / adapter-defined | Check adapter docs or `eventStore.capabilities.aggregate` at runtime |
+
 
 ### `EventStoreOptions` Reference
 

@@ -31,6 +31,11 @@ export const makeEventStore =
 
       await eventStoreRepo.init();
 
+      const declaredAggregateCapability = eventStoreRepo.capabilities?.aggregate;
+      const capabilities: EventStore['capabilities'] = {
+        aggregate: declaredAggregateCapability ?? !!eventStoreRepo.getStreamEvents,
+      };
+
       // Build event flow map for revert lookups
       const eventFlowMap: EventFlowMap = {};
       for (const flow of eventFlows) {
@@ -113,8 +118,17 @@ export const makeEventStore =
         reducer: (state: State, event: IEventStoreEntity) => State,
         initialState: State
       ): Promise<AggregateResult<State>> => {
-        if (!eventStoreRepo.getStreamEvents) {
-          throw new Error('Repo does not support getStreamEvents');
+        const getStreamEvents = eventStoreRepo.getStreamEvents;
+        if (!capabilities.aggregate || !getStreamEvents) {
+          const repoName = eventStoreRepo.constructor?.name || 'IEventStoreRepo';
+          const reason =
+            declaredAggregateCapability === false
+              ? `${repoName} declares capabilities.aggregate=false`
+              : `${repoName} does not implement getStreamEvents(domain, identifier, fromSequence)`;
+          throw new Error(
+            `getAggregate is unavailable for this repository. ${reason}. ` +
+              `Use an adapter that implements getStreamEvents, or avoid getAggregate and validate from projections/OCC.`
+          );
         }
 
         let state = initialState;
@@ -132,7 +146,7 @@ export const makeEventStore =
         // Replay events
         // Optimization: If possible, we could pass sequence to getStreamEvents to fetch only necessary events.
         // The implementation plan says use getStreamEvents.
-        const events = await eventStoreRepo.getStreamEvents(domain, identifier, sequence);
+        const events = await getStreamEvents(domain, identifier, sequence);
         for (const event of events) {
           state = reducer(state, event);
           sequence = event.sequence || 0;
@@ -149,6 +163,7 @@ export const makeEventStore =
         }),
         replay: makeReplay(eventFlows, successEventObservers, eventStoreRepo),
         eventStoreRepo: eventStoreRepo,
+        capabilities,
         output$,
         getAggregate,
         canRevert,

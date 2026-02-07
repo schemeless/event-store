@@ -1,5 +1,21 @@
 # Changelog
 
+## [3.0.1] - 2026-02-07
+
+### Added
+
+- **Capability Signaling for Aggregate Replay**:
+  - Added `capabilities` field to `IEventStoreRepo`, including `capabilities.aggregate`.
+  - Added `eventStore.capabilities.aggregate` so applications can detect support before calling `getAggregate`.
+
+### Changed
+
+- **`getAggregate` Error Clarity**:
+  - `makeEventStore` now throws a capability-aware error when aggregate replay is unavailable.
+  - Error message now explains why support is missing and suggests projection/OCC fallback.
+- **@schemeless/event-store-adapter-dynamodb**:
+  - Declares `capabilities.aggregate = false` explicitly to prevent ambiguous runtime expectations.
+
 ## [3.0.0] - 2026-02-07
 
 ### Added

@@ -47,19 +47,27 @@ export interface EventStoreOptions {
   observerQueueConcurrent?: number;
 }
 
+export interface EventStoreCapabilities {
+  /**
+   * Indicates whether getAggregate is available for this repository.
+   */
+  aggregate: boolean;
+}
+
 export interface EventStore {
   mainQueue: ReturnType<typeof makeMainQueue>;
   sideEffectQueue: ReturnType<typeof makeSideEffectQueue>;
   receive: ReturnType<typeof makeReceive>;
   replay: ReturnType<typeof makeReplay>;
   eventStoreRepo: IEventStoreRepo;
+  capabilities: EventStoreCapabilities;
   output$: Observable<EventOutput>;
 
   /**
    * Load aggregate state by replaying events (with optional snapshot optimization).
-   * Requires repo.getStreamEvents to be implemented.
+   * Requires aggregate capability support from the repo.
    *
-   * @throws Error if repo.getStreamEvents is not implemented
+   * @throws Error if aggregate replay is not supported by the adapter
    */
   getAggregate: <State>(
     domain: string,

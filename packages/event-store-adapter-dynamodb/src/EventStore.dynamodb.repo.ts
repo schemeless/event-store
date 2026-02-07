@@ -1,6 +1,7 @@
 import {
   ConcurrencyError,
   CreatedEvent,
+  IEventStoreRepoCapabilities,
   IEventStoreRepo,
   StoreEventsOptions,
 } from '@schemeless/event-store-types';
@@ -62,6 +63,9 @@ export class EventStoreRepo implements IEventStoreRepo {
   public ddbDocClient: DynamoDBDocumentClient;
   public initialized: boolean;
   public tableName: string;
+  public capabilities: IEventStoreRepoCapabilities = {
+    aggregate: false,
+  };
 
   constructor(public dynamodbClient: DynamoDBClient, public s3Client: S3Client, public options: Options) {
     this.ddbDocClient = DynamoDBDocumentClient.from(this.dynamodbClient, {

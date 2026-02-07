@@ -48,7 +48,17 @@ The iterator includes:
 - **UnprocessedKeys handling** to ensure no data is lost during BatchGet throttling
 - **Parallel S3 fetching** for events with large payloads stored in S3
 
+## Capability declaration
+
+This adapter currently declares:
+
+```ts
+repo.capabilities.aggregate === false
+```
+
+So `eventStore.getAggregate(...)` is not supported with this adapter version.
+Use projection/CQRS reads for validation, or implement a stream-query index + `getStreamEvents` in a custom adapter.
+
 ## Resetting state
 
 Call `resetStore` to drop and recreate the DynamoDB table. This is handy for integration tests where you need a clean slate.
-
