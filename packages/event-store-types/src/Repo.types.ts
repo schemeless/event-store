@@ -28,6 +28,14 @@ interface GetAllEventsResult<PAYLOAD, META> {
   hasNextBatch: boolean;
 }
 
+export interface ISnapshotEntity<STATE = any> {
+  domain: string;
+  identifier: string;
+  state: STATE;
+  sequence: number;
+  created: Date;
+}
+
 export interface IEventStoreRepo<PAYLOAD = any, META = any> {
   init: () => Promise<void>;
   getAllEvents: (
@@ -37,6 +45,29 @@ export interface IEventStoreRepo<PAYLOAD = any, META = any> {
   createEventEntity: (event: CreatedEvent<any>) => IEventStoreEntity<PAYLOAD, META>;
   storeEvents: (events: CreatedEvent<any>[], options?: StoreEventsOptions) => Promise<void>;
   resetStore: () => Promise<void>;
+
+  /**
+   * Get events for a specific stream (domain + identifier).
+   * MUST use efficient index-based query (e.g., DynamoDB Query, SQL WHERE).
+   * Required for getAggregate to work.
+   *
+   * @param domain - Event domain
+   * @param identifier - Stream identifier
+   * @param fromSequence - Start from this sequence (exclusive), 0 = from beginning
+   * @returns Events ordered by sequence ascending
+   */
+  getStreamEvents?: (
+    domain: string,
+    identifier: string,
+    fromSequence?: number
+  ) => Promise<IEventStoreEntity<PAYLOAD, META>[]>;
+
+  // Snapshot support (optional)
+  getSnapshot?: <STATE>(
+    domain: string,
+    identifier: string
+  ) => Promise<ISnapshotEntity<STATE> | null>;
+  saveSnapshot?: <STATE>(snapshot: ISnapshotEntity<STATE>) => Promise<void>;
 
   /**
    * Get the current sequence number for a stream.

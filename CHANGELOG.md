@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.0.0] - 2026-02-07
+
+### Added
+
+- **Snapshot Support**: Introduced core interfaces and logic for aggregate snapshots.
+  - New `getAggregate` helper in `EventStore` to automatically load state from snapshots + incremental event replay.
+  - New `ISnapshotEntity` interface and `getStreamEvents` / `getSnapshot` / `saveSnapshot` methods in `IEventStoreRepo`.
+  - Significant performance boost for high-volume streams (OCC validation) when adapters implement these methods.
+
 ## [2.11.0] - 2026-02-07
 
 ### Fixed

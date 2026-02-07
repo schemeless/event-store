@@ -122,6 +122,40 @@ To solve race conditions with global parallelism, we support **Key-Based Partiti
 
 👉 **[Read the Full Migration Guide](MIGRATION.md)** for detailed implementation steps.
 
+## Snapshot Support (Performance)
+
+For aggregates with thousands of events, replaying from the beginning (Event Sourcing) can be slow. Snapshotting solves this by saving the calculated state at a specific point in time.
+
+### Using `getAggregate`
+
+The framework provides a `getAggregate` helper that automatically:
+1.  Tries to load a snapshot.
+2.  Fetches **only** the events that happened after the snapshot.
+3.  Reduces them to get the final state.
+
+```typescript
+const { state, sequence } = await eventStore.getAggregate(
+  'user',           // domain
+  '123',            // identifier
+  userReducer,      // your reducer function
+  { balance: 0 }    // initial state
+);
+```
+
+### Adapter Requirements
+
+To enable this feature, your `IEventStoreRepo` adapter must implement:
+
+1.  **`getStreamEvents(domain, identifier, fromSequence)`**:
+    - **MUST** use an efficient index (e.g., GSI in DynamoDB, composite index in SQL).
+    - **Do NOT** use full table scans.
+2.  **`getSnapshot(domain, identifier)`** (Optional but recommended):
+    - Returns the latest snapshot.
+3.  **`saveSnapshot`** (Optional):
+    - Persists a new snapshot.
+
+> **Note:** Even without snapshot support (`getSnapshot` returns null), `getAggregate` is still useful if your adapter implements `getStreamEvents`, as it provides a standard way to reconstruct state.
+
 ### `EventStoreOptions` Reference
 
 | property                    | type     | default | description                                                                                                      |

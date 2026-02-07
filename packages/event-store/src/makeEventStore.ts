@@ -5,6 +5,7 @@ import {
   EventFlowMap,
   EventOutputState,
   EventTaskAndError,
+  IEventStoreEntity,
   IEventStoreRepo,
   SuccessEventObserver,
 } from '@schemeless/event-store-types';
@@ -13,7 +14,7 @@ import { makeReceive } from './queue/makeReceive';
 import { makeReplay } from './makeReplay';
 import { makeSideEffectQueue } from './queue/makeSideEffectQueue';
 import { from, merge } from 'rxjs';
-import { EventStore, EventStoreOptions } from './EventStore.types';
+import { AggregateResult, EventStore, EventStoreOptions } from './EventStore.types';
 import { makeRevert } from './revert/makeRevert';
 
 export const makeEventStore =
@@ -106,6 +107,40 @@ export const makeEventStore =
         await Promise.race([shutdownPromise, timeoutPromise]);
       };
 
+      const getAggregate: EventStore['getAggregate'] = async <State>(
+        domain: string,
+        identifier: string,
+        reducer: (state: State, event: IEventStoreEntity) => State,
+        initialState: State
+      ): Promise<AggregateResult<State>> => {
+        if (!eventStoreRepo.getStreamEvents) {
+          throw new Error('Repo does not support getStreamEvents');
+        }
+
+        let state = initialState;
+        let sequence = 0;
+
+        // Try snapshot
+        if (eventStoreRepo.getSnapshot) {
+          const snapshot = await eventStoreRepo.getSnapshot<State>(domain, identifier);
+          if (snapshot) {
+            state = snapshot.state;
+            sequence = snapshot.sequence;
+          }
+        }
+
+        // Replay events
+        // Optimization: If possible, we could pass sequence to getStreamEvents to fetch only necessary events.
+        // The implementation plan says use getStreamEvents.
+        const events = await eventStoreRepo.getStreamEvents(domain, identifier, sequence);
+        for (const event of events) {
+          state = reducer(state, event);
+          sequence = event.sequence || 0;
+        }
+
+        return { state, sequence };
+      };
+
       return {
         mainQueue,
         sideEffectQueue,
@@ -115,6 +150,7 @@ export const makeEventStore =
         replay: makeReplay(eventFlows, successEventObservers, eventStoreRepo),
         eventStoreRepo: eventStoreRepo,
         output$,
+        getAggregate,
         canRevert,
         previewRevert,
         revert,

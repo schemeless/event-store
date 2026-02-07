@@ -4,6 +4,7 @@ import type {
   CreatedEvent,
   EventObserverState,
   EventOutputState,
+  IEventStoreEntity,
   IEventStoreRepo,
   PreviewRevertResult,
   RevertResult,
@@ -19,6 +20,11 @@ export interface EventOutput<Payload = any> {
   state: SideEffectsState | EventOutputState | EventObserverState;
   error?: Error;
   event: CreatedEvent<Payload>;
+}
+
+export interface AggregateResult<State> {
+  state: State;
+  sequence: number;
 }
 
 export interface EventStoreOptions {
@@ -48,6 +54,19 @@ export interface EventStore {
   replay: ReturnType<typeof makeReplay>;
   eventStoreRepo: IEventStoreRepo;
   output$: Observable<EventOutput>;
+
+  /**
+   * Load aggregate state by replaying events (with optional snapshot optimization).
+   * Requires repo.getStreamEvents to be implemented.
+   *
+   * @throws Error if repo.getStreamEvents is not implemented
+   */
+  getAggregate: <State>(
+    domain: string,
+    identifier: string,
+    reducer: (state: State, event: IEventStoreEntity) => State,
+    initialState: State
+  ) => Promise<AggregateResult<State>>;
 
   /**
    * Checks if an event and all its descendants can be reverted.
