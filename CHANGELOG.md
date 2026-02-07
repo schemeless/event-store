@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.10.0] - 2026-02-07
+## [2.11.0] - 2026-02-07
 
 ### Fixed
 
@@ -39,6 +39,12 @@
   - Intelligent routing to `mainQueue` and `sideEffectQueue` partitions.
   - Guarantees strict ordering for events with the same key.
   - See [MIGRATION.md](packages/event-store/MIGRATION.md) for details.
+
+- **Schema Versioning & Upcasting**: Built-in support for evolving event schemas.
+  - New `EventMeta` type with `schemaVersion`.
+  - New `upcast` hook in `EventFlow` to migrate older events on-the-fly.
+  - Automatic version stamping for new events.
+  - See [SCHEMA_VERSIONING.md](packages/event-store/SCHEMA_VERSIONING.md) for a complete guide.
 
 ## [2.8.2] - 2026-02-05
 
