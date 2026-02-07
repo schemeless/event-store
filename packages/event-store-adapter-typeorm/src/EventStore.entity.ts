@@ -1,7 +1,8 @@
 import type { IEventStoreEntity } from '@schemeless/event-store-types';
-import { Column, Entity, PrimaryColumn } from 'typeorm';
+import { Column, Entity, Index, PrimaryColumn } from 'typeorm';
 
 @Entity({ name: 'event_store_entity' })
+@Index('IDX_stream_sequence', ['domain', 'identifier', 'sequence'], { unique: true })
 export class EventStoreEntity implements IEventStoreEntity<any, any | undefined> {
   @PrimaryColumn('varchar', { length: 36 })
   id: string; //uuid
@@ -26,6 +27,9 @@ export class EventStoreEntity implements IEventStoreEntity<any, any | undefined>
 
   @Column('varchar', { nullable: true, length: 36 })
   causationId?: string; //uuid
+
+  @Column('int', { nullable: true })
+  sequence?: number;
 
   @Column({ type: 'timestamp', precision: 6 })
   readonly created: Date;

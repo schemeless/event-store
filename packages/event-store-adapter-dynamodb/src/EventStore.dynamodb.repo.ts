@@ -1,24 +1,29 @@
-import type { CreatedEvent, IEventStoreRepo } from '@schemeless/event-store-types';
-import { S3Client, HeadBucketCommand, CreateBucketCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import {
+  ConcurrencyError,
+  CreatedEvent,
+  IEventStoreRepo,
+  StoreEventsOptions,
+} from '@schemeless/event-store-types';
+import { CreateBucketCommand, GetObjectCommand, HeadBucketCommand, S3Client } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import {
-  DynamoDBClient,
-  DescribeTableCommand,
   CreateTableCommand,
   DeleteTableCommand,
+  DescribeTableCommand,
+  DynamoDBClient,
 } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
-  PutCommand,
   GetCommand,
+  PutCommand,
   QueryCommand,
+  TransactWriteCommand,
 } from '@aws-sdk/lib-dynamodb';
 import sizeof from 'object-sizeof';
 import {
-  TIME_BUCKET_INDEX,
   CAUSATION_INDEX,
-  dateIndexGSIOptions,
   EventStoreEntity,
+  TIME_BUCKET_INDEX,
 } from './EventStore.dynamodb.entity';
 import { logger } from './utils/logger';
 import { EventStoreDynamodbIterator } from './EventStore.dynamodb.iterator';
@@ -43,6 +48,14 @@ const defaultOptions = {
   s3KeyPrefix: 'events/',
   eventStoreTableReadCapacityUnits: 10,
   eventStoreTableWriteCapacityUnits: 10,
+};
+
+const groupBy = <T>(array: T[], keyGetter: (item: T) => string): Record<string, T[]> => {
+  return array.reduce((result, item) => {
+    const key = keyGetter(item);
+    (result[key] = result[key] || []).push(item);
+    return result;
+  }, {} as Record<string, T[]>);
 };
 
 export class EventStoreRepo implements IEventStoreRepo {
@@ -171,7 +184,97 @@ export class EventStoreRepo implements IEventStoreRepo {
     return event;
   }
 
-  storeEvents = async (events: CreatedEvent<any>[]) => {
+  getStreamSequence = async (domain: string, identifier: string): Promise<number> => {
+    await this.init();
+    const headItemId = `HEAD::${domain}::${identifier ?? ''}`;
+    const result = await this.ddbDocClient.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: { id: `EventID#${headItemId}`, created: 'HEAD' },
+      })
+    );
+    return result.Item?.version ?? 0;
+  };
+
+  /**
+   * Internal method to store already-processed EventStoreEntity items with chunking.
+   * This avoids duplicate S3 offload and entity creation in recursive batching.
+   */
+  private storeProcessedEvents = async (
+    streamKey: string,
+    streamEvents: EventStoreEntity[],
+    options?: StoreEventsOptions
+  ) => {
+    const headItemId = `HEAD::${streamKey}`;
+    let currentExpectedSequence = options?.expectedSequence;
+
+    if (currentExpectedSequence === undefined) {
+      const [domain, identifier] = streamKey.split('::');
+      currentExpectedSequence = await this.getStreamSequence(domain, identifier === '' ? undefined : identifier);
+    }
+
+    // Chunking if > 25 (allowing margin for HEAD item)
+    // DynamoDB Limit is 100. We use 25 as a safe limit.
+    const MAX_ITEMS_PER_TX = 25;
+
+    if (streamEvents.length > MAX_ITEMS_PER_TX) {
+      // Recursive chunking
+      const chunkSize = MAX_ITEMS_PER_TX;
+      for (let i = 0; i < streamEvents.length; i += chunkSize) {
+        const chunk = streamEvents.slice(i, i + chunkSize);
+        const chunkSequence = currentExpectedSequence + i;
+        await this.storeProcessedEvents(streamKey, chunk, { expectedSequence: chunkSequence });
+      }
+      return; // All chunks processed recursively
+    }
+
+    const currentVersion = currentExpectedSequence!;
+    const newVersion = currentVersion + streamEvents.length;
+
+    const transactItems: any[] = [
+      // 1. Update HEAD item with version check
+      {
+        Update: {
+          TableName: this.tableName,
+          Key: { id: `EventID#${headItemId}`, created: 'HEAD' },
+          UpdateExpression: 'SET version = :newVersion',
+          ConditionExpression:
+            options?.expectedSequence !== undefined
+              ? 'version = :expected'
+              : 'attribute_not_exists(version) OR version = :expected',
+          ExpressionAttributeValues: {
+            ':newVersion': newVersion,
+            ':expected': currentVersion,
+          },
+        },
+      },
+      // 2. Put each event with sequence
+      ...streamEvents.map((event, idx) => {
+        event.sequence = currentVersion + idx + 1;
+        return {
+          Put: {
+            TableName: this.tableName,
+            Item: event.toItem(),
+            ConditionExpression: 'attribute_not_exists(id)',
+          },
+        };
+      }),
+    ];
+
+    try {
+      await this.ddbDocClient.send(new TransactWriteCommand({ TransactItems: transactItems }));
+    } catch (err) {
+      if (err.name === 'TransactionCanceledException') {
+        // Check if it's a version mismatch
+        const [domain, identifier] = streamKey.split('::');
+        const actualVersion = await this.getStreamSequence(domain, identifier === '' ? undefined : identifier);
+        throw new ConcurrencyError(streamKey, options?.expectedSequence ?? currentVersion, actualVersion);
+      }
+      throw err;
+    }
+  };
+
+  storeEvents = async (events: CreatedEvent<any>[], options?: StoreEventsOptions) => {
     await this.init();
     const allEventEntities = events.map(this.createEventEntity);
     const overSizedEvents = allEventEntities.filter((event) => sizeof(event) > SIZE_LIMIT);
@@ -188,17 +291,11 @@ export class EventStoreRepo implements IEventStoreRepo {
       });
     });
 
-    await Promise.all(
-      reshapedEvents.map((event) =>
-        this.ddbDocClient.send(
-          new PutCommand({
-            TableName: this.tableName,
-            Item: event.toItem(),
-            ConditionExpression: 'attribute_not_exists(id)',
-          })
-        )
-      )
-    );
+    const streamGroups = groupBy(reshapedEvents, (e) => `${e.domain}::${e.identifier ?? ''}`);
+
+    for (const [streamKey, streamEvents] of Object.entries(streamGroups)) {
+      await this.storeProcessedEvents(streamKey, streamEvents, options);
+    }
   };
 
   resetStore = async () => {

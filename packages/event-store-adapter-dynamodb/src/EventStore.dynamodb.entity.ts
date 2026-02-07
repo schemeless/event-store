@@ -27,6 +27,7 @@ export class EventStoreEntity implements IEventStoreEntity<any, any> {
   identifier?: string;
   correlationId?: string;
   causationId?: string;
+  sequence?: number;
   timeBucket: string;
   created: Date;
 

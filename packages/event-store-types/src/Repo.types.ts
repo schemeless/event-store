@@ -9,7 +9,17 @@ export interface IEventStoreEntity<PAYLOAD = any, META = any> {
   identifier?: string;
   correlationId?: string;
   causationId?: string;
+  sequence?: number; // Per-stream sequence number
   readonly created: Date;
+}
+
+export interface StoreEventsOptions {
+  /**
+   * Expected sequence number for the stream (domain + identifier).
+   * If provided, the store will verify the current sequence matches
+   * before writing. Throws ConcurrencyError on mismatch.
+   */
+  expectedSequence?: number;
 }
 
 interface GetAllEventsResult<PAYLOAD, META> {
@@ -25,8 +35,14 @@ export interface IEventStoreRepo<PAYLOAD = any, META = any> {
     startFromId?: string
   ) => Promise<AsyncIterableIterator<Array<IEventStoreEntity<PAYLOAD, META>>>>;
   createEventEntity: (event: CreatedEvent<any>) => IEventStoreEntity<PAYLOAD, META>;
-  storeEvents: (events: CreatedEvent<any>[]) => Promise<void>;
+  storeEvents: (events: CreatedEvent<any>[], options?: StoreEventsOptions) => Promise<void>;
   resetStore: () => Promise<void>;
+
+  /**
+   * Get the current sequence number for a stream.
+   * Returns 0 if no events exist for this stream.
+   */
+  getStreamSequence?: (domain: string, identifier: string) => Promise<number>;
 
   /**
    * Retrieves a single event by its ID.

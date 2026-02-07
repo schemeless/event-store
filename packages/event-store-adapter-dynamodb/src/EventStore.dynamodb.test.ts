@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-
+import { ConcurrencyError, CreatedEvent } from '@schemeless/event-store-types';
 import { EventStoreRepo } from './EventStore.dynamodb.repo';
 import { EventStoreEntity } from './EventStore.dynamodb.entity';
 
@@ -22,11 +22,23 @@ jest.mock('@aws-sdk/lib-dynamodb', () => ({
       send: sendMock,
     })),
   },
-  PutCommand: jest.fn(),
-  GetCommand: jest.fn(),
-  QueryCommand: jest.fn(),
-  BatchGetCommand: jest.fn(),
+  PutCommand: jest.fn().mockImplementation(function (input) {
+    this.input = input;
+  }),
+  GetCommand: jest.fn().mockImplementation(function (input) {
+    this.input = input;
+  }),
+  QueryCommand: jest.fn().mockImplementation(function (input) {
+    this.input = input;
+  }),
+  BatchGetCommand: jest.fn().mockImplementation(function (input) {
+    this.input = input;
+  }),
+  TransactWriteCommand: jest.fn().mockImplementation(function (input) {
+    this.input = input;
+  }),
 }));
+
 
 jest.mock('@aws-sdk/client-s3', () => ({
   S3Client: jest.fn().mockImplementation(() => ({
@@ -170,5 +182,71 @@ describe('EventStoreRepo', () => {
     await repo.resetStore();
 
     expect(sendMock).toHaveBeenCalled();
+  });
+
+  describe('OCC - Optimistic Concurrency Control', () => {
+    it('should assign sequence numbers directly from HEAD item', async () => {
+      const ddb = { send: sendMock };
+      const s3 = { send: sendMock };
+      const repo = new EventStoreRepo(ddb as any, s3 as any, {
+        tableNamePrefix: 'prefix',
+        s3BucketName: 'bucket',
+        skipDynamoDBTableCreation: true,
+        skipS3BucketCreation: true,
+      });
+
+      // 1. Mock getStreamSequence response (GetCommand)
+      sendMock.mockResolvedValueOnce({ Item: { version: 5 } });
+      // 2. Mock TransactWriteCommand success
+      sendMock.mockResolvedValueOnce({});
+
+      const events: CreatedEvent<any>[] = [
+        { id: '1', domain: 'test', type: 'A', payload: {}, created: new Date(), identifier: 'user-1' },
+        { id: '2', domain: 'test', type: 'B', payload: {}, created: new Date(), identifier: 'user-1' }
+      ];
+
+      await repo.storeEvents(events);
+
+      // Verify GetCommand was called for HEAD
+      expect(sendMock).toHaveBeenNthCalledWith(1, expect.objectContaining({
+        input: expect.objectContaining({
+          Key: { id: 'EventID#HEAD::test::user-1', created: 'HEAD' }
+        })
+      }));
+
+      const transactCall = sendMock.mock.calls[1][0];
+      const items = transactCall.input.TransactItems;
+      expect(items).toHaveLength(3);
+      expect(items[0].Update.Key).toEqual({ id: 'EventID#HEAD::test::user-1', created: 'HEAD' });
+      expect(items[0].Update.ExpressionAttributeValues[':newVersion']).toBe(7);
+      expect(items[1].Put.Item.sequence).toBe(6);
+      expect(items[2].Put.Item.sequence).toBe(7);
+    });
+
+    it('should throw ConcurrencyError when TransactionCanceledException occurs', async () => {
+      const ddb = { send: sendMock };
+      const s3 = { send: sendMock };
+      const repo = new EventStoreRepo(ddb as any, s3 as any, {
+        tableNamePrefix: 'prefix',
+        s3BucketName: 'bucket',
+        skipDynamoDBTableCreation: true,
+        skipS3BucketCreation: true,
+      });
+
+      // 1. Mock TransactWriteCommand failure
+      const error = new Error('Transaction canceled');
+      error.name = 'TransactionCanceledException';
+      sendMock.mockRejectedValueOnce(error);
+
+      // 2. Mock getStreamSequence for error message (GetCommand)
+      sendMock.mockResolvedValueOnce({ Item: { version: 10 } });
+
+      const events: CreatedEvent<any>[] = [
+        { id: '1', domain: 'test', type: 'A', payload: {}, created: new Date(), identifier: 'user-1' }
+      ];
+
+      await expect(repo.storeEvents(events, { expectedSequence: 5 }))
+        .rejects.toThrow(ConcurrencyError);
+    });
   });
 });
