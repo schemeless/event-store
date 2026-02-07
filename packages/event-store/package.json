@@ -1,6 +1,6 @@
 {
   "name": "@schemeless/event-store",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "typescript:main": "src/index.ts",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -21,7 +21,7 @@
     "url": "https://github.com/schemeless/event-store/issues"
   },
   "dependencies": {
-    "@schemeless/event-store-types": "^3.0.0",
+    "@schemeless/event-store-types": "^3.0.1",
     "better-queue": "^3.8.10",
     "debug": "^4.2.0",
     "ramda": "^0.27.1",
