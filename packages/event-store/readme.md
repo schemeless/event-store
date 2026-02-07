@@ -124,14 +124,38 @@ To solve race conditions with global parallelism, we support **Key-Based Partiti
 
 ## Snapshot Support (Performance)
 
-For aggregates with thousands of events, replaying from the beginning (Event Sourcing) can be slow. Snapshotting solves this by saving the calculated state at a specific point in time.
+### When Do You NEED This?
+
+| Your Use Case | Solution | Need `getAggregate`? |
+|---------------|----------|----------------------|
+| Prevent concurrent writes to same stream | `expectedSequence` (OCC) | ❌ No |
+| Update projections/read models | `apply` hook (incremental) | ❌ No |
+| Validate based on **current aggregate state** (e.g., "balance >= amount") | `getAggregate` | ✅ Yes |
+
+**OCC (Optimistic Concurrency Control) is O(1)** – it only checks a version number, NOT by replaying events. If your validation logic only needs the event payload itself, you don't need snapshots.
+
+**Snapshots are for reconstructing aggregate state** – When your `validate` or `preApply` hook needs the *current state* of an aggregate (calculated from all past events), `getAggregate` helps. Snapshots optimize this by caching intermediate state.
+
+### Example: When You Need `getAggregate`
+
+```typescript
+// In your EventFlow's validate hook:
+validate: async (event) => {
+  // You need the current account balance to validate
+  const { state } = await eventStore.getAggregate(
+    'account', 
+    event.payload.accountId, 
+    accountReducer, 
+    { balance: 0 }
+  );
+  
+  if (state.balance < event.payload.amount) {
+    throw new Error('Insufficient funds');
+  }
+}
+```
 
 ### Using `getAggregate`
-
-The framework provides a `getAggregate` helper that automatically:
-1.  Tries to load a snapshot.
-2.  Fetches **only** the events that happened after the snapshot.
-3.  Reduces them to get the final state.
 
 ```typescript
 const { state, sequence } = await eventStore.getAggregate(
@@ -142,19 +166,21 @@ const { state, sequence } = await eventStore.getAggregate(
 );
 ```
 
+The helper automatically:
+1.  Tries to load a snapshot (if adapter supports it).
+2.  Fetches **only** events after the snapshot.
+3.  Reduces them to get the final state.
+
 ### Adapter Requirements
 
-To enable this feature, your `IEventStoreRepo` adapter must implement:
+> [!WARNING]
+> As of v3.0.0, **most adapters do NOT implement these methods yet**. Check your adapter's documentation.
 
-1.  **`getStreamEvents(domain, identifier, fromSequence)`**:
-    - **MUST** use an efficient index (e.g., GSI in DynamoDB, composite index in SQL).
-    - **Do NOT** use full table scans.
-2.  **`getSnapshot(domain, identifier)`** (Optional but recommended):
-    - Returns the latest snapshot.
-3.  **`saveSnapshot`** (Optional):
-    - Persists a new snapshot.
+To use `getAggregate`, your `IEventStoreRepo` adapter must implement:
 
-> **Note:** Even without snapshot support (`getSnapshot` returns null), `getAggregate` is still useful if your adapter implements `getStreamEvents`, as it provides a standard way to reconstruct state.
+1.  **`getStreamEvents(domain, identifier, fromSequence)`** (Required)
+2.  **`getSnapshot` / `saveSnapshot`** (Optional, for performance)
+
 
 ### `EventStoreOptions` Reference
 
