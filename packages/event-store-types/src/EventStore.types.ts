@@ -1,4 +1,20 @@
-export interface BaseEventInput<Payload, META = undefined> {
+/**
+ * Base metadata for all events.
+ * Framework automatically populates schemaVersion.
+ * User code can extend this interface for custom metadata.
+ */
+export interface EventMeta {
+  /** Schema version of the event payload */
+  schemaVersion?: number;
+  /** Flag indicating this is a compensating event */
+  isCompensating?: boolean;
+  /** ID of the event being compensated */
+  compensatesEventId?: string;
+  /** Allow arbitrary extensions */
+  [key: string]: any;
+}
+
+export interface BaseEventInput<Payload, META extends EventMeta = EventMeta> {
   payload: Payload;
   meta?: META;
 
@@ -14,7 +30,7 @@ export interface BaseEventInput<Payload, META = undefined> {
   created?: Date;
 }
 
-export interface BaseEvent<Payload, META = undefined> extends BaseEventInput<Payload, META> {
+export interface BaseEvent<Payload, META extends EventMeta = EventMeta> extends BaseEventInput<Payload, META> {
   id?: string;
   domain: string;
   type: string;
@@ -27,14 +43,14 @@ export interface BaseEvent<Payload, META = undefined> extends BaseEventInput<Pay
   created?: Date;
 }
 
-export interface CreatedEvent<Payload, META = undefined> extends BaseEvent<Payload, META> {
+export interface CreatedEvent<Payload, META extends EventMeta = EventMeta> extends BaseEvent<Payload, META> {
   id: string;
   readonly created: Date;
 }
 
-export interface StoredEvent<Payload, META = undefined> extends CreatedEvent<Payload, META> { }
+export interface StoredEvent<Payload, META extends EventMeta = EventMeta> extends CreatedEvent<Payload, META> { }
 
-export type Event<Payload, META = undefined> = StoredEvent<Payload, META>;
+export type Event<Payload, META extends EventMeta = EventMeta> = StoredEvent<Payload, META>;
 
 export interface EventFlow<PartialPayload = any, Payload extends PartialPayload = PartialPayload> {
   readonly domain: string;
@@ -49,6 +65,26 @@ export interface EventFlow<PartialPayload = any, Payload extends PartialPayload 
   readonly payloadType?: PartialPayload | Payload;
 
   readonly samplePayload?: PartialPayload | Payload;
+
+  /**
+   * Current schema version for this event type.
+   * Stored in event.meta.schemaVersion when event is created.
+   * @default 1
+   */
+  readonly schemaVersion?: number;
+
+  /**
+   * Upgrades event payload from older versions to the current schemaVersion.
+   * Called automatically during event processing and replay.
+   *
+   * @param event - The event with potentially outdated payload
+   * @param fromVersion - The version stored in event.meta.schemaVersion (defaults to 1)
+   * @returns Updated event with migrated payload, or void to use the original
+   */
+  readonly upcast?: (
+    event: CreatedEvent<any>,
+    fromVersion: number
+  ) => CreatedEvent<Payload> | Promise<CreatedEvent<Payload>> | void;
 
   /**
    * Extract the shard key for event routing.

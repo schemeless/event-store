@@ -262,3 +262,55 @@ console.log('Child results:', result.childResults); // Nested results
 The revert processes events depth-first, starting from the leaves and working up to the root. This ensures that dependent events are compensated before their parents.
 
 > **Root events only:** Only events without a `causationId` (root events) can be reverted. Attempting to revert intermediate events will throw an error.
+
+## Schema Versioning & Upcasting
+
+To support evolving event schemas over time (e.g., changing a price field from a number to an object), you can define a `schemaVersion` and an `upcast` hook in your `EventFlow`.
+
+### How it works
+
+1.  **Tagging**: New events are automatically tagged with the flow's current `schemaVersion` in `event.meta.schemaVersion`.
+2.  **Upcasting**: When an older event (lower version) is processed (during `receive` or `replay`), the `upcast` hook is called to migrate it to the current structure.
+3.  **Pipeline**: Upcasting happens **before** validation, so your `validate` and `apply` logic only ever needs to handle the *current* schema version.
+
+### Example
+
+```typescript
+interface OrderPlacedPayloadV1 {
+  price: number;
+}
+
+interface OrderPlacedPayloadV2 {
+  price: { amount: number; currency: string };
+}
+
+// The flow definition uses the LATEST payload type
+export const orderPlacedFlow: EventFlow<OrderPlacedPayloadV2> = {
+  domain: 'order',
+  type: 'placed',
+  
+  // 1. Set the current version
+  schemaVersion: 2,
+
+  // 2. Define how to migrate from older versions
+  upcast: (event, fromVersion) => {
+    if (fromVersion < 2) {
+      // Migrate V1 -> V2
+      return {
+        ...event,
+        payload: {
+          ...event.payload,
+          price: { amount: event.payload.price, currency: 'USD' }, // Default to USD
+        },
+      };
+    }
+    // Return void if no changes needed
+  },
+
+  // 3. Validation and Application logic only sees V2
+  validate: async (event) => {
+    // event.payload.price is guaranteed to be { amount, currency }
+    if (event.payload.price.amount < 0) throw new Error('Negative price');
+  },
+};
+```

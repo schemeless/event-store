@@ -12,6 +12,19 @@ export const makeCreateConsequentEventInputs = (eventFlowMap: EventFlowMap) => a
     : [];
   if (consequentEvents.length) {
     logEvent(event, '🏭', 'subEvents', consequentEvents.map(R.prop('type')));
+    // Inject schemaVersion into consequent events
+    consequentEvents.forEach((consequentEvent) => {
+      try {
+        const flow = getEventFlow(eventFlowMap)(consequentEvent);
+        consequentEvent.meta = {
+          ...(consequentEvent.meta || {}),
+          schemaVersion: flow.schemaVersion || 1,
+        };
+      } catch (e) {
+        // If flow not found, default to version 1 or let it fail later
+        // logging might be good but let's keep it simple
+      }
+    });
   } else {
     logEvent(event, '👌️', 'noSub');
   }

@@ -17,7 +17,11 @@ export const makeReceive = (
   const event = Object.assign({}, eventInput, {
     domain: eventFlow.domain,
     type: eventFlow.type,
-    created: eventInput.created || undefined
+    created: eventInput.created || undefined,
+    meta: {
+      ...(eventInput.meta || {}),
+      schemaVersion: eventFlow.schemaVersion || 1,
+    },
   });
   return new Promise((resolve, reject) => {
     mainQueue.push(
