@@ -232,7 +232,61 @@ An `EventFlow` models the complete lifecycle of a domain event. Each property on
 | `sideEffect`                        | `(event) => Promise<void \| BaseEvent<any>[]> \| void \| BaseEvent<any>[]`           |          | Runs after `apply`. Use this to trigger asynchronous workflows (such as sending emails). Returning additional base events queues them for processing.                                          |
 | `cancelApply`                       | `(event) => Promise<void> \| void`                                                   |          | Optional compensating action executed when an event is cancelled during cleanup.                                                                                                               |
 | `createConsequentEvents`            | `(causalEvent) => Promise<BaseEvent<any>[]> \| BaseEvent<any>[]`                     |          | Generates follow-up events that should be enqueued as a direct consequence of the causal event.                                                                                                |
-| `compensate`                        | `(event) => BaseEvent<any> \| BaseEvent<any>[]`                                      |          | Returns compensating event(s) to reverse the effect of this event. Required for revert operations.                                                                                             |
+| `compensate`                        | `(event) => BaseEvent<any> | BaseEvent<any>[]`                                      |          | Returns compensating event(s) to reverse the effect of this event. Required for revert operations.                                                                                             |
+
+## Optimistic Concurrency Control
+
+The event store supports optimistic concurrency control (OCC) to prevent conflicting writes to the same event stream. This is especially important when multiple processes or requests attempt to append events concurrently.
+
+### Using `expectedSequence`
+
+When storing events, you can specify the expected current sequence number of the stream. If another process has modified the stream since you read it, the write will fail with a `ConcurrencyError`.
+
+```ts
+// Read current state
+const currentSeq = await repo.getStreamSequence('Account', 'user-123');
+
+// Attempt to append with version check
+try {
+  await repo.storeEvents([
+    { domain: 'Account', type: 'debited', payload: { amount: 100 }, identifier: 'user-123' }
+  ], { expectedSequence: currentSeq });
+} catch (error) {
+  if (error instanceof ConcurrencyError) {
+    console.log(`Expected ${error.expected}, but found ${error.found}`);
+    // Handle conflict: retry, merge, or abort
+  }
+}
+```
+
+### Batching and Multi-Stream Writes
+
+The adapters handle large batches automatically:
+
+- **DynamoDB**: Batches larger than 25 items are recursively chunked. S3 offloading happens once before chunking to avoid duplicate uploads.
+- **TypeORM/Prisma/MikroORM**: All events in a batch are stored within a single transaction.
+
+**Multi-Stream Batching Behavior**
+
+When batching events across multiple streams with `expectedSequence`:
+
+```ts
+await repo.storeEvents([
+  { domain: 'Account', identifier: 'user-1', ... },
+  { domain: 'Account', identifier: 'user-2', ... },
+  { domain: 'Order', identifier: 'order-123', ... }
+], { expectedSequence: 5 });
+```
+
+> **Note**: The `expectedSequence` applies to **each stream independently**. For safer multi-stream batches, omit `expectedSequence` and rely on stream uniqueness constraints, or handle version checks per stream before batching.
+
+### Error Handling
+
+All adapters throw `ConcurrencyError` when a version conflict is detected:
+
+- **TypeORM**: Detects `SQLITE_CONSTRAINT`, PostgreSQL `23505`, or MySQL `ER_DUP_ENTRY` unique violations and re-queries the actual sequence.
+- **DynamoDB**: Uses conditional writes with `attribute_not_exists` or version matching.
+- **Prisma/MikroORM**: Rely on database unique constraints and translate exceptions.
 
 ### Reverting events
 

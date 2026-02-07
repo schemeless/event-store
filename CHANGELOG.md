@@ -1,5 +1,29 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **@schemeless/event-store-adapter-dynamodb**: Fixed duplicate S3 uploads when storing large batches (>25 items).
+  - Refactored `storeEvents` to separate S3 offloading from recursive batch chunking.
+  - S3 upload now happens once per oversized event before chunking begins.
+- **@schemeless/event-store-adapter-typeorm**: Improved unique constraint violation error handling.
+  - Added support for MySQL `ER_DUP_ENTRY` error code.
+  - `ConcurrencyError` now reports the actual current sequence by re-querying the database on conflict.
+
+### Added
+
+- **@schemeless/event-store-adapter-dynamodb**: Comprehensive test coverage for advanced OCC scenarios.
+  - Large batch chunking (>25 items) with S3 offload integration.
+  - Multi-stream batch processing verification.
+- **@schemeless/event-store-adapter-typeorm**: Real concurrency tests using file-based SQLite.
+  - Validates race condition prevention and strict ordering enforcement.
+
+### Documentation
+
+- Added notes on `expectedSequence` behavior when batching events across multiple streams.
+- Updated walkthrough with OCC refinement details and verification results.
+
 ## [2.9.0] - 2026-02-07
 
 ### Breaking Changes
