@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.0.3] - 2026-02-08
+
+### Fixed
+
+- **Stability Improvements**:
+  - **Shutdown Reliability**: Fixed a race condition where `shutdown()` could complete before pending database operations or side effects were fully processed. Introduced a retry mechanism and active task tracking to ensure a clean exit.
+  - **Hot Observable Race**: Fixed an issue in `makeMainQueue` where the first event could be lost due to subscribing after the event was pushed. Now ensures subscription is established before pushing.
+  - **Queue Drain Deadlock**: Fixed `drain()` occasional hangs in `RxQueue` by replacing unreliable `queue.getStats()` with a precise manual task counter.
+
 ## [3.0.1] - 2026-02-07
 
 ### Added
