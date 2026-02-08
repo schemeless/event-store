@@ -1,14 +1,48 @@
 name: Publish Packages
 
 on:
-  release:
-    types:
-      - published
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Publish mode
+        required: true
+        default: single
+        type: choice
+        options:
+          - single
+          - from-package
+      package_dir:
+        description: Package folder under packages/ (required for mode=single, e.g. event-store)
+        required: false
+        default: event-store
+        type: string
+      version:
+        description: Expected package version for mode=single (optional guard, e.g. 3.0.3)
+        required: false
+        default: ''
+        type: string
+      npm_tag:
+        description: npm dist-tag
+        required: false
+        default: latest
+        type: string
+      dry_run:
+        description: Run publish in dry-run mode
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: publish-packages
+  cancel-in-progress: false
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - name: Check out repository
@@ -17,25 +51,119 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
           registry-url: https://registry.npmjs.org
           cache: yarn
 
       - name: Use Yarn 1.x
-        run: corepack prepare yarn@1.22.19 --activate
+        run: corepack prepare yarn@1.22.22 --activate
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
-      - name: Build packages
-        run: yarn lerna run prepublish
+      - name: Validate inputs and inspect target
+        run: |
+          set -euo pipefail
 
-      - name: Run tests
-        run: yarn test
+          MODE='${{ github.event.inputs.mode }}'
+          PACKAGE_DIR='${{ github.event.inputs.package_dir }}'
+          EXPECTED_VERSION='${{ github.event.inputs.version }}'
 
-      - name: Publish packages
+          echo "MODE=${MODE}" >> "$GITHUB_ENV"
+
+          if [ "${MODE}" = "single" ]; then
+            if [ -z "${PACKAGE_DIR}" ]; then
+              echo "package_dir is required when mode=single" >&2
+              exit 1
+            fi
+
+            PKG_PATH="packages/${PACKAGE_DIR}/package.json"
+            if [ ! -f "${PKG_PATH}" ]; then
+              echo "Package not found: ${PKG_PATH}" >&2
+              exit 1
+            fi
+
+            PKG_NAME="$(node -p "require('./${PKG_PATH}').name")"
+            PKG_VERSION="$(node -p "require('./${PKG_PATH}').version")"
+
+            echo "Publishing single package: ${PKG_NAME}@${PKG_VERSION}"
+
+            if [ -n "${EXPECTED_VERSION}" ] && [ "${PKG_VERSION}" != "${EXPECTED_VERSION}" ]; then
+              echo "Version mismatch: package.json=${PKG_VERSION}, input=${EXPECTED_VERSION}" >&2
+              exit 1
+            fi
+
+            if npm view "${PKG_NAME}@${PKG_VERSION}" version >/dev/null 2>&1; then
+              echo "${PKG_NAME}@${PKG_VERSION} is already published" >&2
+              exit 1
+            fi
+
+            echo "PKG_DIR=packages/${PACKAGE_DIR}" >> "$GITHUB_ENV"
+            echo "PKG_NAME=${PKG_NAME}" >> "$GITHUB_ENV"
+            echo "PKG_VERSION=${PKG_VERSION}" >> "$GITHUB_ENV"
+          elif [ "${MODE}" = "from-package" ]; then
+            echo "Publishing all packages whose local versions are ahead of npm (lerna from-package)."
+          else
+            echo "Unsupported mode: ${MODE}" >&2
+            exit 1
+          fi
+
+      - name: Build package(s)
+        run: |
+          set -euo pipefail
+
+          if [ "${MODE}" = "single" ]; then
+            yarn --cwd "${PKG_DIR}" compile
+          else
+            yarn lerna run prepublish
+          fi
+
+      - name: Publish with NPM token (recommended fallback)
+        if: ${{ secrets.NPM_TOKEN != '' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: yarn publish-all
+        run: |
+          set -euo pipefail
+
+          TAG='${{ github.event.inputs.npm_tag }}'
+          DRY_RUN='${{ github.event.inputs.dry_run }}'
+
+          if [ "${MODE}" = "single" ]; then
+            cd "${PKG_DIR}"
+            if [ "${DRY_RUN}" = "true" ]; then
+              npm publish --dry-run --access public --tag "${TAG}"
+            else
+              npm publish --access public --tag "${TAG}"
+            fi
+          else
+            if [ "${DRY_RUN}" = "true" ]; then
+              npx lerna publish from-package --yes --dist-tag "${TAG}" --no-verify-access --loglevel verbose
+            else
+              npx lerna publish from-package --yes --dist-tag "${TAG}"
+            fi
+          fi
+
+      - name: Publish with npm Trusted Publishing (OIDC)
+        if: ${{ secrets.NPM_TOKEN == '' && github.event.inputs.mode == 'single' }}
+        run: |
+          set -euo pipefail
+
+          TAG='${{ github.event.inputs.npm_tag }}'
+          DRY_RUN='${{ github.event.inputs.dry_run }}'
+
+          cd "${PKG_DIR}"
+
+          if [ "${DRY_RUN}" = "true" ]; then
+            npm publish --dry-run --provenance --access public --tag "${TAG}"
+          else
+            npm publish --provenance --access public --tag "${TAG}"
+          fi
+
+      - name: Block from-package without NPM token
+        if: ${{ secrets.NPM_TOKEN == '' && github.event.inputs.mode == 'from-package' }}
+        run: |
+          echo "mode=from-package currently requires NPM_TOKEN." >&2
+          echo "Set secret NPM_TOKEN in environment npm-publish or run mode=single with OIDC Trusted Publishing." >&2
+          exit 1
