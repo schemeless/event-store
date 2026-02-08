@@ -1,6 +1,6 @@
 import * as Queue from 'better-queue';
 import { ProcessFunction } from 'better-queue';
-import { BehaviorSubject, Observable, Subject, firstValueFrom } from 'rxjs';
+import { BehaviorSubject, Observable, Subject } from 'rxjs';
 import { logger } from '../util/logger';
 import * as Rx from 'rxjs/operators';
 import * as R from 'ramda';
@@ -42,6 +42,16 @@ export const createRxQueue = <TASK = any, RESULT = TASK>(
   id: string,
   queueOptions?: Omit<Queue.QueueOptions<TASK, RESULT>, 'process'>
 ) => {
+  let pendingTasks = 0;
+  const pendingDrainResolvers: Array<() => void> = [];
+  const resolvePendingDrainersIfIdle = () => {
+    if (pendingTasks !== 0) return;
+    while (pendingDrainResolvers.length > 0) {
+      const resolve = pendingDrainResolvers.shift();
+      resolve?.();
+    }
+  };
+
   const process$ = new Subject<{ task: TASK; done: Queue.ProcessFunctionCb<RESULT> }>();
   const callback: Queue.ProcessFunction<TASK, RESULT> = (task, done) => {
     process$.next({ task, done });
@@ -53,14 +63,19 @@ export const createRxQueue = <TASK = any, RESULT = TASK>(
   queueSizeInput$.pipe(Rx.scan((acc, curr) => (acc || 0) + curr, null)).subscribe(queueSizeOutput$);
 
   const customPush = (task: any, cb?: (err: any, result: any) => void) => {
+    pendingTasks += 1;
     queueSizeInput$.next(+1);
     queue
       .push(task, cb)
       .on('finish', () => {
+        pendingTasks = Math.max(0, pendingTasks - 1);
         queueSizeInput$.next(-1);
+        resolvePendingDrainersIfIdle();
       })
       .on('failed', () => {
+        pendingTasks = Math.max(0, pendingTasks - 1);
         queueSizeInput$.next(-1);
+        resolvePendingDrainersIfIdle();
       });
   };
 
@@ -82,14 +97,12 @@ export const createRxQueue = <TASK = any, RESULT = TASK>(
     pause: (): void => queue.pause(),
     resume: (): void => queue.resume(),
     drain: (): Promise<void> => {
-      // Check if queue is already empty (getStats has more fields than typed)
-      const stats = queue.getStats() as any;
-      const isIdle = (stats.waiting ?? 0) === 0 && (stats.running ?? 0) === 0;
-      if (isIdle) {
+      if (pendingTasks === 0) {
         return Promise.resolve();
       }
-      // Wait for next drain event
-      return firstValueFrom(drained$).then(() => undefined);
+      return new Promise((resolve) => {
+        pendingDrainResolvers.push(() => resolve());
+      });
     },
     destroy: (): Promise<void> => new Promise((resolve) => queue.destroy(() => resolve())),
   };

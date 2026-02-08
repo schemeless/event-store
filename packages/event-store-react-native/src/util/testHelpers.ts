@@ -20,9 +20,12 @@ const defaultInMenDBOptionEventSourcing: ConnectionOptions = Object.assign({}, d
 
 let eventStore: EventStore;
 
+import { EventStoreOptions } from '../EventStore.types';
+
 export const getTestEventStore = async (
   allEventFlows: EventFlow[],
-  successEventObservers: SuccessEventObserver<any>[]
+  successEventObservers: SuccessEventObserver<any>[],
+  options: EventStoreOptions = {}
 ) => {
   if (eventStore) {
     return eventStore;
@@ -32,7 +35,18 @@ export const getTestEventStore = async (
     //   region: 'us-east-2',
     //   endpoint: 'http://127.0.0.1:8000',
     // });
-    eventStore = await makeEventStore(eventStoreRepo)(allEventFlows, successEventObservers);
+    eventStore = await makeEventStore(eventStoreRepo, options)(allEventFlows, successEventObservers);
     return eventStore;
+  }
+};
+
+/**
+ * Shuts down the cached test event store instance.
+ * Should be called in afterAll() of test files.
+ */
+export const shutdownEventStore = async (): Promise<void> => {
+  if (eventStore) {
+    await eventStore.shutdown(20_000);
+    eventStore = null as any;
   }
 };

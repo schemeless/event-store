@@ -43,15 +43,42 @@ export const makeEventStore =
         eventFlowMap[key] = flow;
       }
 
+      let pendingMainPipelineTasks = 0;
+      let resolveMainPipelineIdle: (() => void) | null = null;
+      const waitForMainPipelineIdle = (): Promise<void> =>
+        pendingMainPipelineTasks === 0
+          ? Promise.resolve()
+          : new Promise<void>((resolve) => {
+              resolveMainPipelineIdle = resolve;
+            });
+      const markMainPipelineTaskStart = () => {
+        pendingMainPipelineTasks += 1;
+      };
+      const markMainPipelineTaskDone = () => {
+        pendingMainPipelineTasks = Math.max(0, pendingMainPipelineTasks - 1);
+        if (pendingMainPipelineTasks === 0 && resolveMainPipelineIdle) {
+          const resolve = resolveMainPipelineIdle;
+          resolveMainPipelineIdle = null;
+          resolve();
+        }
+      };
+
       const mainQueueProcessed$ = mainQueue.processed$.pipe(
+        Rx.tap(() => {
+          markMainPipelineTaskStart();
+        }),
         Rx.concatMap(async ([doneEvents, eventTaskAndError]): Promise<[CreatedEvent<any>[], EventTaskAndError]> => {
-          if (!eventTaskAndError) {
-            await eventStoreRepo.storeEvents(doneEvents);
-            doneEvents.forEach((event) => sideEffectQueue.push({ event, retryCount: 0 }));
-            return [doneEvents, eventTaskAndError];
-          } else {
-            // todo store failed event
-            return [doneEvents, eventTaskAndError];
+          try {
+            if (!eventTaskAndError) {
+              await eventStoreRepo.storeEvents(doneEvents);
+              doneEvents.forEach((event) => sideEffectQueue.push({ event, retryCount: 0 }));
+              return [doneEvents, eventTaskAndError];
+            } else {
+              // todo store failed event
+              return [doneEvents, eventTaskAndError];
+            }
+          } finally {
+            markMainPipelineTaskDone();
           }
         }),
         Rx.mergeMap(([doneEvents, eventTaskAndError]) => {
@@ -85,20 +112,30 @@ export const makeEventStore =
         storeEvents: (events) => eventStoreRepo.storeEvents(events),
       });
 
+      const hasPendingQueueTasks = (queue: { partitionQueues?: Array<{ queueSize$?: { getValue: () => number | null } }> }) =>
+        (queue.partitionQueues || []).some((partitionQueue) => ((partitionQueue.queueSize$?.getValue() ?? 0) > 0));
+
       // Graceful shutdown implementation
       const shutdown = async (timeout = 5000): Promise<void> => {
         const shutdownPromise = (async () => {
-          // 1. Pause queues to stop accepting new tasks
-          mainQueue.queueInstance.pause();
-          sideEffectQueue.queueInstance.pause();
+          // 1. Repeatedly settle main/side-effect pipelines until both are idle.
+          // Side effects can enqueue follow-up main events, so one pass is not enough.
+          for (let i = 0; i < 12; i += 1) {
+            await mainQueue.drain();
+            await waitForMainPipelineIdle();
+            await sideEffectQueue.drain();
 
-          // 2. Wait for queues to drain
-          await Promise.all([mainQueue.queueInstance.drain(), sideEffectQueue.queueInstance.drain()]);
+            if (pendingMainPipelineTasks === 0 && !hasPendingQueueTasks(mainQueue) && !hasPendingQueueTasks(sideEffectQueue)) {
+              break;
+            }
+          }
 
-          // 3. Destroy queues
-          await Promise.all([mainQueue.queueInstance.destroy(), sideEffectQueue.queueInstance.destroy()]);
+          // 2. Stop queues and destroy resources.
+          mainQueue.pause();
+          sideEffectQueue.pause();
+          await Promise.all([mainQueue.destroy(), sideEffectQueue.destroy()]);
 
-          // 4. Close repo if it supports closing
+          // 3. Close repo if it supports closing
           if (eventStoreRepo.close) {
             await eventStoreRepo.close();
           }

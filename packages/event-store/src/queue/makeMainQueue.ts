@@ -41,16 +41,24 @@ export const makeMainQueue = (eventFlows: EventFlow<any>[], options: MainQueueOp
     Rx.mergeMap(({ task, done: mainQueueDone }) => {
       const applyQueue = makeApplyQueue();
       logEvent(task, '✨', 'received');
-      applyQueue.push({ currentEvent: task });
-      return combineLatest([
+      const taskProcessed$ = combineLatest([
         applyRootEventAndCollectSucceed(eventFlowMap, applyQueue),
         racedQueueFailedOrDrained(applyQueue),
       ]).pipe(
         Rx.take(1),
         cleanupAndCancelFailedEvent(eventFlowMap, mainQueueDone, task),
-        Rx.tap(() => applyQueue.queueInstance.destroy(() => undefined)),
+        Rx.finalize(() => applyQueue.queueInstance.destroy(() => undefined)),
         Rx.tap(() => logEvent(task, '🏁', 'finished'))
       );
+
+      return new Observable<[CreatedEvent<any>[], EventTaskAndError]>((subscriber) => {
+        const subscription = taskProcessed$.subscribe(subscriber);
+        // Push after subscriptions are ready to avoid missing hot queue events.
+        applyQueue.push({ currentEvent: task });
+        return () => {
+          subscription.unsubscribe();
+        };
+      });
     })
   ) as Observable<[CreatedEvent<any>[], EventTaskAndError]>;
 

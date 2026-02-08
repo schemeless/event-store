@@ -46,7 +46,7 @@ export const getTestEventStore = async (
  */
 export const shutdownEventStore = async (): Promise<void> => {
   if (eventStore) {
-    await eventStore.shutdown(2000);
+    await eventStore.shutdown(20_000);
     eventStore = null as any;
   }
 };

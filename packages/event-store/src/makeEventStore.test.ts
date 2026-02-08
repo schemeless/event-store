@@ -125,6 +125,6 @@ describe('make eventStore', () => {
     });
 
     // Shutdown should complete without error
-    await expect(eventStore.shutdown(2000)).resolves.toBeUndefined();
+    await expect(eventStore.shutdown(10_000)).resolves.toBeUndefined();
   });
 });

@@ -42,9 +42,19 @@ export const createRxQueue = <TASK = any, RESULT = TASK>(
   id: string,
   queueOptions?: Omit<Queue.QueueOptions<TASK, RESULT>, 'process'>
 ) => {
+  let pendingTasks = 0;
+  const pendingDrainResolvers: Array<() => void> = [];
+  const resolvePendingDrainersIfIdle = () => {
+    if (pendingTasks !== 0) return;
+    while (pendingDrainResolvers.length > 0) {
+      const resolve = pendingDrainResolvers.shift();
+      resolve?.();
+    }
+  };
+
   const process$ = new Subject<{ task: TASK; done: Queue.ProcessFunctionCb<RESULT> }>();
   const callback: Queue.ProcessFunction<TASK, RESULT> = (task, done) => {
-    process$.next({ task: task as any, done }); // todo fixme
+    process$.next({ task: task as any, done }); // react-native-better-queue can pass batched tasks
   };
 
   const queueSizeInput$ = new Subject<number>();
@@ -53,18 +63,25 @@ export const createRxQueue = <TASK = any, RESULT = TASK>(
   queueSizeInput$.pipe(Rx.scan((acc, curr) => (acc || 0) + curr, null)).subscribe(queueSizeOutput$);
 
   const customPush = (task: any, cb?: (err: any, result: any) => void) => {
+    pendingTasks += 1;
     queueSizeInput$.next(+1);
     queue
       .push(task, cb)
       .on('finish', () => {
+        pendingTasks = Math.max(0, pendingTasks - 1);
         queueSizeInput$.next(-1);
+        resolvePendingDrainersIfIdle();
       })
       .on('failed', () => {
+        pendingTasks = Math.max(0, pendingTasks - 1);
         queueSizeInput$.next(-1);
+        resolvePendingDrainersIfIdle();
       });
   };
 
   const queue = makeQueue<TASK, RESULT>(callback, Object.assign(queueOptions || {}, { id: id }));
+  const drained$ = makeEventQueueObservable<TASK, RESULT>(queue, 'drain', id);
+
   return {
     id,
     queueInstance: queue,
@@ -72,9 +89,21 @@ export const createRxQueue = <TASK = any, RESULT = TASK>(
     process$,
     task$: process$.pipe(Rx.map(R.prop('task'))),
     done$: process$.pipe(Rx.map(R.prop('done'))),
-    drained$: makeEventQueueObservable<TASK, RESULT>(queue, 'drain', id),
+    drained$,
     empty$: makeEventQueueObservable<TASK, RESULT>(queue, 'empty', id),
     taskFailed$: makeFailedEventQueueObservable<TASK, RESULT>(queue),
     queueSize$: queueSizeOutput$,
+    // Lifecycle methods for graceful shutdown
+    pause: (): void => queue.pause(),
+    resume: (): void => queue.resume(),
+    drain: (): Promise<void> => {
+      if (pendingTasks === 0) {
+        return Promise.resolve();
+      }
+      return new Promise((resolve) => {
+        pendingDrainResolvers.push(() => resolve());
+      });
+    },
+    destroy: (): Promise<void> => new Promise((resolve) => queue.destroy(() => resolve())),
   };
 };

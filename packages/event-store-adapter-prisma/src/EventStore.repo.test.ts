@@ -1,29 +1,34 @@
 import * as path from 'path';
-import { promisify } from 'util';
-import { execFile } from 'child_process';
 import { promises as fs } from 'fs';
-import { pathToFileURL } from 'url';
 
 import { PrismaClient } from '@prisma/client';
 import type { CreatedEvent, IEventStoreEntity } from '@schemeless/event-store-types';
 
 import { EventStoreRepo } from './EventStore.repo';
 
-const execFileAsync = promisify(execFile);
 const packageRoot = path.resolve(__dirname, '..');
-const schemaPath = path.join(packageRoot, 'prisma', 'schema.prisma');
-const prismaBinary =
-  process.platform === 'win32'
-    ? path.join(packageRoot, 'node_modules', '.bin', 'prisma.cmd')
-    : path.join(packageRoot, 'node_modules', '.bin', 'prisma');
 const databaseFile = path.join(packageRoot, 'prisma', 'test.db');
-const databaseUrl = pathToFileURL(databaseFile).toString();
-const prismaCliOptions = {
-  cwd: packageRoot,
-  env: {
-    ...process.env,
-    DATABASE_URL: databaseUrl,
-  },
+const databaseUrl = `file:${databaseFile}`;
+
+const ensureSchema = async (prisma: PrismaClient): Promise<void> => {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "EventStoreEntity" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "domain" TEXT NOT NULL,
+      "type" TEXT NOT NULL,
+      "meta" TEXT,
+      "payload" TEXT NOT NULL,
+      "identifier" TEXT,
+      "correlationId" TEXT,
+      "causationId" TEXT,
+      "created" DATETIME NOT NULL
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "EventStoreEntity_created_id_idx"
+      ON "EventStoreEntity" ("created", "id")
+  `);
 };
 
 const makeEvent = (index: number): CreatedEvent<any, any> => ({
@@ -40,24 +45,31 @@ describe('EventStoreRepo (Prisma)', () => {
   let repo: EventStoreRepo;
 
   beforeAll(async () => {
-    process.env.DATABASE_URL = databaseUrl;
-
-    await execFileAsync(prismaBinary, ['generate', '--schema', schemaPath], prismaCliOptions);
-
-    await execFileAsync(prismaBinary, ['db', 'push', '--schema', schemaPath, '--skip-generate'], prismaCliOptions);
-
-    prisma = new PrismaClient();
+    prisma = new PrismaClient({
+      datasources: {
+        db: { url: databaseUrl },
+      },
+    });
+    await prisma.$connect();
+    await ensureSchema(prisma);
     repo = new EventStoreRepo(prisma);
     await repo.init();
   });
 
   beforeEach(async () => {
+    if (!repo) {
+      throw new Error('Prisma test setup failed: repository was not initialized');
+    }
     await repo.resetStore();
   });
 
   afterAll(async () => {
-    await repo.resetStore();
-    await prisma.$disconnect();
+    if (repo) {
+      await repo.resetStore();
+    }
+    if (prisma) {
+      await prisma.$disconnect();
+    }
     await fs.rm(databaseFile, { force: true });
   });
 

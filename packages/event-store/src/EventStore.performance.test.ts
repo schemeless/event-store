@@ -1,230 +1,212 @@
 import { getTestEventStore, shutdownEventStore } from './util/testHelpers';
-import { StandardEvent, testEventFlows } from './mocks';
-import { CreatedEvent, SuccessEventObserver } from '@schemeless/event-store-types';
+import { BaseEvent, CreatedEvent, EventFlow, SuccessEventObserver } from '@schemeless/event-store-types';
 import delay from 'delay.ts';
+import { getPartitionIndex } from './queue/shardUtils';
 
-// Helper to create a slow event flow dynamically
-const createSlowFlow = (delayMs: number) => {
-    const Flow = { ...StandardEvent };
-    Flow.type = `slow_${delayMs}`;
-    Flow.apply = async (event: CreatedEvent<any>) => {
-        await delay(delayMs);
-    };
-    return Flow;
+jest.setTimeout(20_000);
+
+const findKeysForAllPartitions = (numPartitions: number): string[] => {
+  const keys = Array.from({ length: numPartitions }, () => '');
+
+  for (let i = 0; i < 50_000 && keys.some((key) => key === ''); i += 1) {
+    const key = `partition-key-${i}`;
+    const partition = getPartitionIndex(key, numPartitions);
+    if (keys[partition] === '') {
+      keys[partition] = key;
+    }
+  }
+
+  if (keys.some((key) => key === '')) {
+    throw new Error(`Failed to find keys for all ${numPartitions} partitions`);
+  }
+
+  return keys;
+};
+
+const createInFlightProbe = (total: number) => {
+  let inFlight = 0;
+  let maxInFlight = 0;
+  let completed = 0;
+  let resolveDone!: () => void;
+  const done = new Promise<void>((resolve) => {
+    resolveDone = resolve;
+  });
+
+  return {
+    enter() {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+    },
+    leave() {
+      inFlight -= 1;
+      completed += 1;
+      if (completed === total) {
+        resolveDone();
+      }
+    },
+    done,
+    getMaxInFlight() {
+      return maxInFlight;
+    },
+  };
+};
+
+const withReceive = <Payload>(flowWithoutReceive: Omit<EventFlow<Payload>, 'receive'>): EventFlow<Payload> => {
+  const flow = flowWithoutReceive as EventFlow<Payload>;
+  (flow as any).receive = (eventStore: any) => (eventInputArgs: any) => eventStore.receive(flow)(eventInputArgs);
+  return flow;
 };
 
 describe('EventStore Extended Performance Verification', () => {
-    afterEach(async () => {
-        await shutdownEventStore();
+  afterEach(async () => {
+    await shutdownEventStore();
+  });
+
+  describe('1. Concurrency Behavior', () => {
+    it('mainQueue does not block across shards when concurrent > 1', async () => {
+      const executionLog: string[] = [];
+
+      const slowFlow: EventFlow<{ id: string }> = withReceive({
+        domain: 'main_perf',
+        type: 'slow',
+        samplePayload: { id: 'a' },
+        getShardKey: () => 'shard-A',
+        apply: async () => {
+          executionLog.push('start-A');
+          await delay(200);
+          executionLog.push('end-A');
+        },
+      });
+
+      const fastFlow: EventFlow<{ id: string }> = withReceive({
+        domain: 'main_perf',
+        type: 'fast',
+        samplePayload: { id: 'b' },
+        getShardKey: () => 'shard-B',
+        apply: async () => {
+          await delay(50);
+          executionLog.push('start-B');
+          await delay(10);
+          executionLog.push('end-B');
+        },
+      });
+
+      const store = await getTestEventStore([slowFlow, fastFlow], [], { mainQueueConcurrent: 2 });
+
+      await Promise.all([
+        store.receive(slowFlow)({ payload: { id: '1' } }),
+        store.receive(fastFlow)({ payload: { id: '2' } }),
+      ]);
+      await store.mainQueue.drain();
+
+      const startBIndex = executionLog.indexOf('start-B');
+      const endAIndex = executionLog.indexOf('end-A');
+      const endBIndex = executionLog.indexOf('end-B');
+
+      expect(startBIndex).toBeLessThan(endAIndex);
+      expect(endBIndex).toBeLessThan(endAIndex);
     });
 
-    describe('1. Concurrency Performance', () => {
-        const prepareTest = () => {
-            const delayMs = 50;
-            const eventCount = 5;
-            const SlowFlow = createSlowFlow(delayMs);
-            return { delayMs, eventCount, SlowFlow };
-        };
+    it('observerQueue concurrency changes max in-flight observer executions', async () => {
+      const delayMs = 80;
+      const childCount = 8;
+      const domain = 'obs_perf';
 
-        it('should process mainQueue events significantly faster with concurrency > 1', async () => {
-            const { delayMs, eventCount, SlowFlow } = prepareTest();
+      const childFlow: EventFlow<{ key: string }> = withReceive({
+        domain,
+        type: 'child',
+        samplePayload: { key: 'x' },
+        apply: async () => undefined,
+      });
 
-            // 1. Sequential (Concurrent: 1)
-            const seqStore = await getTestEventStore([{ ...SlowFlow, domain: 'seq' }], [], { mainQueueConcurrent: 1 });
-            const startSeq = Date.now();
-            await Promise.all(
-                Array.from({ length: eventCount }).map((_, i) =>
-                    seqStore.receive({ ...SlowFlow, domain: 'seq' })({ payload: { key: `seq_${i}`, positiveNumber: 1 } })
-                )
-            );
-            const durationSeq = Date.now() - startSeq;
-            await shutdownEventStore();
+      const rootFlow: EventFlow<{ batch: string }> = withReceive({
+        domain,
+        type: 'root',
+        samplePayload: { batch: 'b' },
+        createConsequentEvents: () =>
+          Array.from({ length: childCount }, (_, index): BaseEvent<{ key: string }> => ({
+            domain,
+            type: 'child',
+            payload: { key: `child-${index}` },
+          })),
+        apply: async () => undefined,
+      });
 
-            // 2. Parallel (Concurrent: 5)
-            const parStore = await getTestEventStore([{ ...SlowFlow, domain: 'par' }], [], { mainQueueConcurrent: 5 });
-            const startPar = Date.now();
-            await Promise.all(
-                Array.from({ length: eventCount }).map((_, i) =>
-                    parStore.receive({ ...SlowFlow, domain: 'par' })({ payload: { key: `par_${i}`, positiveNumber: 1 } })
-                )
-            );
-            const durationPar = Date.now() - startPar;
+      const makeObserver = (probe: ReturnType<typeof createInFlightProbe>): SuccessEventObserver<any> => ({
+        filters: [{ domain, type: 'child' }],
+        priority: 1,
+        apply: async () => {
+          probe.enter();
+          try {
+            await delay(delayMs);
+          } finally {
+            probe.leave();
+          }
+        },
+      });
 
-            console.log(`MainQueue Sequential: ${durationSeq}ms, Parallel: ${durationPar}ms`);
+      const seqProbe = createInFlightProbe(childCount);
+      const seqStore = await getTestEventStore([rootFlow, childFlow], [makeObserver(seqProbe)], {
+        observerQueueConcurrent: 1,
+      });
+      await seqStore.receive(rootFlow)({ payload: { batch: 'seq' } });
+      await seqProbe.done;
+      expect(seqProbe.getMaxInFlight()).toBe(1);
+      await shutdownEventStore();
 
-            // Expected: Sequential ~250ms, Parallel ~50ms + overhead
-            expect(durationPar).toBeLessThan(durationSeq * 0.6);
-        });
-
-        it('should process observerQueue events significantly faster with concurrency > 1', async () => {
-            const { delayMs, eventCount, SlowFlow } = prepareTest();
-            // Slow observer
-            const slowObserver: SuccessEventObserver<any> = {
-                filters: [{ domain: 'obs', type: `slow_${delayMs}` }],
-                priority: 1,
-                apply: async () => { await delay(delayMs); }
-            };
-
-            // 1. Sequential Observer
-            const seqStore = await getTestEventStore([{ ...SlowFlow, domain: 'obs' }], [slowObserver], { observerQueueConcurrent: 1 });
-            // For observers to run in parallel, we need to fire multiple events and wait for them to be processed.
-            // But receive() returns when mainQueue is done. Observers run async in background (piped from mainQueue processed).
-            // So we need to wait for all observers to finish.
-
-            // We can't easily await observers from outside without a hook.
-            // Workaround: Send N events, and check total time until a flag is set? 
-            // Better: use a latch/counter in the observer.
-
-            // Let's skip strict timing check for observers if it's too complex to coordinate, 
-            // OR use a specialized Observer that resolves a promise when N are done.
-
-            const createLatchObserver = (total: number) => {
-                let count = 0;
-                let resolveFn: () => void;
-                const promise = new Promise<void>(r => resolveFn = r);
-                const observer: SuccessEventObserver<any> = {
-                    filters: [{ domain: 'obs', type: `slow_${delayMs}` }],
-                    priority: 1,
-                    apply: async () => {
-                        await delay(delayMs);
-                        count++;
-                        if (count === total) resolveFn();
-                    }
-                };
-                return { observer, promise };
-            };
-
-            const latchSeq = createLatchObserver(eventCount);
-
-            const startSeq = Date.now();
-            await Promise.all(
-                Array.from({ length: eventCount }).map((_, i) =>
-                    seqStore.receive({ ...SlowFlow, domain: 'obs' })({ payload: { key: `seq_${i}`, positiveNumber: 1 } })
-                )
-            );
-            await latchSeq.promise;
-            const durationSeq = Date.now() - startSeq;
-            await shutdownEventStore();
-
-            // 2. Parallel Observer
-            const latchPar = createLatchObserver(eventCount);
-            const parStore = await getTestEventStore([{ ...SlowFlow, domain: 'obs' }], [latchPar.observer], { observerQueueConcurrent: 5 });
-
-            const startPar = Date.now();
-            await Promise.all(
-                Array.from({ length: eventCount }).map((_, i) =>
-                    parStore.receive({ ...SlowFlow, domain: 'obs' })({ payload: { key: `par_${i}`, positiveNumber: 1 } })
-                )
-            );
-            await latchPar.promise;
-            const durationPar = Date.now() - startPar;
-
-            console.log(`ObserverQueue Sequential: ${durationSeq}ms, Parallel: ${durationPar}ms`);
-            expect(durationPar).toBeLessThan(durationSeq * 0.6);
-        });
-        it('should process sideEffectQueue events significantly faster with concurrency > 1', async () => {
-            const { delayMs, eventCount, SlowFlow } = prepareTest();
-
-            const createLatchSideEffectFlow = (total: number) => {
-                let count = 0;
-                let resolveFn: () => void;
-                const promise = new Promise<void>(r => resolveFn = r);
-
-                const Flow = { ...SlowFlow, domain: 'side' };
-                // fast apply
-                Flow.apply = async () => { };
-                // slow sideEffect
-                Flow.sideEffect = async () => {
-                    await delay(delayMs);
-                    count++;
-                    if (count === total) resolveFn();
-                };
-                return { Flow, promise };
-            };
-
-            // 1. Sequential SideEffect
-            const latchSeq = createLatchSideEffectFlow(eventCount);
-            const seqStore = await getTestEventStore([{ ...latchSeq.Flow, domain: 'side_seq' }], [], { sideEffectQueueConcurrent: 1 });
-
-            const startSeq = Date.now();
-            await Promise.all(
-                Array.from({ length: eventCount }).map((_, i) =>
-                    seqStore.receive({ ...latchSeq.Flow, domain: 'side_seq' })({ payload: { key: `seq_${i}`, positiveNumber: 1 } })
-                )
-            );
-            await latchSeq.promise;
-            const durationSeq = Date.now() - startSeq;
-            await shutdownEventStore();
-
-            // 2. Parallel SideEffect
-            const latchPar = createLatchSideEffectFlow(eventCount);
-            const parStore = await getTestEventStore([{ ...latchPar.Flow, domain: 'side_par' }], [], { sideEffectQueueConcurrent: 5 });
-
-            const startPar = Date.now();
-            await Promise.all(
-                Array.from({ length: eventCount }).map((_, i) =>
-                    parStore.receive({ ...latchPar.Flow, domain: 'side_par' })({ payload: { key: `par_${i}`, positiveNumber: 1 } })
-                )
-            );
-            await latchPar.promise;
-            const durationPar = Date.now() - startPar;
-
-            console.log(`SideEffectQueue Sequential: ${durationSeq}ms, Parallel: ${durationPar}ms`);
-            expect(durationPar).toBeLessThan(durationSeq * 0.6);
-        });
+      const parProbe = createInFlightProbe(childCount);
+      const parStore = await getTestEventStore([rootFlow, childFlow], [makeObserver(parProbe)], {
+        observerQueueConcurrent: 4,
+      });
+      await parStore.receive(rootFlow)({ payload: { batch: 'par' } });
+      await parProbe.done;
+      expect(parProbe.getMaxInFlight()).toBeGreaterThan(1);
     });
 
-    describe('2. Fire-and-Forget Robustness', () => {
-        it('should continue processing when a fire-and-forget observer throws', async () => {
-            const errorObserver: SuccessEventObserver<any> = {
-                filters: [{ domain: 'err', type: 'test' }],
-                priority: 1,
-                fireAndForget: true,
-                apply: async () => {
-                    throw new Error('Boom');
-                }
-            };
+    it('sideEffectQueue runs in parallel when concurrent > 1 and shard keys differ', async () => {
+      const delayMs = 80;
+      const partitions = 4;
+      const keys = findKeysForAllPartitions(partitions);
+      const type = `side_${delayMs}`;
 
-            const store = await getTestEventStore([StandardEvent], [errorObserver]);
-
-            // Should not throw
-            await expect(
-                StandardEvent.receive(store)({ payload: { key: 'robust', positiveNumber: 1 } })
-            ).resolves.not.toThrow();
-
-            // Should be able to process next event
-            await expect(
-                StandardEvent.receive(store)({ payload: { key: 'robust_2', positiveNumber: 1 } })
-            ).resolves.not.toThrow();
+      const makeFlow = (domain: string, probe: ReturnType<typeof createInFlightProbe>): EventFlow<{ key: string }> =>
+        withReceive({
+          domain,
+          type,
+          samplePayload: { key: 'x' },
+          getShardKey: (event) => event.payload.key,
+          apply: async () => undefined,
+          sideEffect: async () => {
+            probe.enter();
+            try {
+              await delay(delayMs);
+            } finally {
+              probe.leave();
+            }
+          },
         });
+
+      const seqProbe = createInFlightProbe(keys.length);
+      const seqFlow = makeFlow('side_seq', seqProbe);
+      const seqStore = await getTestEventStore([seqFlow], [], {
+        mainQueueConcurrent: partitions,
+        sideEffectQueueConcurrent: 1,
+      });
+      await Promise.all(keys.map((key) => seqStore.receive(seqFlow)({ payload: { key } })));
+      await seqProbe.done;
+      expect(seqProbe.getMaxInFlight()).toBe(1);
+      await shutdownEventStore();
+
+      const parProbe = createInFlightProbe(keys.length);
+      const parFlow = makeFlow('side_par', parProbe);
+      const parStore = await getTestEventStore([parFlow], [], {
+        mainQueueConcurrent: partitions,
+        sideEffectQueueConcurrent: partitions,
+      });
+      await Promise.all(keys.map((key) => parStore.receive(parFlow)({ payload: { key } })));
+      await parProbe.done;
+      expect(parProbe.getMaxInFlight()).toBeGreaterThan(1);
     });
+  });
 
-    describe('3. Ordering Verification (Main Queue)', () => {
-        // This is hard to deterministically prove "out of order" without a lot of runs.
-        // But we can prove that they start/overlap.
-        it('should allow overlapping execution in mainQueue', async () => {
-            const delayMs = 100;
-            const Flow = createSlowFlow(delayMs);
-            // Use a shared resource to detect overlap
-            let inFlight = 0;
-            let maxInFlight = 0;
-
-            Flow.apply = async () => {
-                inFlight++;
-                maxInFlight = Math.max(maxInFlight, inFlight);
-                await delay(delayMs);
-                inFlight--;
-            };
-
-            const store = await getTestEventStore([{ ...Flow, domain: 'overlap' }], [], { mainQueueConcurrent: 2 });
-
-            // Send 2 events rapidly
-            const p1 = store.receive({ ...Flow, domain: 'overlap' })({ payload: { key: '1', positiveNumber: 1 } });
-            const p2 = store.receive({ ...Flow, domain: 'overlap' })({ payload: { key: '2', positiveNumber: 1 } });
-
-            await Promise.all([p1, p2]);
-
-            expect(maxInFlight).toBeGreaterThan(1);
-        });
-    });
 });

@@ -16,7 +16,7 @@ describe('makeSideEffectQueue', () => {
     } as unknown as mainQueueType);
     sideEffectQueue.processed$.subscribe((r) => {
       if (r.state === SideEffectsState.fail) {
-        expect(spy).toBeCalledTimes(4);
+        expect(spy).toHaveBeenCalledTimes(4);
         cb();
       }
     });
@@ -41,7 +41,7 @@ describe('makeSideEffectQueue', () => {
     } as unknown as mainQueueType);
     sideEffectQueue.processed$.subscribe((r) => {
       if (r.state === SideEffectsState.done) {
-        expect(spy).toBeCalledTimes(2);
+        expect(spy).toHaveBeenCalledTimes(2);
         cb();
       }
     });

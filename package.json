@@ -8,7 +8,7 @@
     "nohoist": []
   },
   "scripts": {
-    "test": "jest --detectOpenHandles --forceExit",
+    "test": "lerna run test",
     "bootstrap": "yarn && lerna run prepublish",
     "lerna-test": "lerna run test",
     "lock:regen": "lerna run lock:regen",

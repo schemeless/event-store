@@ -26,7 +26,7 @@ const makeEvent = (num: number): CreatedEvent<any, any> => {
 };
 describe('EventStore Typeorm', () => {
   it('should make 500 events works', async () => {
-    const eventStoreRepo = new EventStoreRepo(defaultInMemDBOption);
+    const eventStoreRepo = new EventStoreRepo({ ...defaultInMemDBOption, name: 'typeorm-v3-test-1' });
     const eventsToStore = [...new Array(500).keys()].map(makeEvent);
     await eventStoreRepo.init();
     await eventStoreRepo.storeEvents(eventsToStore);
@@ -39,13 +39,12 @@ describe('EventStore Typeorm', () => {
     const rightOrder = allEvents.every((currentEvent, index) => {
       const nextEvent = allEvents[index + 1];
       if (!nextEvent) return true;
-      console.log(nextEvent);
       return nextEvent.created >= currentEvent.created;
     });
     expect(rightOrder).toBe(true);
   });
   it('should make replay after works', async () => {
-    const eventStoreRepo = new EventStoreRepo(defaultInMemDBOption);
+    const eventStoreRepo = new EventStoreRepo({ ...defaultInMemDBOption, name: 'typeorm-v3-test-2' });
     const eventsToStore = [...new Array(500).keys()].map(makeEvent);
     await eventStoreRepo.init();
     await eventStoreRepo.storeEvents(eventsToStore);

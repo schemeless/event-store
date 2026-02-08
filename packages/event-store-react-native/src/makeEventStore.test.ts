@@ -34,7 +34,7 @@ describe('make eventStore', () => {
           positiveNumber: -1,
         },
       })
-    ).rejects.toThrowError(/Invalid positive number/);
+    ).rejects.toThrow(/Invalid positive number/);
 
     expect(storeGet('eventStore2')).toBeUndefined();
     expect(mockObserverApply.mock.calls.length).toBe(0);
@@ -65,7 +65,7 @@ describe('make eventStore', () => {
           positiveNumber: 1,
         },
       })
-    ).rejects.toThrowError(/Invalid positive number/);
+    ).rejects.toThrow(/Invalid positive number/);
 
     expect(storeGet('eventStore4')).toBe(0);
     expect(mockObserverApply.mock.calls.length).toBe(0);
@@ -114,5 +114,17 @@ describe('make eventStore', () => {
     } finally {
       subscription.unsubscribe();
     }
+  });
+
+  it('should shutdown gracefully', async () => {
+    const eventStore = await getTestEventStore(testEventFlows, testObservers);
+
+    // Process an event first
+    await StandardEvent.receive(eventStore)({
+      payload: { key: 'shutdown-test', positiveNumber: 1 },
+    });
+
+    // Shutdown should complete without error
+    await expect(eventStore.shutdown(10_000)).resolves.toBeUndefined();
   });
 });

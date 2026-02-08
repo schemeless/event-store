@@ -54,7 +54,10 @@ describe('makeReceive', () => {
       expect.objectContaining({ domain: 'account', type: 'created' }),
       expect.any(Function)
     );
-    expect(makeObserverQueueMock).toHaveBeenCalledWith(successObservers);
+    expect(makeObserverQueueMock).toHaveBeenCalledWith(
+      successObservers,
+      expect.objectContaining({ concurrent: 1 })
+    );
 
     drained$.next();
 
