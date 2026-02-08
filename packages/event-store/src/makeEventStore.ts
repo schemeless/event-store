@@ -76,7 +76,7 @@ export const makeEventStore =
       // const { result$, observerQueue } = assignObserver(doneAndSideEffect$, successEventObservers);
       const output$ = doneAndSideEffect$;
       // Ensure queues start draining even if callers only subscribe later.
-      output$.subscribe(() => undefined);
+      const outputSubscription = output$.subscribe(() => undefined);
 
       // Create revert functions
       const { canRevert, previewRevert, revert } = makeRevert({
@@ -105,11 +105,23 @@ export const makeEventStore =
         })();
 
         // Timeout protection
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('EventStore shutdown timeout')), timeout)
-        );
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            reject(new Error('EventStore shutdown timeout'));
+          }, timeout);
+          const nodeTimer = timer as ReturnType<typeof setTimeout> & { unref?: () => void };
+          nodeTimer.unref?.();
+        });
 
-        await Promise.race([shutdownPromise, timeoutPromise]);
+        try {
+          await Promise.race([shutdownPromise, timeoutPromise]);
+        } finally {
+          if (timer !== undefined) {
+            clearTimeout(timer);
+          }
+          outputSubscription.unsubscribe();
+        }
       };
 
       const getAggregate: EventStore['getAggregate'] = async <State>(
