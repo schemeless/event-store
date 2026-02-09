@@ -1,6 +1,6 @@
 {
   "name": "@schemeless/event-store-adapter-prisma",
-  "version": "3.0.1",
+  "version": "3.0.4",
   "typescript:main": "src/index.ts",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -22,7 +22,7 @@
     "url": "https://github.com/schemeless/event-store/issues"
   },
   "dependencies": {
-    "@schemeless/event-store-types": "^3.0.1"
+    "@schemeless/event-store-types": "^3.0.4"
   },
   "peerDependencies": {
     "@prisma/client": ">=5.0.0"
