@@ -62,6 +62,51 @@ export const orderPlacedFlow: EventFlow = {
 
 This ensures all derived events share the same `correlationId` (for grouping) while each maintains a `causationId` pointer to its immediate parent (for chain traversal).
 
+## Optional Runtime Validation (Recommended)
+
+`@schemeless/event-store` does not require any specific validation library. The framework only calls your `validate` hook, so you can choose the tool that fits your stack.
+
+For TypeScript-first projects, we recommend **Zod** because it gives clear runtime errors and strong type inference.
+
+```ts
+import { z } from 'zod';
+import type { EventFlow } from '@schemeless/event-store';
+
+const userRegisteredPayload = z.object({
+  id: z.string().uuid(),
+  email: z.string().email(),
+  name: z.string().min(1),
+});
+
+type UserRegisteredPayload = z.infer<typeof userRegisteredPayload>;
+
+export const userRegisteredFlow: EventFlow<UserRegisteredPayload> = {
+  domain: 'user',
+  type: 'registered',
+  receive: (eventStore) => (eventInput) => eventStore.receive(userRegisteredFlow)(eventInput),
+  validate: async (event) => {
+    const result = userRegisteredPayload.safeParse(event.payload);
+    if (!result.success) {
+      throw new Error(result.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '));
+    }
+  },
+  apply: async (event) => {
+    // event.payload is now validated at runtime
+  },
+};
+```
+
+Alternative options:
+
+- **Valibot**: similar DX to Zod, smaller footprint.
+- **TypeBox + Ajv**: best when you need JSON Schema output and ecosystem tooling.
+- **class-validator**: useful in decorator/class-based DTO stacks.
+
+Recommendation:
+
+- Keep validation in event flows (`validate` / `preApply`).
+- Keep the core event-store package library-agnostic.
+
 ## Build the store
 
 `makeEventStore` wires your repository and flows together, returning queues, a `receive` helper, and a replay function. Success observers are processed on a dedicated queue so long-running reactions do not block the main command pipeline.
