@@ -5,13 +5,11 @@ import { validate } from './validate';
 import { preApply } from './preApply';
 import { upcast } from './upcast';
 
-export const makeValidateAndApply =
-  (eventFlowMap: EventFlowMap) =>
-  async (event): Promise<CreatedEvent<any>> => {
-    const eventFlow = getEventFlow(eventFlowMap)(event);
-    const upcastedEvent = await upcast(eventFlow, event);
-    await validate(eventFlow, upcastedEvent);
-    const preAppliedEvent = await preApply(eventFlow, upcastedEvent);
-    await apply(eventFlow, preAppliedEvent);
-    return preAppliedEvent;
-  };
+export const makeValidateAndApply = (eventFlowMap: EventFlowMap) => async (event): Promise<CreatedEvent<any>> => {
+  const eventFlow = getEventFlow(eventFlowMap)(event);
+  const upcastedEvent = await upcast(eventFlow, event);
+  await validate(eventFlow, upcastedEvent);
+  const preAppliedEvent = await preApply(eventFlow, upcastedEvent);
+  await apply(eventFlow, preAppliedEvent);
+  return preAppliedEvent;
+};

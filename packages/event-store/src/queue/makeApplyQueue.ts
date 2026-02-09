@@ -1,10 +1,10 @@
 import { createRxQueue } from './RxQueue';
 import type { BaseEvent, CreatedEvent } from '@schemeless/event-store-types';
-import { v4 as uuid } from 'uuid';
+import { getUlid } from '../util/ulid';
 
 export const makeApplyQueue = () =>
   createRxQueue<{ causalEvent?: CreatedEvent<any>; currentEvent: BaseEvent<any> }, CreatedEvent<any>>(
-    'apply:' + uuid().substr(-4, 4),
+    'apply:' + getUlid().slice(-4),
     {
       filo: true,
       concurrent: 1,

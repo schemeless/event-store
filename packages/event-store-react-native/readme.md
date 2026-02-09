@@ -40,6 +40,12 @@ yarn workspace @schemeless/event-store-react-native compile
 yarn workspace @schemeless/event-store-react-native test
 ```
 
+### Alignment notes
+
+- Runtime behavior is aligned with `@schemeless/event-store`, except for queue internals that must use `react-native-better-queue`.
+- Queue IDs use ULID slices instead of `uuid` to avoid forcing `crypto.getRandomValues` polyfills for internal queue naming.
+- Some stress/integration suites are intentionally maintained only in the Node package (`snapshot`, `shutdown`, `revert`, sharded concurrency/stress), because they depend on Node-centric adapter and load characteristics.
+
 ## License
 
 MIT

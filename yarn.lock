@@ -2707,6 +2707,32 @@
   dependencies:
     "@prisma/debug" "5.22.0"
 
+"@schemeless/event-store-adapter-dynamodb@^2.11.0":
+  version "2.11.0"
+  resolved "https://registry.yarnpkg.com/@schemeless/event-store-adapter-dynamodb/-/event-store-adapter-dynamodb-2.11.0.tgz#9a38e7f3e80b7b962094b51ae54afbad9bbd3d0a"
+  integrity sha512-v8VRl0wxl4oxUu0e68NKrm8VnIV20Q/vj59Z43VDQTuBx7ETpFJi4MSq1yC7eC8iX2rTK/KRyGI3wnxnt/dzgw==
+  dependencies:
+    "@aws-sdk/client-dynamodb" "^3.0.0"
+    "@aws-sdk/lib-dynamodb" "^3.0.0"
+    "@aws-sdk/util-dynamodb" "^3.0.0"
+    "@schemeless/event-store-types" "^2.11.0"
+    debug "^4.2.0"
+    object-sizeof "^1.6.1"
+
+"@schemeless/event-store-adapter-typeorm@^2.11.0":
+  version "2.11.0"
+  resolved "https://registry.yarnpkg.com/@schemeless/event-store-adapter-typeorm/-/event-store-adapter-typeorm-2.11.0.tgz#0ce6313b1729f6a6060ca2600a91c240d30e9e18"
+  integrity sha512-aUQMeEIQcGScVTZREayFkwPzW9hmmd3Bup8jSMulEU0pxYZ6vSkz5o9HHO7sj/ThQtBJn4OIIeO5El2M9fvQsA==
+  dependencies:
+    "@schemeless/event-store-types" "^2.11.0"
+    debug "^4.2.0"
+    typeorm "^0.2.29"
+
+"@schemeless/event-store-types@^2.11.0":
+  version "2.11.0"
+  resolved "https://registry.yarnpkg.com/@schemeless/event-store-types/-/event-store-types-2.11.0.tgz#23d6e508f8f8742416cdf386fda22b20e3bd8e66"
+  integrity sha512-oYVGDKmBlGDtoyXq63wV8YcYSzTbuAZvrlu/OYf68p8W/A5PE8YmT0Z/JTbpjW2DCIAKBDCxSpfANc+cnWWFRQ==
+
 "@sinclair/typebox@^0.34.0":
   version "0.34.48"
   resolved "https://registry.yarnpkg.com/@sinclair/typebox/-/typebox-0.34.48.tgz#75b0ead87e59e1adbd6dccdc42bad4fddee73b59"

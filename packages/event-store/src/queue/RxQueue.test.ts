@@ -99,8 +99,8 @@ describe('Rx Queue', () => {
     rxQueue.push('2');
     rxQueue.push('3');
 
-    const delay = (ms) => new Promise((res) => setTimeout(res, ms));
-    await delay(20);
+    await rxQueue.drain();
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(arr).toEqual([null, 1, 2, 3, 2, 1, 0]);
   });

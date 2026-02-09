@@ -1,3 +1,5 @@
+// Intentional divergence from the Node package:
+// React Native runtime uses a forked queue implementation that removes Node-only store dependencies.
 import * as Queue from 'react-native-better-queue';
 import { ProcessFunction } from 'react-native-better-queue';
 import { BehaviorSubject, Observable, Subject } from 'rxjs';
@@ -54,7 +56,9 @@ export const createRxQueue = <TASK = any, RESULT = TASK>(
 
   const process$ = new Subject<{ task: TASK; done: Queue.ProcessFunctionCb<RESULT> }>();
   const callback: Queue.ProcessFunction<TASK, RESULT> = (task, done) => {
-    process$.next({ task: task as any, done }); // react-native-better-queue can pass batched tasks
+    // react-native-better-queue can pass TASK[] in batch mode.
+    // We intentionally keep batchSize=1 in this package, so TASK casting is safe for our runtime contract.
+    process$.next({ task: task as TASK, done });
   };
 
   const queueSizeInput$ = new Subject<number>();

@@ -75,4 +75,41 @@ describe('makeObserverQueue', () => {
     expect(processedSpy).not.toHaveBeenCalled();
     subscription.unsubscribe();
   });
+
+  it('continues processing when a fire-and-forget observer throws', async () => {
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const successApply = jest.fn().mockResolvedValue(undefined);
+    const observers: SuccessEventObserver<any>[] = [
+      {
+        filters: [{ domain: 'test', type: 'created' }],
+        priority: 1,
+        fireAndForget: true,
+        apply: jest.fn(async () => {
+          throw new Error('Boom');
+        }),
+      },
+      {
+        filters: [{ domain: 'test', type: 'created' }],
+        priority: 2,
+        apply: successApply,
+      },
+    ];
+
+    const observerQueue = makeObserverQueue(observers);
+    const processedSubscription = observerQueue.processed$.subscribe();
+    const drainedPromise = firstValueFrom(observerQueue.queueInstance.drained$);
+    const firstEvent = makeEvent();
+    const secondEvent = { ...makeEvent(), id: '2' };
+
+    observerQueue.push(firstEvent);
+    observerQueue.push(secondEvent);
+    await drainedPromise;
+
+    expect(successApply).toHaveBeenCalledTimes(2);
+    expect(successApply).toHaveBeenNthCalledWith(1, firstEvent);
+    expect(successApply).toHaveBeenNthCalledWith(2, secondEvent);
+    expect(consoleErrorSpy).toHaveBeenCalled();
+    processedSubscription.unsubscribe();
+    consoleErrorSpy.mockRestore();
+  });
 });
