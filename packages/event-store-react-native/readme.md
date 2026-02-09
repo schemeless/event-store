@@ -40,6 +40,8 @@ yarn workspace @schemeless/event-store-react-native compile
 yarn workspace @schemeless/event-store-react-native test
 ```
 
+For upgrading from `2.8.x`, see [`MIGRATION.md`](./MIGRATION.md).
+
 ### Alignment notes
 
 - Runtime behavior is aligned with `@schemeless/event-store`, except for queue internals that must use `react-native-better-queue`.
