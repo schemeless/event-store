@@ -124,4 +124,33 @@ describe('Rx Queue', () => {
 
     await rxQueue.destroy();
   });
+
+  it('drains to zero under async completion jitter', async () => {
+    const rxQueue = createRxQueue<number, number>('jitterTest');
+    const processed: number[] = [];
+    const queueSizes: Array<number | null> = [];
+
+    rxQueue.queueSize$.subscribe((size) => {
+      queueSizes.push(size);
+    });
+
+    rxQueue.process$.subscribe(({ task, done }) => {
+      processed.push(task);
+      const jitterMs = (task % 4) * 3;
+      setTimeout(() => done(null, task), jitterMs);
+    });
+
+    for (let i = 0; i < 12; i += 1) {
+      rxQueue.push(i);
+    }
+
+    await rxQueue.drain();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const numericSizes = queueSizes.filter((v): v is number => typeof v === 'number');
+    expect(numericSizes.length).toBeGreaterThan(0);
+    expect(numericSizes[numericSizes.length - 1]).toBe(0);
+    expect(numericSizes.every((v) => v >= 0)).toBe(true);
+    expect(processed).toEqual(Array.from({ length: 12 }, (_, idx) => idx));
+  });
 });
