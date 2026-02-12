@@ -1,320 +1,311 @@
 # Schemeless Event Store
 
-A batteries-included event sourcing toolkit for Node.js services. The monorepo provides the core event store runtime, strongly typed definitions for authoring event flows, and persistence adapters that let you capture and replay events through DynamoDB, Prisma-managed SQL databases, TypeORM-backed SQL databases, MikroORM, or in-memory stubs.
+[![npm version](https://img.shields.io/npm/v/@schemeless/event-store?label=npm%20%40schemeless%2Fevent-store)](https://www.npmjs.com/package/@schemeless/event-store)
+[![Publish Workflow](https://github.com/schemeless/event-store/actions/workflows/publish.yml/badge.svg)](https://github.com/schemeless/event-store/actions/workflows/publish.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 
-## Why Schemeless?
+A batteries-included event sourcing toolkit for Node.js services. This monorepo provides a runtime (`@schemeless/event-store`), shared types (`@schemeless/event-store-types`), and persistence adapters for SQL, DynamoDB, and mobile/offline use cases.
 
-Event sourced systems thrive on consistent lifecycle handling. This project focuses on:
+## Documentation language
 
-- **Event flows as the source of truth.** Each flow describes how a domain event is received, validated, persisted, and fanned out into consequent events or side effects ([EventStore.types.ts](packages/event-store-types/src/EventStore.types.ts#L26-L76), [makeValidateAndApply.ts](packages/event-store/src/eventLifeCycle/makeValidateAndApply.ts#L1-L13)).
-- **Deterministic processing pipelines.** The core runtime coordinates a single `mainQueue` for authoring events, a `sideEffectQueue` for asynchronous work with retry semantics, and observer queues for notifying subscribers ([makeEventStore.ts](packages/event-store/src/makeEventStore.ts#L17-L54), [makeMainQueue.ts](packages/event-store/src/queue/makeMainQueue.ts#L1-L36), [makeSideEffectQueue.ts](packages/event-store/src/queue/makeSideEffectQueue.ts#L1-L49)).
-- **Replayable state.** Any `IEventStoreRepo` implementation can stream historical events back through your flows so projections and observers stay consistent ([makeReplay.ts](packages/event-store/src/makeReplay.ts#L1-L36), [Repo.types.ts](packages/event-store-types/src/Repo.types.ts#L18-L26)).
+- Current primary documentation language: English
+- Multilingual direction: add Simplified Chinese (`README.zh-CN.md`) and localized docs under `docs/i18n/zh-CN/`
+- This README keeps section boundaries stable so language variants can stay aligned
 
-## Core Concepts
+## What this project gives you
 
-### Event flows
+- Event flows as first-class units (`receive`, `validate`, `apply`, `sideEffect`, `createConsequentEvents`)
+- Ordered processing with configurable queue concurrency
+- Replay support for rebuilding projections
+- Observer pipeline for post-commit reactions
+- Revert APIs (`canRevert`, `previewRevert`, `revert`) based on compensating events
+- Adapter-driven storage so runtime code is database-agnostic
 
-An event flow couples domain semantics with lifecycle hooks:
+## Is this a fit?
 
-- `receive` defines how raw input is transformed into one or more created events (including consequent events via `createConsequentEvents`) ([EventStore.types.ts](packages/event-store-types/src/EventStore.types.ts#L42-L74), [applyRootEventAndCollectSucceed.ts](packages/event-store/src/operators/applyRootEventAndCollectSucceed.ts#L1-L27)).
-- `validate`, `preApply`, and `apply` execute sequentially to guarantee each created event is consistent and side-effect free before it is committed ([validate.ts](packages/event-store/src/eventLifeCycle/validate.ts#L1-L13), [preApply.ts](packages/event-store/src/eventLifeCycle/preApply.ts#L1-L9), [apply.ts](packages/event-store/src/eventLifeCycle/apply.ts#L1-L8)).
-- `sideEffect` handles asynchronous integrations, automatically retrying according to `meta.sideEffectFailedRetryAllowed` and enqueueing additional root events if necessary ([EventStore.types.ts](packages/event-store/src/EventStore.types.ts#L31-L59), [makeSideEffectQueue.ts](packages/event-store/src/queue/makeSideEffectQueue.ts#L10-L43)).
-- `createConsequentEvents` lets a successful event spawn more work that re-enters the main queue with preserved causation metadata ([EventStore.types.ts](packages/event-store-types/src/EventStore.types.ts#L61-L74), [defaultEventCreator.ts](packages/event-store/src/operators/defaultEventCreator.ts#L1-L21)).
+Use this if:
 
-Every event passes through a default creator that assigns ULID-based identifiers, correlation IDs, and causation IDs so downstream consumers always have traceability ([defaultEventCreator.ts](packages/event-store/src/operators/defaultEventCreator.ts#L1-L21), [ulid.ts](packages/event-store/src/util/ulid.ts#L1-L8)).
+- You want event sourcing with explicit lifecycle hooks
+- You need deterministic replay and traceability (`correlationId`, `causationId`)
+- You want pluggable persistence adapters in a TypeScript-first codebase
 
-### Event structure and metadata
+Probably not a fit if:
 
-Every persisted event contains the following fields:
+- You only need a simple CRUD data layer
+- You do not need replay, event history, or causal chains
 
-| Field     | Type      | Description                                                             |
-| --------- | --------- | ----------------------------------------------------------------------- |
-| `id`      | `string`  | Unique event identifier (ULID format). Auto-generated by the framework. |
-| `domain`  | `string`  | Logical namespace for the event (e.g., `Account`, `Order`).             |
-| `type`    | `string`  | Specific event name within the domain (e.g., `placed`, `credited`).     |
-| `payload` | `object`  | The business data captured by the event.                                |
-| `meta`    | `object?` | Optional application-defined metadata.                                  |
-| `created` | `Date`    | Timestamp when the event was created.                                   |
+## Install
 
-#### Traceability metadata
+Install the runtime and types:
 
-The framework automatically manages several IDs to support debugging, auditing, and event chain traversal:
-
-| Field           | Set By                        | Description                                                                                                                                                                     |
-| --------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `correlationId` | Framework (or external input) | Identifies the **root event** of a causal chain. All events triggered by the same user command share this ID. Can be passed from external systems (e.g., HTTP request headers). |
-| `causationId`   | Framework only                | Points to the **immediate parent event** that caused this event. Framework-controlled; do not set manually.                                                                     |
-| `identifier`    | Developer                     | Represents the actor who triggered the event (e.g., user ID, service name).                                                                                                     |
-| `trackingId`    | Developer                     | External reference for tracing across systems (e.g., HTTP request ID).                                                                                                          |
-
-#### Event chain example
-
-Consider an order placement command that triggers a transfer, which in turn triggers debit and credit operations:
-
-```
-Order/Placed (Root Event)
-├── id: evt_111
-├── correlationId: evt_111   ← Points to itself (root)
-└── causationId: null        ← No parent
-
-    └──▶ Account/Transfer
-         ├── id: evt_222
-         ├── correlationId: evt_111   ← Same root
-         └── causationId: evt_111     ← Parent is Order/Placed
-
-              └──▶ Account/Debit + Account/Credit
-                   ├── id: evt_333, evt_444
-                   ├── correlationId: evt_111   ← Same root
-                   └── causationId: evt_222     ← Parent is Account/Transfer
+```bash
+yarn add @schemeless/event-store @schemeless/event-store-types
+# or: npm i @schemeless/event-store @schemeless/event-store-types
 ```
 
-This structure enables:
+Pick an adapter (example: TypeORM):
 
-- **Debugging**: Find all events related to a single user action via `correlationId`.
-- **Auditing**: Trace the exact sequence of events in a business transaction.
-- **Cascading operations**: Traverse the event tree via `causationId` for rollback or analysis.
+```bash
+yarn add @schemeless/event-store-adapter-typeorm typeorm reflect-metadata sqlite3
+# or: npm i @schemeless/event-store-adapter-typeorm typeorm reflect-metadata sqlite3
+```
 
-### Persistence adapters
+Available adapters in this monorepo:
 
-Adapters implement the `IEventStoreRepo` contract so the runtime can initialise storage, persist created events, paginate through history, and reset state during tests ([Repo.types.ts](packages/event-store-types/src/Repo.types.ts#L1-L26)). This repository includes:
+- `@schemeless/event-store-adapter-typeorm`
+- `@schemeless/event-store-adapter-typeorm-v3`
+- `@schemeless/event-store-adapter-prisma`
+- `@schemeless/event-store-adapter-mikroorm`
+- `@schemeless/event-store-adapter-dynamodb`
+- `@schemeless/event-store-adapter-watermelondb`
+- `@schemeless/event-store-adapter-null`
 
-- `@schemeless/event-store` – Core runtime that exposes `makeEventStore`, queues, and the `output$` observable stream for monitoring progress ([makeEventStore.ts](packages/event-store/src/makeEventStore.ts#L17-L54), [EventStore.types.ts](packages/event-store/src/EventStore.types.ts#L13-L28)).
-- `@schemeless/event-store-types` – Shared TypeScript definitions for events, event flows, observers, and repository interfaces ([EventStore.types.ts](packages/event-store-types/src/EventStore.types.ts#L1-L78), [Repo.types.ts](packages/event-store-types/src/Repo.types.ts#L1-L26)).
-- `@schemeless/event-store-adapter-typeorm` – SQL-backed repository that persists events through TypeORM, supports SQLite quirks, and resets schemas via migrations ([EventStore.repo.ts](packages/event-store-adapter-typeorm/src/EventStore.repo.ts#L1-L65)).
-- `@schemeless/event-store-adapter-prisma` – Prisma ORM adapter that consumes an existing `PrismaClient`, persists events inside interactive transactions, and streams ordered history without running schema migrations for you ([EventStore.repo.ts](packages/event-store-adapter-prisma/src/EventStore.repo.ts#L1-L64)).
-- `@schemeless/event-store-adapter-mikroorm` – MikroORM-based SQL adapter that wraps transactions, streams paginated history, and works across PostgreSQL, MySQL, SQLite, and other MikroORM drivers ([EventStore.repo.ts](packages/event-store-adapter-mikroorm/src/EventStore.repo.ts#L1-L97)).
-- `@schemeless/event-store-adapter-dynamodb` – DynamoDB + S3 repository that transparently offloads oversized payloads while keeping table size under AWS limits ([EventStore.dynamodb.repo.ts](packages/event-store-adapter-dynamodb/src/EventStore.dynamodb.repo.ts#L1-L97)).
-- `@schemeless/event-store-adapter-null` – No-op adapter useful for unit tests and dry runs where persistence is unnecessary ([EventStore.repo.ts](packages/event-store-adapter-null/src/EventStore.repo.ts#L1-L19)).
-- `@schemeless/event-store-adapter-watermelondb` – WatermelonDB-backed adapter tailored for React Native applications that need an offline-first event store backed by SQLite on device ([EventStore.repo.ts](packages/event-store-adapter-watermelondb/src/EventStore.repo.ts#L1-L156)).
-- `@schemeless/dynamodb-orm` – Lightweight helpers around the AWS Data Mapper used by the DynamoDB adapter ([index.ts](packages/dynamodb-orm/src/index.ts#L1-L3)).
-
-Feel free to add your own adapter by implementing the same interface.
-
-### Observability and replay
-
-The `output$` observable emits every success, validation error, cancellation, and side-effect result in order, enabling custom metrics or logging pipelines ([makeEventStore.ts](packages/event-store/src/makeEventStore.ts#L41-L69), [EventStore.types.ts](packages/event-store/src/EventStore.types.ts#L13-L28)). The queues only drain while `output$` has an active subscription—`makeEventStore` installs an internal subscriber so processing starts immediately, but if you ever tear it down you must attach your own subscriber right away or new commands will stall.
-
-For long-running services, `replay` rehydrates projections by running stored events back through each flow and its success observers ([makeReplay.ts](packages/event-store/src/makeReplay.ts#L1-L36)). Success observers process completed events in priority order using a dedicated queue so they can remain isolated from the main command pipeline ([makeReceive.ts](packages/event-store/src/queue/makeReceive.ts#L1-L27)).
-
-## Performance & Concurrency
-
-You can configure the concurrency level for the internal queues to optimize throughput. By default, all queues run sequentially (`concurrent: 1`) to guarantee strict ordering.
-
-### Configurable Concurrency
-
-Pass `EventStoreOptions` to `makeEventStore` to enable parallel processing:
+## Quick start (5 minutes)
 
 ```ts
-const eventStore = await makeEventStore(repo, {
-  mainQueueConcurrent: 5,       // Process 5 main events in parallel
-  sideEffectQueueConcurrent: 10, // Process 10 side effects in parallel
-  observerQueueConcurrent: 5,    // Process 5 observers in parallel
-})([userRegisteredFlow]);
-```
+import 'reflect-metadata';
+import { EventFlow, makeEventStore } from '@schemeless/event-store';
+import { EventStoreRepo as TypeOrmRepo } from '@schemeless/event-store-adapter-typeorm';
 
-### `EventStoreOptions` Reference
+type UserRegisteredPayload = {
+  userId: string;
+  email: string;
+};
 
-| property                    | type     | default | description                                                                                                      |
-| --------------------------- | -------- | ------- | ---------------------------------------------------------------------------------------------------------------- |
-| `mainQueueConcurrent`       | `number` | `1`     | Number of events processed in parallel by the main queue. Set > 1 for high throughput at the cost of strict ordering. |
-| `sideEffectQueueConcurrent` | `number` | `1`     | Number of side effects processed in parallel. Safe to increase as side effects are retryable and asynchronous.    |
-| `observerQueueConcurrent`   | `number` | `1`     | Number of observers processed in parallel. Safe to increase if observers are independent.                         |
-
-### Fire-and-Forget Observers
-
-For observers that perform non-critical, time-consuming tasks (like sending analytics or notifications) where you don't want to block the main event processing flow, use `fireAndForget: true`.
-
-```ts
-const analyticsObserver: SuccessEventObserver = {
-  filters: [{ domain: 'user', type: 'registered' }],
-  priority: 1,
-  fireAndForget: true, // Run asynchronously, do not wait
+const userRegisteredFlow: EventFlow<UserRegisteredPayload> = {
+  domain: 'user',
+  type: 'registered',
+  receive: (eventStore) => (eventInput) => eventStore.receive(userRegisteredFlow)(eventInput),
+  validate: (event) => {
+    if (!event.payload.email.includes('@')) {
+      throw new Error('invalid email');
+    }
+  },
   apply: async (event) => {
-      await sendAnalytics(event);
+    // Update projection/read model here
+    console.log('applied event', event.id, event.payload.userId);
   },
 };
+
+async function main() {
+  const repo = new TypeOrmRepo({
+    name: 'quick-start',
+    type: 'sqlite',
+    database: ':memory:',
+    dropSchema: true,
+    synchronize: true,
+    logging: false,
+  });
+
+  const store = await makeEventStore(repo)([userRegisteredFlow]);
+
+  const [created] = await store.receive(userRegisteredFlow)({
+    payload: { userId: 'u-1', email: 'user@example.com' },
+    identifier: 'u-1',
+  });
+
+  console.log('created event id:', created.id);
+  await store.shutdown();
+}
+
+main().catch(console.error);
 ```
 
-- **Non-blocking**: The main `receive()` call returns immediately after persistence, without waiting for this observer.
-- **Error Isolation**: If this observer throws an error, it is logged but does **not** fail the main event flow.
+## Adapter capability matrix
 
-## Monorepo layout
+| Adapter package | Backend | Replay (`getAllEvents`) | OCC (`expectedSequence`) | Revert helpers (`getEventById` + `findByCausationId`) |
+| --- | --- | --- | --- | --- |
+| `@schemeless/event-store-adapter-typeorm` | SQL via TypeORM | Yes | Yes | Yes |
+| `@schemeless/event-store-adapter-typeorm-v3` | SQL via TypeORM v3 flavor | Yes | No | Yes |
+| `@schemeless/event-store-adapter-prisma` | SQL via Prisma | Yes | No | Yes |
+| `@schemeless/event-store-adapter-mikroorm` | SQL via MikroORM | Yes | No | Yes |
+| `@schemeless/event-store-adapter-dynamodb` | DynamoDB (+ optional S3 payload offload) | Yes | Yes | Yes |
+| `@schemeless/event-store-adapter-watermelondb` | WatermelonDB / React Native SQLite | Yes | No | Yes |
+| `@schemeless/event-store-adapter-null` | No-op stub | No | No | Partial (stubbed) |
 
-```
-packages/
-  event-store/                 Core runtime implementation
-  event-store-react-native/    React Native build of the core runtime
-  event-store-types/           Shared type definitions
-  event-store-adapter-*/       Persistence implementations (Prisma, TypeORM, MikroORM, DynamoDB, WatermelonDB, null)
-  dynamodb-orm/                AWS Data Mapper helpers
-examples/
-  example-domain-pacakges/     Sample event flows and domains
-  example-service/             Demo service wiring the store together
-```
+Note: `getAggregate` requires `repo.getStreamEvents(...)`. Built-in adapters currently do not implement `getStreamEvents`, so aggregate replay capability is unavailable by default.
 
-Each package has its own `package.json` with scripts such as `test`, `compile`, and `prepublish` so you can iterate in isolation.
+## Core workflows
 
-## Getting started
+### 1) Receive events
 
-1. **Install dependencies**
+`store.receive(flow)(input)` is the recommended ingestion path. It generates event identifiers/timestamps, handles lifecycle hooks, persists created events, and fans out side effects.
 
-   ```bash
-   yarn install
-   ```
+### 2) Replay history
 
-   The workspace uses Yarn classic (v1) with Lerna for orchestration.
-
-2. **Bootstrap the packages**
-
-   ```bash
-   yarn bootstrap
-   ```
-
-   This installs dependencies and runs `prepublish` in each workspace to build the TypeScript sources ahead of local development.
-
-3. **Run the test suite**
-
-   ```bash
-   yarn test
-   ```
-
-   Use `yarn lerna-test` to execute package-specific test scripts, or target a single workspace with `yarn workspace <package-name> test`.
-
-4. **Prepare distribution builds**
-
-   ```bash
-   yarn prepare
-   ```
-
-   This runs each package's `prepublish` script, compiling TypeScript into the `dist` directories.
-
-## Authoring a new event flow
-
-1. **Model the domain event** by creating an `EventFlow` object that at least defines `domain`, `type`, and a `receive` handler returning the created event(s).
-2. **Implement lifecycle hooks** such as `validate` and `apply` to enforce invariants and update projections.
-3. **Register the flow** when building the store:
-
-   ```ts
-   import { makeEventStore } from '@schemeless/event-store';
-   import { EventStoreRepo as TypeOrmRepo } from '@schemeless/event-store-adapter-typeorm';
-
-   const eventFlows = [userRegisteredFlow, userEmailVerifiedFlow];
-   const repo = new TypeOrmRepo({ type: 'sqlite', database: ':memory:' });
-   const buildEventStore = makeEventStore(repo);
-   const eventStore = await buildEventStore(eventFlows);
-
-   const [created] = await eventStore.receive(userRegisteredFlow)({
-     payload: { id: '123', email: 'user@example.com' },
-   });
-   ```
-
-4. **React to completed events** by registering success observers when initialising the store. Observers receive events after they are persisted, enabling notification systems or read model updates without slowing down the main queue.
-
-5. **Replay history** via `await eventStore.replay()` whenever you need to rebuild projections from storage.
-
-### `EventFlow` interface reference
-
-An `EventFlow` models the complete lifecycle of a domain event. Each property on the interface is optional unless noted otherwise and helps the event store decide how to process the event.
-
-| Field                               | Type                                                                                 | Required | Description                                                                                                                                                                                    |
-| ----------------------------------- | ------------------------------------------------------------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `domain`                            | `string`                                                                             | ✅       | Logical namespace for the event (for example `Account` or `Order`). Used together with `type` to build a unique identifier.                                                                    |
-| `type`                              | `string`                                                                             | ✅       | Specific event name within the domain such as `created` or `placed`.                                                                                                                           |
-| `description`                       | `string`                                                                             |          | Human readable description of what the event represents. Useful for documentation and tooling.                                                                                                 |
-| `meta.sideEffectFailedRetryAllowed` | `number`                                                                             |          | Number of times the side-effect queue may retry before marking the event as failed. Defaults to the queue's standard retry behaviour.                                                          |
-| `eventType`                         | `CreatedEvent<Payload>`                                                              |          | Type helper exposing the fully created event shape. Typically inferred automatically but can be supplied to satisfy TypeScript consumers.                                                      |
-| `payloadType`                       | `PartialPayload \| Payload`                                                          |          | Helper that narrows the expected payload type. It is commonly set to the same value as `samplePayload` to improve IDE hints.                                                                   |
-| `samplePayload`                     | `PartialPayload \| Payload`                                                          |          | Representative payload example that documents the expected shape and can be re-used in tests.                                                                                                  |
-| `receive`                           | `(eventStore) => (eventInputArgs) => Promise<[CreatedEvent<Payload>, ...]>`          | ✅       | Factory returning the handler that receives incoming event inputs and creates one or more events. This is where validation of raw input and orchestration of consequent events usually occurs. |
-| `validate`                          | `(event) => Promise<Error \| void> \| Error \| void`                                 |          | Performs domain validation on the stored event before it is applied. Returning or throwing an error prevents the event from proceeding.                                                        |
-| `preApply`                          | `(event) => Promise<CreatedEvent<Payload> \| void> \| CreatedEvent<Payload> \| void` |          | Allows reshaping or enriching the event payload prior to persistence. Returning a new event replaces the original one.                                                                         |
-| `apply`                             | `(event) => Promise<void> \| void`                                                   |          | Updates read models or projections synchronously with event persistence.                                                                                                                       |
-| `sideEffect`                        | `(event) => Promise<void \| BaseEvent<any>[]> \| void \| BaseEvent<any>[]`           |          | Runs after `apply`. Use this to trigger asynchronous workflows (such as sending emails). Returning additional base events queues them for processing.                                          |
-| `cancelApply`                       | `(event) => Promise<void> \| void`                                                   |          | Optional compensating action executed when an event is cancelled during cleanup.                                                                                                               |
-| `createConsequentEvents`            | `(causalEvent) => Promise<BaseEvent<any>[]> \| BaseEvent<any>[]`                     |          | Generates follow-up events that should be enqueued as a direct consequence of the causal event.                                                                                                |
-| `compensate`                        | `(event) => BaseEvent<any> | BaseEvent<any>[]`                                      |          | Returns compensating event(s) to reverse the effect of this event. Required for revert operations.                                                                                             |
-
-## Optimistic Concurrency Control
-
-The event store supports optimistic concurrency control (OCC) to prevent conflicting writes to the same event stream. This is especially important when multiple processes or requests attempt to append events concurrently.
-
-### Using `expectedSequence`
-
-When storing events, you can specify the expected current sequence number of the stream. If another process has modified the stream since you read it, the write will fail with a `ConcurrencyError`.
+Use replay to rebuild projections:
 
 ```ts
-// Read current state
-const currentSeq = await repo.getStreamSequence('Account', 'user-123');
+await store.replay();
+```
 
-// Attempt to append with version check
+You can also resume replay from an event id checkpoint:
+
+```ts
+await store.replay('last-processed-event-id');
+```
+
+### 3) Observe successful events
+
+Register success observers when constructing the store:
+
+```ts
+const observers = [
+  {
+    filters: [{ domain: 'user', type: 'registered' }],
+    priority: 1,
+    fireAndForget: true,
+    apply: async (event) => {
+      // async notification, analytics, etc.
+    },
+  },
+];
+
+const store = await makeEventStore(repo)([userRegisteredFlow], observers);
+```
+
+Behavior notes:
+
+- `fireAndForget: true` does not block the main receive path
+- fire-and-forget observer failures are isolated from main event success/failure
+
+### 3.5) Monitor lifecycle events with `output$`
+
+```ts
+const sub = store.output$.subscribe((eventOutput) => {
+  console.log(eventOutput.state, eventOutput.event.id);
+});
+
+// later
+sub.unsubscribe();
+```
+
+### 4) Revert event trees
+
+```ts
+const check = await store.canRevert(rootEventId);
+if (check.canRevert) {
+  const preview = await store.previewRevert(rootEventId);
+  const result = await store.revert(rootEventId);
+}
+```
+
+Only root events can be reverted. Every event in the causal tree must define `compensate`.
+
+### 5) Optimistic concurrency control (OCC)
+
+If you use repository-level writes directly, pass `expectedSequence`:
+
+```ts
+import { ConcurrencyError, type CreatedEvent } from '@schemeless/event-store-types';
+
+const expectedSequence = await repo.getStreamSequence('account', 'user-123');
+
+const nextEvent: CreatedEvent<{ amount: number }> = {
+  id: 'evt-account-user-123-0002',
+  domain: 'account',
+  type: 'debited',
+  identifier: 'user-123',
+  payload: { amount: 100 },
+  created: new Date(),
+};
+
 try {
-  await repo.storeEvents([
-    { domain: 'Account', type: 'debited', payload: { amount: 100 }, identifier: 'user-123' }
-  ], { expectedSequence: currentSeq });
+  await repo.storeEvents([nextEvent], { expectedSequence });
 } catch (error) {
   if (error instanceof ConcurrencyError) {
-    console.log(`Expected ${error.expected}, but found ${error.found}`);
-    // Handle conflict: retry, merge, or abort
+    console.log(`Expected ${error.expectedSequence}, but found ${error.actualSequence}`);
   }
 }
 ```
 
-### Batching and Multi-Stream Writes
+Important: direct `repo.storeEvents(...)` expects `CreatedEvent[]` (including `id` and `created`). Most applications should prefer `store.receive(...)`, which creates those fields for you.
 
-The adapters handle large batches automatically:
+## Performance and concurrency
 
-- **DynamoDB**: Batches larger than 25 items are recursively chunked. S3 offloading happens once before chunking to avoid duplicate uploads.
-- **TypeORM/Prisma/MikroORM**: All events in a batch are stored within a single transaction.
-
-**Multi-Stream Batching Behavior**
-
-When batching events across multiple streams with `expectedSequence`:
+By default, queues are sequential (`1`) for strict ordering. You can tune queue concurrency:
 
 ```ts
-await repo.storeEvents([
-  { domain: 'Account', identifier: 'user-1', ... },
-  { domain: 'Account', identifier: 'user-2', ... },
-  { domain: 'Order', identifier: 'order-123', ... }
-], { expectedSequence: 5 });
+const store = await makeEventStore(repo, {
+  mainQueueConcurrent: 5,
+  sideEffectQueueConcurrent: 10,
+  observerQueueConcurrent: 5,
+})(eventFlows, observers);
 ```
 
-> **Note**: The `expectedSequence` applies to **each stream independently**. For safer multi-stream batches, omit `expectedSequence` and rely on stream uniqueness constraints, or handle version checks per stream before batching.
+Guidance:
 
-### Error Handling
+- Increase `sideEffectQueueConcurrent` first for I/O-heavy work
+- Increase `observerQueueConcurrent` when observers are independent
+- Increase `mainQueueConcurrent` only if you understand ordering tradeoffs
 
-All adapters throw `ConcurrencyError` when a version conflict is detected:
+## Monorepo layout
 
-- **TypeORM**: Detects `SQLITE_CONSTRAINT`, PostgreSQL `23505`, or MySQL `ER_DUP_ENTRY` unique violations and re-queries the actual sequence.
-- **DynamoDB**: Uses conditional writes with `attribute_not_exists` or version matching.
-- **Prisma/MikroORM**: Rely on database unique constraints and translate exceptions.
-
-### Reverting events
-
-The event store provides APIs to undo an event and all its descendants:
-
-```ts
-// Check if the event tree can be reverted
-const check = await eventStore.canRevert(eventId);
-
-// Preview what would be affected
-const preview = await eventStore.previewRevert(eventId);
-
-// Execute the revert (generates compensating events)
-const result = await eventStore.revert(eventId);
+```txt
+packages/
+  event-store/                 Core runtime
+  event-store-react-native/    React Native build of the runtime
+  event-store-types/           Shared types
+  event-store-adapter-*/       Persistence adapters
+examples/
+  example-domain-pacakges/     Sample domains and flows
+  example-service/             Example service integration
 ```
 
-Only root events (events without a `causationId`) can be reverted. All events in the tree must define a `compensate` hook or the operation fails.
+## Local development
 
-## Examples and local tooling
+```bash
+yarn install
+yarn bootstrap
+yarn test
+yarn prepare
+```
 
-The [`examples/`](examples) directory showcases reference flows and a sample service that wires adapters together. Use these as a starting point for your own domains or for integration testing.
+Workspace notes:
+
+- Uses Yarn classic (`yarn@1.22.22`) and Lerna
+- `yarn bootstrap` runs workspace `prepublish` builds
+- `yarn lerna-test` runs package-level test scripts
+
+## Try examples quickly
+
+Fastest low-friction path:
+
+```bash
+yarn workspace @schemeless/example-domain test
+```
+
+Full service example (requires MySQL + Redis and env setup):
+
+```bash
+cd examples/example-service
+npm run dev:db:sync
+npm run start
+```
+
+## Documentation map
+
+- Architecture: [`docs/architecture.md`](docs/architecture.md)
+- EventFlow reference: [`docs/event-flow-reference.md`](docs/event-flow-reference.md)
+- OCC and concurrency: [`docs/occ-and-concurrency.md`](docs/occ-and-concurrency.md)
+- Revert guide: [`docs/revert.md`](docs/revert.md)
+- Adapter selection guide: [`docs/adapters.md`](docs/adapters.md)
+- Runtime deep dive: [`packages/event-store/readme.md`](packages/event-store/readme.md)
+- Concurrency migration notes: [`packages/event-store/MIGRATION.md`](packages/event-store/MIGRATION.md)
+- OCC migration notes: [`packages/event-store/OCC_MIGRATION.md`](packages/event-store/OCC_MIGRATION.md)
+- Schema versioning/upcasting: [`packages/event-store/SCHEMA_VERSIONING.md`](packages/event-store/SCHEMA_VERSIONING.md)
+- TypeORM adapter doc: [`packages/event-store-adapter-typeorm/readme.md`](packages/event-store-adapter-typeorm/readme.md)
+- Prisma adapter doc: [`packages/event-store-adapter-prisma/readme.md`](packages/event-store-adapter-prisma/readme.md)
+- MikroORM adapter doc: [`packages/event-store-adapter-mikroorm/readme.md`](packages/event-store-adapter-mikroorm/readme.md)
+- DynamoDB adapter doc: [`packages/event-store-adapter-dynamodb/readme.md`](packages/event-store-adapter-dynamodb/readme.md)
+- WatermelonDB adapter doc: [`packages/event-store-adapter-watermelondb/readme.md`](packages/event-store-adapter-watermelondb/readme.md)
 
 ## Contributing
 
-- Follow the existing TypeScript style (the project relies on Prettier defaults) and avoid wrapping imports with `try/catch`.
-- Prefer Yarn commands over npm equivalents.
-- Run `yarn test` before opening a pull request, and ensure documentation stays up to date when you add new packages or commands.
+- Prefer Yarn commands over npm equivalents for repo development
+- Keep docs in sync when changing public API or adapter behavior
+- Run tests before opening a pull request
 
 ## License
 
-This repository is released under the MIT license. See the individual `package.json` files for author details and versioning.
+MIT. See [`LICENSE`](./LICENSE).
