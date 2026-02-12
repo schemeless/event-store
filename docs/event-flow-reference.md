@@ -32,7 +32,7 @@
 | --- | --- |
 | `receive` | `(eventStore) => (eventInputArgs) => Promise<[CreatedEvent<Payload>, ...CreatedEvent<any>[]]>` |
 | `validate` | `(event) => Promise<Error \\| void> \\| Error \\| void` |
-| `preApply` | `(event) => Promise<CreatedEvent<Payload> \\| void> \\| CreatedEvent<Payload> \\| void` |
+| `preApply` | `(event: CreatedEvent<PartialPayload>) => Promise<CreatedEvent<Payload> \\| void> \\| CreatedEvent<Payload> \\| void` |
 | `apply` | `(event) => Promise<void> \\| void` |
 | `sideEffect` | `(event) => Promise<void \\| BaseEvent<any>[]> \\| void \\| BaseEvent<any>[]` |
 | `cancelApply` | `(event) => Promise<void> \\| void` |

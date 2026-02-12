@@ -60,7 +60,7 @@ Framework-managed tracing fields:
 Developer-supplied tracing/context fields:
 
 - `identifier`: actor/stream identifier
-- `trackingId`: external request trace id
+- External trace ids (for example `trackingId`) should be stored in `meta`
 
 The key rule is: do not manually author `causationId` in normal flow input. It is derived by the framework when consequent/side-effect-generated events are created.
 
@@ -96,11 +96,10 @@ Use replay to rebuild read models/projections after deployment or migration.
 
 `EventStore.output$` emits lifecycle outcomes from main processing and side effects.
 
-State families:
+State families emitted by `output$`:
 
 - Event states: `Event:success`, `Event:invalid`, `Event:canceled`, `Event:reverted`, `Event:revertFailed`
 - Side-effect states: `SideEffects:done`, `SideEffects:retry`, `SideEffects:fail`
-- Observer state: `Observer:success`
 
 Use it for:
 
