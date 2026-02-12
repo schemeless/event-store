@@ -4,6 +4,8 @@
 [![Publish Workflow](https://github.com/schemeless/event-store/actions/workflows/publish.yml/badge.svg)](https://github.com/schemeless/event-store/actions/workflows/publish.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 
+[简体中文](./README.zh-CN.md)
+
 > **Store what happened, not just what is.**
 
 A TypeScript-first event sourcing toolkit with pluggable storage, replay, and revert built in. This monorepo provides a runtime (`@schemeless/event-store`), shared types (`@schemeless/event-store-types`), and persistence adapters for SQL, DynamoDB, and mobile/offline use cases.
