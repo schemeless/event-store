@@ -6,365 +6,285 @@
 
 [English](./readme.md)
 
+> **记录发生了什么，而不仅仅是现在的样子。**
 > **Store what happened, not just what is.**
 
-这是一个专为 Node.js 服务打造的、开箱即用的事件溯源（Event Sourcing）工具包。作为一个 Monorepo，它包含核心运行时 (`@schemeless/event-store`)、共享类型定义 (`@schemeless/event-store-types`)，以及适配 SQL、DynamoDB 和移动端/离线场景的持久化适配器。
+这是一个专为 Node.js 此打造的 Event Sourcing（事件溯源）工具箱，功能完备（batteries-included）。它采用 Monorepo 结构，提供了核心运行时 (`@schemeless/event-store`)、共享类型库 (`@schemeless/event-store-types`)，以及一系列开箱即用的持久化适配器（支持 SQL、DynamoDB 以及移动端/离线场景）。
 
 ## 项目状态 Status
 
-✅ **生产环境就绪 (Production-ready)**。本库已在生产系统中实际应用。核心 API 已经稳定，尽管可能会有一些微小的功能迭代。
+✅ **生产环境就绪**。本库已在生产系统中稳定运行。核心 API 已定型，未来仅会有微小的功能迭代。
 
-## 功能特性 Features
+## 核心特性 Features
 
-- **声明式事件生命周期** — 在一处统一定义验证逻辑、状态转换和副作用
-- **有序事件处理** — 默认保持严格顺序处理，可针对性能调优并发度
-- **基于历史回放重建** — 通过不可变的事件日志重建你的读模型（Read Models/Projections）
-- **观察者流水线** — 通过异步处理器（即发即弃或阻塞模式）响应已提交的事件
-- **回滚支持 (Revert)** — 基于补偿事件机制撤销整个因果相关的事件树 (`canRevert`, `previewRevert`, `revert`)
-- **可插拔存储** — 想换数据库（SQL, DynamoDB, SQLite）？哪怕我不改业务逻辑也能无缝切换
+- **声明式定义** — 在一处集中定义事件的校验逻辑、状态变更和副作用，不再散落在各处。
+- **严格有序** — 默认保证事件处理的严格顺序，也支持针对性能需求调整并发度。
+- **历史回放 (Replay)** — 通过重放不可变的事件日志，随时重建或修复你的读模型（Projections）。
+- **观察者模式** — 支持异步的观察者流水线（Pipeline），无论是从旁路触发通知（fire-and-forget）还是阻塞式处理。
+- **内置回滚 (Revert)** — 即使是事件溯源也能“后悔”。通过补偿事件机制，支持撤销整个因果相关的事件树。
+- **存储无关** — 业务逻辑与存储解耦。想从 SQL 迁移到 DynamoDB？业务代码一行都不用改。
 
-## 核心概念：思考事件 Core Concepts
+## 核心概念：像“事件”一样思考
 
-大多数应用只通过 CRUD（增删改查）持久化**最新的状态**。而事件溯源持久化的是**造成该状态的一系列事实（事件）**。
+绝大多数应用还在用 **CRUD**（增删改查）的方式，只保存数据的**最终状态**。
+而 **Event Sourcing** 选择保存**导致状态变更的一系列事实（事件）**。
 
-### 举个例子
+### 举个通俗的例子
 
-想象一下用户的**钱包余额**。
+想象一下你的**钱包余额**。
 
 **在传统（CRUD）系统中：**
-你只存一个数字。如果用户存了 100 块，又取了 40 块，数据库里就只剩个 60。你不知道他是怎么变成 60 的，也不知道这是一笔操作还是十笔操作的结果。
+数据库里只存一个数字。如果用户先存了 100 块，又取了 40 块，数据库里就变成 `60`。
+至于这 `60` 块是怎么来的？是一笔存还是十笔存？除非你去查另一张流水表，否则这张表里**只有结果，没有过程**。
+
 ```json
 // 数据库里的当前状态
 { "userId": "u-1", "balance": 60 }
 ```
 
-**在事件溯源（Event Sourced）系统中：**
-你存的是交易流水的历史（事件）。"当前余额" 是通过回放这些事实计算出来的。
+**在 Event Sourcing 系统中：**
+我们不直接存“余额”，而是存“交易流水”。所谓的“当前余额”，无非是把所有流水加减一遍算出来的结果。
+
 ```text
-1. AccountOpened { date: "2023-01-01" } (账户已开通)
-2. FundsDeposited { amount: 100 }       (资金已存入)
-3. FundsWithdrawn { amount: 40 }        (资金已取出)
+1. AccountOpened { date: "2023-01-01" } // 账户开通
+2. FundsDeposited { amount: 100 }       // 存入 100
+3. FundsWithdrawn { amount: 40 }        // 取出 40
 ```
-现在你不仅确切地知道为什么余额是 60，还能回答像"上周二余额是多少？"这样的问题——只要回放到那一天就行。
-在这个库里，这对应着：通过 `receive(...)` 接收指令，在 `apply` 中进行状态转换，并通过 `replay()` 重建历史。
+
+这样做的好处是，你不仅知道现在有 60 块，还能回答：“上周二下午 3 点的时候余额是多少？”——只需要把事件回放到那个时间点即可。
+
+在这个库中：
+- `receive(...)`: 接收用户的操作指令。
+- `apply`: 定义事件如何改变状态（比如余额 +100）。
+- `replay()`: 当你需要重建数据时，系统自动把事件重跑一遍。
 
 ### 为什么要这么做？
 
-| 特性 | 传统 CRUD | 事件溯源 Event Sourcing |
+| 特性 | 传统 CRUD | Event Sourcing |
 | :--- | :--- | :--- |
-| **真相来源 (Source of Truth)** | 当前的一行数据 | 不可变的事件日志 |
-| **审计追踪 (Audit Trail)** | 需要手动维护额外的历史表 | 内置完整的变更历史（强可追溯性） |
-| **调试能力 (Debugging)** | 很难复现复杂状态 | **时间旅行**：可以回放到过去任意时间点 |
-| **业务意图 (Business Intent)** | 信息丢失（只是 status 字段变成了 closed） | 意图明确（是 `AccountClosed` 还是 `AccountSuspended`）|
+| **真相来源 (Source of Truth)** | 表里当前的那行数据 | 不可篡改的事件日志 |
+| **审计 (Audit Trail)** | 需要额外写代码记录日志，容易漏 | **天生自带**完整历史，强可追溯 |
+| **调试 (Debugging)** | 很难复现复杂的中间状态 | **时间旅行**：随意回放到过去任意时刻 |
+| **业务意图** | 意图丢失（比如状态只变成了 `closed`） | 意图明确（是 `AccountClosed` 还是 `AccountSuspended`？）|
 
-本库提供了相应的基础设施来让这个模式变得简单：接收事件、校验业务规则，并持久化到存储（SQL, DynamoDB 等）。
+本库就是为了让这种模式落地变得简单：它帮你处理接收事件、校验规则，并把它们安全地存到数据库里（SQL, DynamoDB 等）。
 
-## 适合我吗？Is this a fit?
+## 适合我吗？
 
-请使用如果：
+**如果你需要：**
 
-- 你想要带有明确生命周期钩子的事件溯源
-- 你需要确定性的重放和可追溯性 (`correlationId`, `causationId`)
-- 你想要在 TypeScript 优先的代码库中使用可插拔的持久化适配器
+- 带有明确生命周期（校验 -> 变更 -> 副作用）的事件流
+- 确定性的重放机制，以及完整的可追溯性（自带 `correlationId` 和 `causationId`）
+- TypeScript 优先，且希望存储层可以灵活插拔
 
-可能不适合如果：
+**那么它非常适合你。**
 
-- 你只需要一个简单的 CRUD 增删改查数据层
-- 你不需要重放、事件历史或因果链
+**如果你：**
+
+- 只需要一个简单的 CRUD 增删改查
+- 完全不需要回放历史、审计日志或因果追踪
+
+**那可能不太适合，杀鸡焉用牛刀。**
 
 ## 前置要求 Prerequisites
 
 - **Node.js** 14+ (推荐 TypeScript 4.1+)
-- **Database**: 根据技术栈选择适配器：
-  - SQL: TypeORM, Prisma, 或 MikroORM
+- **数据库**: 任选其一：
+  - SQL系: TypeORM, Prisma, 或 MikroORM
   - NoSQL: DynamoDB
   - 移动端/离线: WatermelonDB (React Native)
-  - 测试/桩: Null adapter
+  - 测试用: Null adapter
 
 ## 安装 Install
 
-安装运行时和类型定义：
+安装核心库：
 
 ```bash
 yarn add @schemeless/event-store @schemeless/event-store-types
-# or: npm i @schemeless/event-store @schemeless/event-store-types
 ```
 
 选择一个适配器（以 TypeORM 为例）：
 
 ```bash
 yarn add @schemeless/event-store-adapter-typeorm typeorm reflect-metadata sqlite3
-# or: npm i @schemeless/event-store-adapter-typeorm typeorm reflect-metadata sqlite3
 ```
 
-本 Monorepo 中可用的适配器：
-
-- `@schemeless/event-store-adapter-typeorm`
-- `@schemeless/event-store-adapter-typeorm-v3`
-- `@schemeless/event-store-adapter-prisma`
-- `@schemeless/event-store-adapter-mikroorm`
-- `@schemeless/event-store-adapter-dynamodb`
-- `@schemeless/event-store-adapter-watermelondb`
-- `@schemeless/event-store-adapter-null`
-
-## 快速开始 Quick start (5 分钟)
+## 快速上手 Quick start (5 分钟)
 
 ```ts
 import 'reflect-metadata';
 import { EventFlow, makeEventStore } from '@schemeless/event-store';
 import { EventStoreRepo as TypeOrmRepo } from '@schemeless/event-store-adapter-typeorm';
 
+// 1. 定义事件载荷
 type UserRegisteredPayload = {
   userId: string;
   email: string;
 };
 
+// 2. 定义事件流
 const userRegisteredFlow: EventFlow<UserRegisteredPayload> = {
   domain: 'user',
   type: 'registered',
+  
+  // 接收逻辑
   receive: (eventStore) => (eventInput) => eventStore.receive(userRegisteredFlow)(eventInput),
+  
+  // 校验逻辑
   validate: (event) => {
     if (!event.payload.email.includes('@')) {
       throw new Error('invalid email');
     }
   },
+  
+  // 状态变更 / 投影更新
   apply: async (event) => {
-    // 在这里更新投影/读模型
-    console.log('applied event', event.id, event.payload.userId);
+    console.log('应用事件:', event.id, event.payload.userId);
   },
 };
 
 async function main() {
+  // 3. 初始化存储适配器
   const repo = new TypeOrmRepo({
     name: 'quick-start',
     type: 'sqlite',
-    database: ':memory:',
+    database: ':memory:', // 使用内存数据库演示
     dropSchema: true,
     synchronize: true,
     logging: false,
   });
 
+  // 4. 创建 EventStore 实例
   const store = await makeEventStore(repo)([userRegisteredFlow]);
 
+  // 5. 触发事件
   const [created] = await store.receive(userRegisteredFlow)({
     payload: { userId: 'u-1', email: 'user@example.com' },
     identifier: 'u-1',
   });
 
-  console.log('created event id:', created.id);
+  console.log('事件创建成功 ID:', created.id);
   await store.shutdown();
 }
 
 main().catch(console.error);
 ```
 
-## 适配器能力矩阵 Adapter capability matrix
+## 适配器能力矩阵 Capability Matrix
 
-| 适配器包名 | 后端 | 支持重放 (`getAllEvents`) | 支持乐观锁 OCC (`expectedSequence`) | 回滚辅助 (`getEventById` + `findByCausationId`) |
+| 适配器 | 后端 | 支持重放 | 支持乐观锁 (OCC) | 支持回滚辅助 |
 | --- | --- | --- | --- | --- |
-| `@schemeless/event-store-adapter-typeorm` | SQL via TypeORM | Yes | Yes | Yes |
-| `@schemeless/event-store-adapter-typeorm-v3` | SQL via TypeORM v3 flavor | Yes | No | Yes |
-| `@schemeless/event-store-adapter-prisma` | SQL via Prisma | Yes | No | Yes |
-| `@schemeless/event-store-adapter-mikroorm` | SQL via MikroORM | Yes | No | Yes |
-| `@schemeless/event-store-adapter-dynamodb` | DynamoDB (+ 可选 S3 载荷卸载) | Yes | Yes | Yes |
-| `@schemeless/event-store-adapter-watermelondb` | WatermelonDB / React Native SQLite | Yes | No | Yes |
-| `@schemeless/event-store-adapter-null` | No-op stub | No | No | Partial (stubbed) |
+| `adapter-typeorm` | SQL (TypeORM) | ✅ | ✅ | ✅ |
+| `adapter-typeorm-v3` | SQL (TypeORM v3) | ✅ | ❌ | ✅ |
+| `adapter-prisma` | SQL (Prisma) | ✅ | ❌ | ✅ |
+| `adapter-mikroorm` | SQL (MikroORM) | ✅ | ❌ | ✅ |
+| `adapter-dynamodb` | DynamoDB | ✅ | ✅ | ✅ |
+| `adapter-watermelondb` | WatermelonDB / RN SQLite | ✅ | ❌ | ✅ |
+| `adapter-null` | No-op (测试桩) | ❌ | ❌ | 部分 |
 
-注意：`getAggregate` 需要 `repo.getStreamEvents(...)` 支持。内置适配器目前尚未实现 `getStreamEvents`，因此聚合根重放能力默认不可用。
+> 注意：内置适配器目前主要支持全局重放。聚合根级别的重放 (`getStreamEvents`) 暂未默认实现。
 
 ## 核心工作流 Core workflows
 
-### 1) 接收事件 Receive events
+### 1) 接收事件 (Receive)
 
-`store.receive(flow)(input)` 是推荐的数据摄入路径。它会自动生成事件 ID 和时间戳、处理生命周期钩子、持久化创建的事件，并分发副作用。
+`store.receive(flow)(input)` 是标准的入口。它负责：
+1. 生成事件 ID 和时间戳
+2. 执行 `validate`
+3. 持久化事件
+4. 执行 `apply` 和 `sideEffect`
 
-### 2) 重放历史 Replay history
+### 2) 重放历史 (Replay)
 
-使用重放来重建投影（projections）：
+当你的业务逻辑变了，想重新计算数据时：
 
 ```ts
 await store.replay();
 ```
 
-也可以从某个事件 ID 检查点继续重放：
+或者从某个断点继续：
 
 ```ts
 await store.replay('last-processed-event-id');
 ```
 
-### 3) 观察成功的事件 Observe successful events
+### 3) 观察者 (Observer)
 
-在构建 store 时注册成功观察者：
+有些逻辑不需要在事件发生的当场同步执行（比如发邮件、数据分析），可以用观察者：
 
 ```ts
 const observers = [
   {
     filters: [{ domain: 'user', type: 'registered' }],
     priority: 1,
-    fireAndForget: true,
+    fireAndForget: true, // true = 异步执行，不阻塞主流程
     apply: async (event) => {
-      // 异步通知、数据分析等
+      // 发邮件...
     },
   },
 ];
-
-const store = await makeEventStore(repo)([userRegisteredFlow], observers);
 ```
 
-行为说明：
+### 4) 监控生命周期
 
-- `fireAndForget: true` 不会阻塞主接收流程
-- 即发即弃（fire-and-forget）观察者的失败与主事件的成功/失败是隔离的
-
-### 4) 监控生命周期事件 Monitor lifecycle events
-
-使用 `output$` 可观察流：
+通过 RxJS 流监控内部发生的一切：
 
 ```ts
-const sub = store.output$.subscribe((eventOutput) => {
-  console.log(eventOutput.state, eventOutput.event.id);
+store.output$.subscribe((eventOutput) => {
+  console.log('当前阶段:', eventOutput.state, '事件ID:', eventOutput.event.id);
 });
-
-// 后面记得取消订阅
-sub.unsubscribe();
 ```
 
-### 5) 回滚事件树 Revert event trees
+### 5) 撤销/回滚 (Revert)
 
 ```ts
-const check = await store.canRevert(rootEventId);
+// 检查是否可以回滚（只有 "叶子节点" 的事件才能被回滚，或者整个分支一起回滚）
+const check = await store.canRevert(eventId);
+
 if (check.canRevert) {
-  const preview = await store.previewRevert(rootEventId);
-  const result = await store.revert(rootEventId);
+  // 预览会发生什么
+  const preview = await store.previewRevert(eventId);
+  // 执行回滚（通过生成反向的补偿事件）
+  await store.revert(eventId);
 }
 ```
 
-只有根事件（Root Event）可以被回滚。因果树中的每个事件都必须定义 `compensate` 逻辑。
-
 ### 6) 乐观并发控制 (OCC)
 
-如果你直接使用 repository 层的写入操作，请传入 `expectedSequence`：
+防止并发写入冲突。如果你绕过 `store.receive` 直接写库，需要带上 `expectedSequence`：
 
 ```ts
-import { ConcurrencyError, type CreatedEvent } from '@schemeless/event-store-types';
-
-const expectedSequence = await repo.getStreamSequence('account', 'user-123');
-
-const nextEvent: CreatedEvent<{ amount: number }> = {
-  id: 'evt-account-user-123-0002',
-  domain: 'account',
-  type: 'debited',
-  identifier: 'user-123',
-  payload: { amount: 100 },
-  created: new Date(),
-};
-
 try {
-  await repo.storeEvents([nextEvent], { expectedSequence });
+  await repo.storeEvents([newEvent], { expectedSequence: 5 });
 } catch (error) {
   if (error instanceof ConcurrencyError) {
-    console.log(`Expected ${error.expectedSequence}, but found ${error.actualSequence}`);
+    console.log('有人抢先一步修改了数据');
   }
 }
 ```
 
-重要：直接调用 `repo.storeEvents(...)` 需要传入 `CreatedEvent[]`（包含 `id` 和 `created`）。大多数应用应该优先使用 `store.receive(...)`，它会帮你自动创建这些字段。
+## 文档索引
 
-## 性能与并发 Performance and concurrency
-
-默认情况下，队列是串行执行的（并发度 `1`），以保证严格顺序。你可以调整队列并发度：
-
-```ts
-const store = await makeEventStore(repo, {
-  mainQueueConcurrent: 5,
-  sideEffectQueueConcurrent: 10,
-  observerQueueConcurrent: 5,
-})(eventFlows, observers);
-```
-
-调优指南：
-
-- 优先增加 `sideEffectQueueConcurrent` 来处理 I/O 密集型工作
-- 当观察者之间相互独立时，增加 `observerQueueConcurrent`
-- 只有在你充分理解顺序权衡的情况下，才增加 `mainQueueConcurrent`
-
-## Monorepo 结构
-
-```txt
-packages/
-  event-store/                 核心运行时
-  event-store-react-native/    运行时的 React Native 构建版本
-  event-store-types/           共享类型定义
-  event-store-adapter-*/       持久化适配器
-examples/
-  example-domain-packages/     示例领域和流程
-  example-service/             示例服务集成
-```
-
-## 本地开发 Local development
-
-```bash
-yarn install
-yarn bootstrap
-yarn test
-yarn prepare
-```
-
-Workspace 说明：
-
-- 使用 Yarn classic (`yarn@1.22.22`) 和 Lerna
-- `yarn bootstrap` 会运行 workspace 的 `prepublish` 构建
-- `yarn lerna-test` 运行各个 package 的测试脚本
-
-## 快速试用示例 Try examples quickly
-
-最快、摩擦最小的路径：
-
-```bash
-yarn workspace @schemeless/example-domain test
-```
-
-完整的服务示例（需要 MySQL + Redis 和环境变量配置）：
-
-```bash
-cd examples/example-service
-npm run dev:db:sync
-npm run start
-```
-
-## 文档地图 Documentation map
-
-### 指南 Guides
-
-- [架构设计 Architecture](docs/architecture.md)
+**指南**
+- [架构设计](docs/architecture.md)
 - [EventFlow 参考手册](docs/event-flow-reference.md)
 - [OCC 与并发控制](docs/occ-and-concurrency.md)
-- [回滚指南 Revert](docs/revert.md)
-- [适配器选择指南](docs/adapters.md)
-- [运行时深入解读 Runtime deep dive](packages/event-store/readme.md)
+- [回滚指南](docs/revert.md)
+- [适配器选择](docs/adapters.md)
 
-### 适配器文档 Adapter Docs
-
+**适配器文档**
 - [TypeORM](packages/event-store-adapter-typeorm/readme.md) | [Prisma](packages/event-store-adapter-prisma/readme.md) | [MikroORM](packages/event-store-adapter-mikroorm/README.md) | [DynamoDB](packages/event-store-adapter-dynamodb/readme.md) | [WatermelonDB](packages/event-store-adapter-watermelondb/readme.md)
-
-### 迁移指南 Migration Guides
-
-- [并发迁移指南](packages/event-store/MIGRATION.md)
-- [OCC 迁移指南](packages/event-store/OCC_MIGRATION.md)
-- [Schema 版本控制/Upcasting](packages/event-store/SCHEMA_VERSIONING.md)
 
 ## 贡献 Contributing
 
-我们欢迎任何贡献！在提交 PR 之前：
+欢迎提交 PR！
 
-1. **先查阅现有 issue** 或新建一个来讨论你的想法
-2. **在本地运行测试**: `yarn test` 和 `yarn lerna-test`
-3. **保持文档同步**: 当修改公开 API 时请同步更新相关文档
-4. **遵循代码风格**: 使用 Prettier（如果有的话运行 `yarn format`）
-5. **优先使用 Yarn**: 本项目使用 Yarn classic (`yarn@1.22.22`)
+1. **先开 Issue** 讨论你的想法
+2. **本地测试**: `yarn test` 和 `yarn lerna-test`
+3. **保持文档同步**: 改了 API 记得改文档
+4. **统一风格**: 主要使用 Prettier
+5. **使用 Yarn**: 请用 `yarn@1.22.22`
 
-对于较大的变更，请务必先在 issue 中讨论以对齐方案。
+## License
 
-## 许可证 License
-
-MIT. 详见 [`LICENSE`](./LICENSE)。
+MIT. See [`LICENSE`](./LICENSE).
