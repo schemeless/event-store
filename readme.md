@@ -4,22 +4,58 @@
 [![Publish Workflow](https://github.com/schemeless/event-store/actions/workflows/publish.yml/badge.svg)](https://github.com/schemeless/event-store/actions/workflows/publish.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 
-A batteries-included event sourcing toolkit for Node.js services. This monorepo provides a runtime (`@schemeless/event-store`), shared types (`@schemeless/event-store-types`), and persistence adapters for SQL, DynamoDB, and mobile/offline use cases.
+> **Store what happened, not just what is.**
 
-## Documentation language
+A TypeScript-first event sourcing toolkit with pluggable storage, replay, and revert built in. This monorepo provides a runtime (`@schemeless/event-store`), shared types (`@schemeless/event-store-types`), and persistence adapters for SQL, DynamoDB, and mobile/offline use cases.
 
-- Current primary documentation language: English
-- Multilingual direction: add Simplified Chinese (`README.zh-CN.md`) and localized docs under `docs/i18n/zh-CN/`
-- This README keeps section boundaries stable so language variants can stay aligned
+## Status
 
-## What this project gives you
+✅ **Production-ready.** This library has been used in production systems. The core API is stable, though minor features may evolve.
 
-- Event flows as first-class units (`receive`, `validate`, `apply`, `sideEffect`, `createConsequentEvents`)
-- Ordered processing with configurable queue concurrency
-- Replay support for rebuilding projections
-- Observer pipeline for post-commit reactions
-- Revert APIs (`canRevert`, `previewRevert`, `revert`) based on compensating events
-- Adapter-driven storage so runtime code is database-agnostic
+## Features
+
+- **Declarative event lifecycles** — Define validation, state transitions, and side effects in one place
+- **Ordered event processing** — Sequential by default, tunable concurrency for performance
+- **Replay from history** — Rebuild your read models from the immutable event log
+- **Observer pipeline** — React to committed events with async handlers (fire-and-forget or blocking)
+- **Revert support** — Undo event trees with compensating events (`canRevert`, `previewRevert`, `revert`)
+- **Pluggable storage** — Swap databases (SQL, DynamoDB, SQLite) without changing business logic
+
+## Core Concepts: Thinking in Events
+
+Most applications persist only the latest state (CRUD). Event sourcing persists the sequence of domain facts that produced that state.
+
+### The Difference by Example
+
+Imagine a User's Wallet Balance.
+
+**In a Traditional (CRUD) System:**
+You store one number. If the user deposits $100 and then withdraws $40, the database just shows $60. You don't know *how* they got there or if it was one transaction or ten.
+```json
+// Current State in DB
+{ "userId": "u-1", "balance": 60 }
+```
+
+**In an Event Sourced System:**
+You store the history of transactions (events). The "Current Balance" is calculated by replaying these facts.
+```text
+1. AccountOpened { date: "2023-01-01" }
+2. FundsDeposited { amount: 100 }
+3. FundsWithdrawn { amount: 40 }
+```
+Now you know exactly *why* the balance is $60. Plus, you can answer questions like "What was the balance last Tuesday?" by only replaying events up to that date.
+In this library, that maps to: command ingestion via `receive(...)`, state transitions in `apply`, and historical reconstruction through `replay()`.
+
+### Why do this?
+
+| Feature | Traditional CRUD | Event Sourcing |
+| :--- | :--- | :--- |
+| **Source of Truth** | The current table row | The immutable log of events |
+| **Audit Trail** | Requires manual "history tables" | Built-in event history (strong traceability) |
+| **Debugging** | Hard to reproduce complex states | **Time Travel**: Replay events to any point in the past |
+| **Business Intent** | Lossy (field `status` changed to `closed`) | Explicit (`AccountClosed` vs `AccountSuspended`) |
+
+This library provides the **infrastructure** to make this pattern easy: receiving events, validating business rules, and persisting them to storage (SQL, DynamoDB, etc.).
 
 ## Is this a fit?
 
@@ -33,6 +69,15 @@ Probably not a fit if:
 
 - You only need a simple CRUD data layer
 - You do not need replay, event history, or causal chains
+
+## Prerequisites
+
+- **Node.js** 14+ (TypeScript 4.1+ recommended)
+- **Database**: Choose an adapter based on your stack:
+  - SQL: TypeORM, Prisma, or MikroORM
+  - NoSQL: DynamoDB
+  - Mobile/offline: WatermelonDB (React Native)
+  - Test/stub: Null adapter
 
 ## Install
 
@@ -169,7 +214,7 @@ Behavior notes:
 - `fireAndForget: true` does not block the main receive path
 - fire-and-forget observer failures are isolated from main event success/failure
 
-### 3.5) Monitor lifecycle events with `output$`
+### 4) Monitor lifecycle events with `output$`
 
 ```ts
 const sub = store.output$.subscribe((eventOutput) => {
@@ -180,7 +225,7 @@ const sub = store.output$.subscribe((eventOutput) => {
 sub.unsubscribe();
 ```
 
-### 4) Revert event trees
+### 5) Revert event trees
 
 ```ts
 const check = await store.canRevert(rootEventId);
@@ -192,7 +237,7 @@ if (check.canRevert) {
 
 Only root events can be reverted. Every event in the causal tree must define `compensate`.
 
-### 5) Optimistic concurrency control (OCC)
+### 6) Optimistic concurrency control (OCC)
 
 If you use repository-level writes directly, pass `expectedSequence`:
 
@@ -248,7 +293,7 @@ packages/
   event-store-types/           Shared types
   event-store-adapter-*/       Persistence adapters
 examples/
-  example-domain-pacakges/     Sample domains and flows
+  example-domain-packages/     Sample domains and flows
   example-service/             Example service integration
 ```
 
@@ -285,26 +330,36 @@ npm run start
 
 ## Documentation map
 
-- Architecture: [`docs/architecture.md`](docs/architecture.md)
-- EventFlow reference: [`docs/event-flow-reference.md`](docs/event-flow-reference.md)
-- OCC and concurrency: [`docs/occ-and-concurrency.md`](docs/occ-and-concurrency.md)
-- Revert guide: [`docs/revert.md`](docs/revert.md)
-- Adapter selection guide: [`docs/adapters.md`](docs/adapters.md)
-- Runtime deep dive: [`packages/event-store/readme.md`](packages/event-store/readme.md)
-- Concurrency migration notes: [`packages/event-store/MIGRATION.md`](packages/event-store/MIGRATION.md)
-- OCC migration notes: [`packages/event-store/OCC_MIGRATION.md`](packages/event-store/OCC_MIGRATION.md)
-- Schema versioning/upcasting: [`packages/event-store/SCHEMA_VERSIONING.md`](packages/event-store/SCHEMA_VERSIONING.md)
-- TypeORM adapter doc: [`packages/event-store-adapter-typeorm/readme.md`](packages/event-store-adapter-typeorm/readme.md)
-- Prisma adapter doc: [`packages/event-store-adapter-prisma/readme.md`](packages/event-store-adapter-prisma/readme.md)
-- MikroORM adapter doc: [`packages/event-store-adapter-mikroorm/readme.md`](packages/event-store-adapter-mikroorm/readme.md)
-- DynamoDB adapter doc: [`packages/event-store-adapter-dynamodb/readme.md`](packages/event-store-adapter-dynamodb/readme.md)
-- WatermelonDB adapter doc: [`packages/event-store-adapter-watermelondb/readme.md`](packages/event-store-adapter-watermelondb/readme.md)
+### Guides
+
+- [Architecture](docs/architecture.md)
+- [EventFlow reference](docs/event-flow-reference.md)
+- [OCC and concurrency](docs/occ-and-concurrency.md)
+- [Revert guide](docs/revert.md)
+- [Adapter selection guide](docs/adapters.md)
+- [Runtime deep dive](packages/event-store/readme.md)
+
+### Adapter Docs
+
+- [TypeORM](packages/event-store-adapter-typeorm/readme.md) | [Prisma](packages/event-store-adapter-prisma/readme.md) | [MikroORM](packages/event-store-adapter-mikroorm/README.md) | [DynamoDB](packages/event-store-adapter-dynamodb/readme.md) | [WatermelonDB](packages/event-store-adapter-watermelondb/readme.md)
+
+### Migration Guides
+
+- [Concurrency migration](packages/event-store/MIGRATION.md)
+- [OCC migration](packages/event-store/OCC_MIGRATION.md)
+- [Schema versioning/upcasting](packages/event-store/SCHEMA_VERSIONING.md)
 
 ## Contributing
 
-- Prefer Yarn commands over npm equivalents for repo development
-- Keep docs in sync when changing public API or adapter behavior
-- Run tests before opening a pull request
+We welcome contributions! Before opening a pull request:
+
+1. **Check existing issues** or open one to discuss your idea
+2. **Run tests locally**: `yarn test` and `yarn lerna-test`
+3. **Keep docs in sync**: Update relevant docs when changing public API
+4. **Follow code style**: Use Prettier (run `yarn format` if available)
+5. **Prefer Yarn**: This monorepo uses Yarn classic (`yarn@1.22.22`)
+
+For larger changes, please discuss in an issue first to align on approach.
 
 ## License
 
