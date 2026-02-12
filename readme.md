@@ -8,7 +8,9 @@
 
 > **Store what happened, not just what is.**
 
-A TypeScript-first event sourcing toolkit with pluggable storage, replay, and revert built in. This monorepo provides a runtime (`@schemeless/event-store`), shared types (`@schemeless/event-store-types`), and persistence adapters for SQL, DynamoDB, and mobile/offline use cases.
+A batteries-included toolkit for building Event Sourcing systems in Node.js.
+
+This monorepo provides a core runtime (`@schemeless/event-store`), shared types (`@schemeless/event-store-types`), and plug-and-play persistence adapters for SQL, DynamoDB, and mobile/offline use cases.
 
 ## Status
 
@@ -114,20 +116,28 @@ import 'reflect-metadata';
 import { EventFlow, makeEventStore } from '@schemeless/event-store';
 import { EventStoreRepo as TypeOrmRepo } from '@schemeless/event-store-adapter-typeorm';
 
+// 1. Define Payload
 type UserRegisteredPayload = {
   userId: string;
   email: string;
 };
 
+// 2. Define Flow
 const userRegisteredFlow: EventFlow<UserRegisteredPayload> = {
   domain: 'user',
   type: 'registered',
+  
+  // Wire up the receive function
   receive: (eventStore) => (eventInput) => eventStore.receive(userRegisteredFlow)(eventInput),
+  
+  // Validation logic
   validate: (event) => {
     if (!event.payload.email.includes('@')) {
       throw new Error('invalid email');
     }
   },
+  
+  // State changes / Projections
   apply: async (event) => {
     // Update projection/read model here
     console.log('applied event', event.id, event.payload.userId);
@@ -135,17 +145,20 @@ const userRegisteredFlow: EventFlow<UserRegisteredPayload> = {
 };
 
 async function main() {
+  // 3. Initialize Adapter
   const repo = new TypeOrmRepo({
     name: 'quick-start',
     type: 'sqlite',
-    database: ':memory:',
+    database: ':memory:', // Use in-memory DB for demo
     dropSchema: true,
     synchronize: true,
     logging: false,
   });
 
+  // 4. Create Store Instance
   const store = await makeEventStore(repo)([userRegisteredFlow]);
 
+  // 5. Trigger Event
   const [created] = await store.receive(userRegisteredFlow)({
     payload: { userId: 'u-1', email: 'user@example.com' },
     identifier: 'u-1',
@@ -176,11 +189,15 @@ Note: `getAggregate` requires `repo.getStreamEvents(...)`. Built-in adapters cur
 
 ### 1) Receive events
 
-`store.receive(flow)(input)` is the recommended ingestion path. It generates event identifiers/timestamps, handles lifecycle hooks, persists created events, and fans out side effects.
+`store.receive(flow)(input)` is the standard ingestion path. It handles the heavy lifting:
+1. Generates globally unique event IDs and timestamps
+2. Runs lifecycle hooks (e.g., `validate`)
+3. Persists the created events
+4. Fans out side effects concurrently
 
 ### 2) Replay history
 
-Use replay to rebuild projections:
+When your business logic changes or you need to backfill data, replay history to rebuild projections:
 
 ```ts
 await store.replay();
@@ -194,7 +211,7 @@ await store.replay('last-processed-event-id');
 
 ### 3) Observe successful events
 
-Register success observers when constructing the store:
+Use observers for async logic that shouldn't block the main flow (e.g., sending emails, analytics). Register them when constructing the store:
 
 ```ts
 const observers = [
@@ -282,7 +299,7 @@ const store = await makeEventStore(repo, {
 
 Guidance:
 
-- Increase `sideEffectQueueConcurrent` first for I/O-heavy work
+- Increase `sideEffectQueueConcurrent` first for I/O-heavy work (e.g. external APIs, emails)
 - Increase `observerQueueConcurrent` when observers are independent
 - Increase `mainQueueConcurrent` only if you understand ordering tradeoffs
 

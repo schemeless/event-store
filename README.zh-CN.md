@@ -97,17 +97,31 @@
 
 ## 安装 Install
 
-安装核心库：
+## 安装 Install
+
+首先安装核心运行时和类型定义：
 
 ```bash
 yarn add @schemeless/event-store @schemeless/event-store-types
+# or: npm i @schemeless/event-store @schemeless/event-store-types
 ```
 
-选择一个适配器（以 TypeORM 为例）：
+然后选择在这个 Monorepo 中提供的一个适配器（例如 TypeORM）：
 
 ```bash
 yarn add @schemeless/event-store-adapter-typeorm typeorm reflect-metadata sqlite3
+# or: npm i @schemeless/event-store-adapter-typeorm typeorm reflect-metadata sqlite3
 ```
+
+**可用适配器列表：**
+
+- `@schemeless/event-store-adapter-typeorm`
+- `@schemeless/event-store-adapter-typeorm-v3`
+- `@schemeless/event-store-adapter-prisma`
+- `@schemeless/event-store-adapter-mikroorm`
+- `@schemeless/event-store-adapter-dynamodb`
+- `@schemeless/event-store-adapter-watermelondb`
+- `@schemeless/event-store-adapter-null`
 
 ## 快速上手 Quick start (5 分钟)
 
@@ -188,80 +202,103 @@ main().catch(console.error);
 
 ### 1) 接收事件 (Receive)
 
-`store.receive(flow)(input)` 是标准的入口。它负责：
-1. 生成事件 ID 和时间戳
-2. 执行 `validate`
-3. 持久化事件
-4. 执行 `apply` 和 `sideEffect`
+`store.receive(flow)(input)` 是官方推荐的数据摄入路径。它替你处理了所有脏活累活：
+1. 自动生成全局唯一的事件 ID 和时间戳
+2. 执行生命周期钩子（validate 等）
+3. 持久化创建的事件
+4. 并发分发副作用（Side Effects）
 
 ### 2) 重放历史 (Replay)
 
-当你的业务逻辑变了，想重新计算数据时：
+使用重放来重建投影（projections）：
 
 ```ts
 await store.replay();
 ```
 
-或者从某个断点继续：
+也可以从某个事件 ID 检查点继续重放（适用于断点续传）：
 
 ```ts
 await store.replay('last-processed-event-id');
 ```
 
-### 3) 观察者 (Observer)
+### 3) 观察成功的事件 (Observe)
 
-有些逻辑不需要在事件发生的当场同步执行（比如发邮件、数据分析），可以用观察者：
+在构建 store 时注册成功观察者：
 
 ```ts
 const observers = [
   {
     filters: [{ domain: 'user', type: 'registered' }],
     priority: 1,
-    fireAndForget: true, // true = 异步执行，不阻塞主流程
+    fireAndForget: true,
     apply: async (event) => {
-      // 发邮件...
+      // 异步执行通知、数据分析等，不阻塞主流程
     },
   },
 ];
+
+const store = await makeEventStore(repo)([userRegisteredFlow], observers);
 ```
 
-### 4) 监控生命周期
+**行为说明：**
 
-通过 RxJS 流监控内部发生的一切：
+- `fireAndForget: true` 表示该观察者不会阻塞主接收流程（`receive`）。
+- 即发即弃（fire-and-forget）观察者的失败是隔离的，不会导致主事件的事务回滚。
+
+### 4) 监控生命周期事件
+
+使用 `output$` 可观察流（RxJS Observable）来监控内部发生的一切：
 
 ```ts
-store.output$.subscribe((eventOutput) => {
-  console.log('当前阶段:', eventOutput.state, '事件ID:', eventOutput.event.id);
+const sub = store.output$.subscribe((eventOutput) => {
+  console.log(eventOutput.state, eventOutput.event.id);
 });
+
+// 后面记得取消订阅
+sub.unsubscribe();
 ```
 
 ### 5) 撤销/回滚 (Revert)
 
 ```ts
-// 检查是否可以回滚（只有 "叶子节点" 的事件才能被回滚，或者整个分支一起回滚）
-const check = await store.canRevert(eventId);
-
+const check = await store.canRevert(rootEventId);
 if (check.canRevert) {
-  // 预览会发生什么
-  const preview = await store.previewRevert(eventId);
-  // 执行回滚（通过生成反向的补偿事件）
-  await store.revert(eventId);
+  const preview = await store.previewRevert(rootEventId);
+  const result = await store.revert(rootEventId);
 }
 ```
+
+注意：只有根事件（Root Event）可以被回滚。因果树中的每个事件都必须定义 `compensate` 逻辑才能支持回滚。
 
 ### 6) 乐观并发控制 (OCC)
 
-防止并发写入冲突。如果你绕过 `store.receive` 直接写库，需要带上 `expectedSequence`：
+如果你绕过 `store.receive` 直接使用 repository 层的写入操作，请务必传入 `expectedSequence` 以防止并发冲突：
 
 ```ts
+import { ConcurrencyError, type CreatedEvent } from '@schemeless/event-store-types';
+
+const expectedSequence = await repo.getStreamSequence('account', 'user-123');
+
+const nextEvent: CreatedEvent<{ amount: number }> = {
+  id: 'evt-account-user-123-0002',
+  domain: 'account',
+  type: 'debited',
+  identifier: 'user-123',
+  payload: { amount: 100 },
+  created: new Date(),
+};
+
 try {
-  await repo.storeEvents([newEvent], { expectedSequence: 5 });
+  await repo.storeEvents([nextEvent], { expectedSequence });
 } catch (error) {
   if (error instanceof ConcurrencyError) {
-    console.log('有人抢先一步修改了数据');
+    console.log(`预期版本 ${error.expectedSequence}, 但实际版本是 ${error.actualSequence}`);
   }
 }
 ```
+
+**重要：** 直接调用 `repo.storeEvents(...)` 需要你手动构造完整的 `CreatedEvent` 对象（包含 `id` 和 `created`）。大多数业务场景下，应该**优先使用** `store.receive(...)`，它会帮你自动处理这些字段。
 
 ## 文档索引
 
