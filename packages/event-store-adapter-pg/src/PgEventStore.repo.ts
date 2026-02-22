@@ -6,6 +6,7 @@ import {
     IEventStoreRepoCapabilities,
     StoreEventsOptions,
 } from '@schemeless/event-store-types';
+import { createHash } from 'crypto';
 import { Pool, PoolClient, PoolConfig } from 'pg';
 import { logger } from './utils/logger';
 
@@ -19,6 +20,23 @@ function assertValidTableName(name: string): void {
     if (!VALID_TABLE_NAME.test(name)) {
         throw new Error(`Invalid table name: "${name}". Must match ${VALID_TABLE_NAME}`);
     }
+}
+
+function buildIndexName(tableName: string, suffix: string): string {
+    const normalizedTableName = tableName.replace(/[^a-zA-Z0-9_]/g, '_');
+    const plain = `${normalizedTableName}_${suffix}`;
+    if (plain.length <= 63) {
+        return plain;
+    }
+
+    const hash = createHash('sha1')
+        .update(tableName)
+        .digest('hex')
+        .slice(0, 10);
+    const reservedLength = hash.length + suffix.length + 2; // "_" + hash + "_" + suffix
+    const baseLength = Math.max(1, 63 - reservedLength);
+    const truncatedBase = normalizedTableName.slice(0, baseLength);
+    return `${truncatedBase}_${hash}_${suffix}`;
 }
 
 export class PgEventStoreRepo implements IEventStoreRepo {
@@ -36,9 +54,10 @@ export class PgEventStoreRepo implements IEventStoreRepo {
         assertValidTableName(tableName);
         this.pool = new Pool(poolConfig);
         this.tableName = tableName;
-        // Derive index names from tableName to avoid collision when multiple tables coexist
-        this.idxStreamSequence = `${tableName}_stream_sequence_idx`;
-        this.idxCausationId = `${tableName}_causation_id_idx`;
+        // Derive index names from tableName to avoid collision when multiple tables coexist.
+        // PostgreSQL identifiers are limited to 63 characters, so names must be length-safe.
+        this.idxStreamSequence = buildIndexName(tableName, 'stream_sequence_idx');
+        this.idxCausationId = buildIndexName(tableName, 'causation_id_idx');
     }
 
     async init() {
@@ -67,6 +86,29 @@ export class PgEventStoreRepo implements IEventStoreRepo {
         CREATE INDEX IF NOT EXISTS "${this.idxCausationId}" 
         ON ${this.tableName} ("causationId");
       `);
+
+            // Migration safety check:
+            // legacy tables may contain rows that only differ by NULL identifier.
+            // Converting NULL -> '' would create collisions on (domain, identifier, sequence).
+            const duplicateCheck = await client.query(
+                `SELECT domain,
+                        COALESCE(identifier, '') AS normalized_identifier,
+                        sequence,
+                        COUNT(*)::int AS duplicate_count
+                 FROM ${this.tableName}
+                 WHERE sequence IS NOT NULL
+                 GROUP BY domain, COALESCE(identifier, ''), sequence
+                 HAVING COUNT(*) > 1
+                 LIMIT 1`
+            );
+            if (duplicateCheck.rows.length > 0) {
+                const row = duplicateCheck.rows[0];
+                throw new Error(
+                    `Migration blocked for table "${this.tableName}": duplicate stream sequence rows detected for ` +
+                    `(domain="${row.domain}", identifier="${row.normalized_identifier}", sequence=${row.sequence}, count=${row.duplicate_count}). ` +
+                    `Please deduplicate data before init().`
+                );
+            }
 
             // Idempotent migration: backfill any legacy NULL identifiers
             // so the NOT NULL + unique index works correctly on pre-existing tables.

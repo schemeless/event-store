@@ -1,5 +1,6 @@
 import { PgEventStoreRepo } from './PgEventStore.repo';
 import { ConcurrencyError, CreatedEvent } from '@schemeless/event-store-types';
+import { Client } from 'pg';
 
 const connectionOptions = {
     host: process.env.PGHOST || 'localhost',
@@ -202,5 +203,93 @@ describe('PgEventStoreRepo', () => {
             ...connectionOptions,
             tableName: 'DROP TABLE foo; --',
         })).toThrow(/Invalid table name/);
+    });
+
+    it('should create distinct stream indexes for long custom table names', async () => {
+        const prefix = 'event_store_table_with_really_long_name_prefix_for_collision_';
+        const tableNameA = `${prefix}a`;
+        const tableNameB = `${prefix}b`;
+
+        const repoA = new PgEventStoreRepo({ ...connectionOptions, tableName: tableNameA });
+        const repoB = new PgEventStoreRepo({ ...connectionOptions, tableName: tableNameB });
+        const client = new Client(connectionOptions);
+
+        try {
+            await repoA.init();
+            await repoB.init();
+
+            await client.connect();
+            const res = await client.query(
+                `SELECT tablename, indexname
+                 FROM pg_indexes
+                 WHERE tablename IN ($1, $2)
+                   AND indexdef LIKE '%(domain, identifier, sequence)%'
+                 ORDER BY tablename ASC`,
+                [tableNameA, tableNameB]
+            );
+
+            expect(res.rows.length).toBe(2);
+            expect(new Set(res.rows.map((row) => row.tablename))).toEqual(new Set([tableNameA, tableNameB]));
+            expect(new Set(res.rows.map((row) => row.indexname)).size).toBe(2);
+        } finally {
+            await client.end();
+            await repoA.close();
+            await repoB.close();
+            const cleanup = new Client(connectionOptions);
+            await cleanup.connect();
+            try {
+                await cleanup.query(`DROP TABLE IF EXISTS ${tableNameA}`);
+                await cleanup.query(`DROP TABLE IF EXISTS ${tableNameB}`);
+            } finally {
+                await cleanup.end();
+            }
+        }
+    });
+
+    it('should block migration when legacy NULL identifiers would collide', async () => {
+        const tableName = `legacy_collision_${Date.now()}`;
+        const client = new Client(connectionOptions);
+        await client.connect();
+        try {
+            await client.query(`
+              CREATE TABLE ${tableName} (
+                id VARCHAR(36) PRIMARY KEY,
+                domain VARCHAR(15) NOT NULL,
+                type VARCHAR(32) NOT NULL,
+                meta JSONB,
+                payload JSONB NOT NULL,
+                identifier VARCHAR(64),
+                "correlationId" VARCHAR(36),
+                "causationId" VARCHAR(36),
+                sequence INT,
+                created TIMESTAMP(6) NOT NULL
+              )`);
+            await client.query(`
+              CREATE UNIQUE INDEX "${tableName}_legacy_stream_idx"
+              ON ${tableName} (domain, identifier, sequence)
+            `);
+            await client.query(`
+              INSERT INTO ${tableName} (id, domain, type, payload, identifier, sequence, created)
+              VALUES
+                ('legacy-1', 'test', 'test', '{}'::jsonb, NULL, 1, NOW()),
+                ('legacy-2', 'test', 'test', '{}'::jsonb, NULL, 1, NOW())
+            `);
+        } finally {
+            await client.end();
+        }
+
+        const legacyRepo = new PgEventStoreRepo({ ...connectionOptions, tableName });
+        try {
+            await expect(legacyRepo.init()).rejects.toThrow(/Migration blocked/);
+        } finally {
+            await legacyRepo.close();
+            const cleanup = new Client(connectionOptions);
+            await cleanup.connect();
+            try {
+                await cleanup.query(`DROP TABLE IF EXISTS ${tableName}`);
+            } finally {
+                await cleanup.end();
+            }
+        }
     });
 });
