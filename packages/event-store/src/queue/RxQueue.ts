@@ -32,7 +32,6 @@ export class AsyncQueue<TASK, RESULT> {
     }
 
     this.tasks.push({ task, cb });
-    console.log(`[${this.options.id}] push task`, { active: this.activeCount, queueLen: this.tasks.length });
     Promise.resolve().then(() => this.pump());
 
     return this;
@@ -57,11 +56,6 @@ export class AsyncQueue<TASK, RESULT> {
     if (this.isPaused || this.isDestroyed) return;
 
     const concurrent = this.options.concurrent || 1;
-    console.log(`[${this.options.id}] pump start`, {
-      active: this.activeCount,
-      concurrent,
-      queueLen: this.tasks.length,
-    });
     while (this.activeCount < concurrent && this.tasks.length > 0) {
       const item = this.options.filo ? this.tasks.pop() : this.tasks.shift();
       if (!item) break;
@@ -75,10 +69,8 @@ export class AsyncQueue<TASK, RESULT> {
       }
 
       try {
-        console.log(`[${this.options.id}] call processFn`, { active: this.activeCount });
         this.processFn(task, (err, result) => {
           this.activeCount--;
-          console.log(`[${this.options.id}] task done`, { err, active: this.activeCount, queueLen: this.tasks.length });
           if (err) {
             this.taskFailed$.next(err);
             if (cb) cb(err, undefined);
@@ -88,7 +80,6 @@ export class AsyncQueue<TASK, RESULT> {
 
           Promise.resolve().then(() => {
             if (this.activeCount === 0 && this.tasks.length === 0) {
-              if (this.options.id?.startsWith('apply:')) console.log('drained generated for ' + this.options.id);
               this.drained$.next([this]);
             }
             this.pump();
@@ -96,13 +87,11 @@ export class AsyncQueue<TASK, RESULT> {
         });
       } catch (err) {
         this.activeCount--;
-        console.log(`[${this.options.id}] task sync error`, { err, active: this.activeCount });
         this.taskFailed$.next(err);
         if (cb) cb(err, undefined);
 
         Promise.resolve().then(() => {
           if (this.activeCount === 0 && this.tasks.length === 0) {
-            if (this.options.id?.startsWith('apply:')) console.log('drained generated for ' + this.options.id);
             this.drained$.next([this]);
           }
           this.pump();

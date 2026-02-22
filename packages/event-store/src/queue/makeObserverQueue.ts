@@ -5,6 +5,7 @@ import * as Rx from 'rxjs/operators';
 import { logEvent } from '../util/logEvent';
 import { Observable } from 'rxjs';
 import { EventOutput } from '../EventStore.types';
+import { logger } from '../util/logger';
 
 type ObserverMap = { [domainType: string]: SuccessEventObserver[] };
 
@@ -47,23 +48,19 @@ export const makeObserverQueue = (
       } else {
         // apply observers
         const orderedObserversToApply = R.sortBy(R.prop('priority'))(observersToApply);
-        console.log(`[makeObserverQueue] applying ${orderedObserversToApply.length} observers`);
         for (const observerToApply of orderedObserversToApply) {
           if (observerToApply.fireAndForget) {
             // Fire and forget: execute without waiting
             Promise.resolve()
               .then(() => observerToApply.apply(createdEvent))
               .catch((err) => {
-                console.error(`Fire-and-forget observer failed: ${err}`);
+                logger.error(`Fire-and-forget observer failed: ${err}`);
               });
           } else {
-            console.log(`[makeObserverQueue] await observerToApply.apply`);
             await observerToApply.apply(createdEvent);
-            console.log(`[makeObserverQueue] observerToApply.apply done`);
           }
         }
         logEvent(createdEvent, '👀', 'Applied observers');
-        console.log(`[makeObserverQueue] calling done() for event`);
         done();
         return { state: EventObserverState.success, event: createdEvent };
       }

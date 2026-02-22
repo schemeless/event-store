@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.1.2] - 2026-02-23
+
+### Fixed
+
+- **Logging Cleanup**: Removed accidental `console.log` debug statements from `RxQueue` and `makeObserverQueue` in the core package. Standardized remaining error logs to use the project's internal logger.
+
 ## [3.1.1] - 2026-02-23
 
 ### Changed
