@@ -1,5 +1,5 @@
 import type { BaseEvent, CreatedEvent, EventFlowMap } from '@schemeless/event-store-types';
-import * as Queue from 'better-queue';
+import { ProcessFunctionCb } from '../queue/RxQueue';
 import { from, of, pipe } from 'rxjs';
 import * as Rx from 'rxjs/operators';
 import { getEventFlow } from './getEventFlow';
@@ -18,7 +18,7 @@ const cancelEvent = (eventFlowMap: EventFlowMap) => async (event: CreatedEvent<a
 
 export const cleanupAndCancelFailedEvent = (
   eventFlowMap: EventFlowMap,
-  done: Queue.ProcessFunctionCb<any>,
+  done: ProcessFunctionCb<any>,
   event: BaseEvent<any>
 ) =>
   pipe(

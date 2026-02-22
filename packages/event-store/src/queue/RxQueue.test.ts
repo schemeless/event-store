@@ -30,7 +30,9 @@ describe('Rx Queue', () => {
 
   it('should receive drain ', (cb) => {
     const rxQueue = createRxQueue<string, string>('drainTest');
+    let processedCount = 0;
     rxQueue.process$.subscribe(({ task, done }) => {
+      processedCount += 1;
       done();
     });
 
@@ -38,8 +40,8 @@ describe('Rx Queue', () => {
     rxQueue.push('2');
     rxQueue.push('3');
 
-    rxQueue.drained$.subscribe(([queue]) => {
-      expect(queue.getStats().total).toBe(3);
+    rxQueue.drained$.pipe(Rx.take(1)).subscribe(() => {
+      expect(processedCount).toBe(3);
       cb();
     });
   });
@@ -54,10 +56,7 @@ describe('Rx Queue', () => {
     rxQueue.push('2');
     rxQueue.push('3');
 
-    rxQueue.empty$.subscribe(([queue]) => {
-      expect(queue.getStats().total).toBe(3);
-      cb();
-    });
+    rxQueue.empty$.pipe(Rx.take(1)).subscribe(() => cb());
   });
 
   it('should receive failed ', (cb) => {

@@ -47,22 +47,23 @@ export const makeObserverQueue = (
       } else {
         // apply observers
         const orderedObserversToApply = R.sortBy(R.prop('priority'))(observersToApply);
+        console.log(`[makeObserverQueue] applying ${orderedObserversToApply.length} observers`);
         for (const observerToApply of orderedObserversToApply) {
           if (observerToApply.fireAndForget) {
             // Fire and forget: execute without waiting
             Promise.resolve()
               .then(() => observerToApply.apply(createdEvent))
               .catch((err) => {
-                // We use console.error here because we can't easily import logger from here if it creates a cycle,
-                // but checking imports: logEvent uses logger inside.
-                // Assuming we can log it or just ignore. Ideally log.
                 console.error(`Fire-and-forget observer failed: ${err}`);
               });
           } else {
+            console.log(`[makeObserverQueue] await observerToApply.apply`);
             await observerToApply.apply(createdEvent);
+            console.log(`[makeObserverQueue] observerToApply.apply done`);
           }
         }
         logEvent(createdEvent, '👀', 'Applied observers');
+        console.log(`[makeObserverQueue] calling done() for event`);
         done();
         return { state: EventObserverState.success, event: createdEvent };
       }

@@ -1,5 +1,8 @@
-import type { CreatedEvent, EventTaskAndError } from '@schemeless/event-store-types';
+import type { EventTaskAndError } from '@schemeless/event-store-types';
 
-export const isEventTaskError = (
-  eventOrError: CreatedEvent<any> | EventTaskAndError
-): eventOrError is EventTaskAndError => (eventOrError as EventTaskAndError).error != null;
+export const isEventTaskError = (eventOrError: unknown): eventOrError is EventTaskAndError => {
+  if (!eventOrError || typeof eventOrError !== 'object') {
+    return false;
+  }
+  return 'error' in eventOrError && (eventOrError as EventTaskAndError).error != null;
+};

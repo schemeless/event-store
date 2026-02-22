@@ -1,49 +1,125 @@
-import * as Queue from 'better-queue';
-import { ProcessFunction } from 'better-queue';
 import { BehaviorSubject, Observable, Subject } from 'rxjs';
 import { logger } from '../util/logger';
 import * as Rx from 'rxjs/operators';
 import * as R from 'ramda';
-import { scan } from 'ramda';
 
-const makeEventQueueObservable = <TASK, RESULT, RETURN = [Queue<TASK, RESULT>]>(
-  queue: Queue<TASK, RESULT>,
-  queueEventType: Queue.QueueEvent,
-  queueId = 'unnamed'
-): Observable<RETURN> => {
-  return new Observable<RETURN>((observer) => {
-    queue.on(queueEventType, (...args) => {
-      logger.debug(`Queue Event: ${queueId} - ${queueEventType}`);
-      observer.next(args.length === 0 ? [queue] : ([queue, ...args] as any));
+export interface QueueOptions {
+  id?: string;
+  concurrent?: number;
+  filo?: boolean;
+}
+
+export type ProcessFunctionCb<T> = (error?: any, result?: T) => void;
+export type ProcessFunction<TASK, RESULT> = (task: TASK, cb: ProcessFunctionCb<RESULT>) => void;
+
+export class AsyncQueue<TASK, RESULT> {
+  private tasks: { task: TASK; cb?: (err: any, result: any) => void }[] = [];
+  private activeCount = 0;
+  private isPaused = false;
+  private isDestroyed = false;
+
+  public readonly drained$ = new Subject<[AsyncQueue<TASK, RESULT>]>();
+  public readonly empty$ = new Subject<[AsyncQueue<TASK, RESULT>]>();
+  public readonly taskFailed$ = new Subject<any>();
+
+  constructor(private processFn: ProcessFunction<TASK, RESULT>, private options: QueueOptions = {}) {}
+
+  public push(task: TASK, cb?: (err: any, result: any) => void) {
+    if (this.isDestroyed) {
+      const err = new Error('Queue is destroyed');
+      if (cb) cb(err, undefined);
+      return this;
+    }
+
+    this.tasks.push({ task, cb });
+    console.log(`[${this.options.id}] push task`, { active: this.activeCount, queueLen: this.tasks.length });
+    Promise.resolve().then(() => this.pump());
+
+    return this;
+  }
+
+  public pause() {
+    this.isPaused = true;
+  }
+
+  public resume() {
+    this.isPaused = false;
+    Promise.resolve().then(() => this.pump());
+  }
+
+  public destroy(cb?: () => void) {
+    this.isDestroyed = true;
+    this.tasks = [];
+    if (cb) cb();
+  }
+
+  private pump() {
+    if (this.isPaused || this.isDestroyed) return;
+
+    const concurrent = this.options.concurrent || 1;
+    console.log(`[${this.options.id}] pump start`, {
+      active: this.activeCount,
+      concurrent,
+      queueLen: this.tasks.length,
     });
-  });
-};
+    while (this.activeCount < concurrent && this.tasks.length > 0) {
+      const item = this.options.filo ? this.tasks.pop() : this.tasks.shift();
+      if (!item) break;
 
-const makeFailedEventQueueObservable = <TASK, RESULT, RETURN = [Queue<TASK, RESULT>]>(
-  queue: Queue<TASK, RESULT>
-): Observable<RETURN> => {
-  return new Observable<RETURN>((observer) => {
-    queue.on('task_failed', (id, error) => {
-      logger.warn('EventQueueObservable error');
-      // logger.fatal('%o', error);
-      observer.error(error);
-    });
-  });
-};
+      this.activeCount++;
+      const { task, cb } = item;
 
-const makeQueue = <TASK, RESULT>(
-  fn: ProcessFunction<TASK, RESULT>,
-  queueOptions: Omit<Queue.QueueOptions<TASK, RESULT>, 'process'>
-) => new Queue<TASK, RESULT>(fn, queueOptions);
+      if (this.tasks.length === 0) {
+        // Defer to next microtask so Observable pipelines settle before drain/empty is observed
+        Promise.resolve().then(() => this.empty$.next([this]));
+      }
+
+      try {
+        console.log(`[${this.options.id}] call processFn`, { active: this.activeCount });
+        this.processFn(task, (err, result) => {
+          this.activeCount--;
+          console.log(`[${this.options.id}] task done`, { err, active: this.activeCount, queueLen: this.tasks.length });
+          if (err) {
+            this.taskFailed$.next(err);
+            if (cb) cb(err, undefined);
+          } else {
+            if (cb) cb(null, result);
+          }
+
+          Promise.resolve().then(() => {
+            if (this.activeCount === 0 && this.tasks.length === 0) {
+              if (this.options.id?.startsWith('apply:')) console.log('drained generated for ' + this.options.id);
+              this.drained$.next([this]);
+            }
+            this.pump();
+          });
+        });
+      } catch (err) {
+        this.activeCount--;
+        console.log(`[${this.options.id}] task sync error`, { err, active: this.activeCount });
+        this.taskFailed$.next(err);
+        if (cb) cb(err, undefined);
+
+        Promise.resolve().then(() => {
+          if (this.activeCount === 0 && this.tasks.length === 0) {
+            if (this.options.id?.startsWith('apply:')) console.log('drained generated for ' + this.options.id);
+            this.drained$.next([this]);
+          }
+          this.pump();
+        });
+      }
+    }
+  }
+}
 
 export type ApplyQueue = ReturnType<typeof createRxQueue>;
 
-export const createRxQueue = <TASK = any, RESULT = TASK>(
-  id: string,
-  queueOptions?: Omit<Queue.QueueOptions<TASK, RESULT>, 'process'>
-) => {
+export const createRxQueue = <TASK = any, RESULT = TASK>(id: string, queueOptions?: QueueOptions) => {
   let pendingTasks = 0;
   const pendingDrainResolvers: Array<() => void> = [];
+  // Emitted (deferred one microtask) when pendingTasks drops to 0
+  const drained$ = new Subject<null>();
+
   const resolvePendingDrainersIfIdle = () => {
     if (pendingTasks !== 0) return;
     while (pendingDrainResolvers.length > 0) {
@@ -52,8 +128,21 @@ export const createRxQueue = <TASK = any, RESULT = TASK>(
     }
   };
 
-  const process$ = new Subject<{ task: TASK; done: Queue.ProcessFunctionCb<RESULT> }>();
-  const callback: Queue.ProcessFunction<TASK, RESULT> = (task, done) => {
+  const emitDrainedIfIdle = () => {
+    // Defer Observable emission by two microtasks so RxJS Promise-based operators
+    // (mergeMap(async), scan, combineLatest, etc.) have time to flush final values
+    // before drained$ observers consume the idle signal.
+    Promise.resolve().then(() => {
+      Promise.resolve().then(() => {
+        if (pendingTasks === 0) {
+          drained$.next(null);
+        }
+      });
+    });
+  };
+
+  const process$ = new Subject<{ task: TASK; done: ProcessFunctionCb<RESULT> }>();
+  const callback: ProcessFunction<TASK, RESULT> = (task, done) => {
     process$.next({ task, done });
   };
 
@@ -62,36 +151,43 @@ export const createRxQueue = <TASK = any, RESULT = TASK>(
 
   queueSizeInput$.pipe(Rx.scan((acc, curr) => (acc || 0) + curr, null)).subscribe(queueSizeOutput$);
 
+  const queue = new AsyncQueue<TASK, RESULT>(callback, Object.assign(queueOptions || {}, { id }));
+
+  const taskFailed$ = new Observable<any>((observer) => {
+    const sub = queue.taskFailed$.subscribe({
+      next: (error) => {
+        logger.warn('EventQueueObservable error');
+        observer.error(error);
+      },
+    });
+    return () => sub.unsubscribe();
+  });
+
   const customPush = (task: any, cb?: (err: any, result: any) => void) => {
     pendingTasks += 1;
     queueSizeInput$.next(+1);
-    queue
-      .push(task, cb)
-      .on('finish', () => {
-        pendingTasks = Math.max(0, pendingTasks - 1);
-        queueSizeInput$.next(-1);
-        resolvePendingDrainersIfIdle();
-      })
-      .on('failed', () => {
-        pendingTasks = Math.max(0, pendingTasks - 1);
-        queueSizeInput$.next(-1);
-        resolvePendingDrainersIfIdle();
-      });
+    queue.push(task, (err, result) => {
+      pendingTasks = Math.max(0, pendingTasks - 1);
+      queueSizeInput$.next(-1);
+      resolvePendingDrainersIfIdle();
+      if (cb) cb(err, result);
+      // Defer Observable drained$ emission so the RxJS pipeline (scan, combineLatest etc.)
+      // has time to process the result before drained$ subscribers are notified.
+      emitDrainedIfIdle();
+    });
   };
-
-  const queue = makeQueue<TASK, RESULT>(callback, Object.assign(queueOptions || {}, { id: id }));
-  const drained$ = makeEventQueueObservable<TASK, RESULT>(queue, 'drain', id);
 
   return {
     id,
     queueInstance: queue,
-    push: customPush as typeof queue.push,
+    // Provide correct type bound via assertion
+    push: customPush as (task: TASK, cb?: ProcessFunctionCb<RESULT>) => void,
     process$,
     task$: process$.pipe(Rx.map(R.prop('task'))),
     done$: process$.pipe(Rx.map(R.prop('done'))),
-    drained$,
-    empty$: makeEventQueueObservable<TASK, RESULT>(queue, 'empty', id),
-    taskFailed$: makeFailedEventQueueObservable<TASK, RESULT>(queue),
+    drained$: drained$.asObservable(),
+    empty$: queue.empty$.asObservable(),
+    taskFailed$: taskFailed$,
     queueSize$: queueSizeOutput$,
     // Lifecycle methods for graceful shutdown
     pause: (): void => queue.pause(),
@@ -101,7 +197,9 @@ export const createRxQueue = <TASK = any, RESULT = TASK>(
         return Promise.resolve();
       }
       return new Promise((resolve) => {
-        pendingDrainResolvers.push(() => resolve());
+        pendingDrainResolvers.push(() => {
+          resolve();
+        });
       });
     },
     destroy: (): Promise<void> => new Promise((resolve) => queue.destroy(() => resolve())),
