@@ -1,6 +1,6 @@
 {
   "name": "@schemeless/event-store-adapter-dynamodb",
-  "version": "3.0.4",
+  "version": "3.1.0",
   "typescript:main": "src/index.ts",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -26,7 +26,7 @@
     "@aws-sdk/client-dynamodb": "^3.0.0",
     "@aws-sdk/lib-dynamodb": "^3.0.0",
     "@aws-sdk/util-dynamodb": "^3.0.0",
-    "@schemeless/event-store-types": "^3.0.4",
+    "@schemeless/event-store-types": "^3.1.0",
     "debug": "^4.2.0",
     "object-sizeof": "^1.6.1"
   },

@@ -6,8 +6,7 @@
 
 [English](./readme.md)
 
-> **记录发生了什么，而不仅仅是现在的样子。**
-> **Store what happened, not just what is.**
+> **记录发生了什么，而不仅仅是现在的样子。** > **Store what happened, not just what is.**
 
 这是一个专为 Node.js 此打造的 Event Sourcing（事件溯源）工具箱，功能完备（batteries-included）。它采用 Monorepo 结构，提供了核心运行时 (`@schemeless/event-store`)、共享类型库 (`@schemeless/event-store-types`)，以及一系列开箱即用的持久化适配器（支持 SQL、DynamoDB 以及移动端/离线场景）。
 
@@ -54,18 +53,19 @@
 这样做的好处是，你不仅知道现在有 60 块，还能回答：“上周二下午 3 点的时候余额是多少？”——只需要把事件回放到那个时间点即可。
 
 在这个库中：
+
 - `receive(...)`: 接收用户的操作指令。
 - `apply`: 定义事件如何改变状态（比如余额 +100）。
 - `replay()`: 当你需要重建数据时，系统自动把事件重跑一遍。
 
 ### 为什么要这么做？
 
-| 特性 | 传统 CRUD | Event Sourcing |
-| :--- | :--- | :--- |
-| **真相来源 (Source of Truth)** | 表里当前的那行数据 | 不可篡改的事件日志 |
-| **审计 (Audit Trail)** | 需要额外写代码记录日志，容易漏 | **天生自带**完整历史，强可追溯 |
-| **调试 (Debugging)** | 很难复现复杂的中间状态 | **时间旅行**：随意回放到过去任意时刻 |
-| **业务意图** | 意图丢失（比如状态只变成了 `closed`） | 意图明确（是 `AccountClosed` 还是 `AccountSuspended`？）|
+| 特性                           | 传统 CRUD                             | Event Sourcing                                           |
+| :----------------------------- | :------------------------------------ | :------------------------------------------------------- |
+| **真相来源 (Source of Truth)** | 表里当前的那行数据                    | 不可篡改的事件日志                                       |
+| **审计 (Audit Trail)**         | 需要额外写代码记录日志，容易漏        | **天生自带**完整历史，强可追溯                           |
+| **调试 (Debugging)**           | 很难复现复杂的中间状态                | **时间旅行**：随意回放到过去任意时刻                     |
+| **业务意图**                   | 意图丢失（比如状态只变成了 `closed`） | 意图明确（是 `AccountClosed` 还是 `AccountSuspended`？） |
 
 本库就是为了让这种模式落地变得简单：它帮你处理接收事件、校验规则，并把它们安全地存到数据库里（SQL, DynamoDB 等）。
 
@@ -90,9 +90,9 @@
 
 - **Node.js** 14+ (推荐 TypeScript 4.1+)
 - **数据库**: 任选其一：
-  - SQL系: TypeORM, Prisma, 或 MikroORM
+  - SQL 系: TypeORM, Prisma, 或 MikroORM；原生 PostgreSQL 请使用 `adapter-pg`
   - NoSQL: DynamoDB
-  - 移动端/离线: WatermelonDB (React Native)
+  - 移动端/离线: **Expo SQLite**（原生 `expo-sqlite`，推荐）+ WatermelonDB (React Native)
   - 测试用: Null adapter
 
 ## 安装 Install
@@ -115,6 +115,8 @@ yarn add @schemeless/event-store-adapter-typeorm typeorm reflect-metadata sqlite
 
 **可用适配器列表：**
 
+- `@schemeless/event-store-adapter-pg` ⭐ **PostgreSQL 推荐** — 原生 `pg` 驱动，零 ORM 开销，JSONB 存储
+- `@schemeless/event-store-adapter-expo-sqlite` ⭐ **Expo / React Native 推荐** — 原生 `expo-sqlite`，零 ORM 开销，完整 OCC + Snapshot 支持
 - `@schemeless/event-store-adapter-typeorm`
 - `@schemeless/event-store-adapter-typeorm-v3`
 - `@schemeless/event-store-adapter-prisma`
@@ -140,17 +142,17 @@ type UserRegisteredPayload = {
 const userRegisteredFlow: EventFlow<UserRegisteredPayload> = {
   domain: 'user',
   type: 'registered',
-  
+
   // 接收逻辑
   receive: (eventStore) => (eventInput) => eventStore.receive(userRegisteredFlow)(eventInput),
-  
+
   // 校验逻辑
   validate: (event) => {
     if (!event.payload.email.includes('@')) {
       throw new Error('invalid email');
     }
   },
-  
+
   // 状态变更 / 投影更新
   apply: async (event) => {
     console.log('应用事件:', event.id, event.payload.userId);
@@ -186,23 +188,26 @@ main().catch(console.error);
 
 ## 适配器能力矩阵 Capability Matrix
 
-| 适配器 | 后端 | 支持重放 | 支持乐观锁 (OCC) | 支持回滚辅助 |
-| --- | --- | --- | --- | --- |
-| `adapter-typeorm` | SQL (TypeORM) | ✅ | ✅ | ✅ |
-| `adapter-typeorm-v3` | SQL (TypeORM v3) | ✅ | ❌ | ✅ |
-| `adapter-prisma` | SQL (Prisma) | ✅ | ❌ | ✅ |
-| `adapter-mikroorm` | SQL (MikroORM) | ✅ | ❌ | ✅ |
-| `adapter-dynamodb` | DynamoDB | ✅ | ✅ | ✅ |
-| `adapter-watermelondb` | WatermelonDB / RN SQLite | ✅ | ❌ | ✅ |
-| `adapter-null` | No-op (测试桩) | ❌ | ❌ | 部分 |
+| 适配器                 | 后端                     | 支持重放 | 支持乐观锁 (OCC) | 支持回滚辅助 | 支持聚合根 |
+| ---------------------- | ------------------------ | -------- | ---------------- | ------------ | ---------- |
+| `adapter-pg`           | PostgreSQL (原生)        | ✅       | ✅               | ✅           | ✅         |
+| `adapter-expo-sqlite`  | Expo SQLite (原生)       | ✅       | ✅               | ✅           | ✅         |
+| `adapter-typeorm`      | SQL (TypeORM)            | ✅       | ✅               | ✅           | ❌         |
+| `adapter-typeorm-v3`   | SQL (TypeORM v3)         | ✅       | ❌               | ✅           | ❌         |
+| `adapter-prisma`       | SQL (Prisma)             | ✅       | ❌               | ✅           | ❌         |
+| `adapter-mikroorm`     | SQL (MikroORM)           | ✅       | ❌               | ✅           | ❌         |
+| `adapter-dynamodb`     | DynamoDB                 | ✅       | ✅               | ✅           | ✅         |
+| `adapter-watermelondb` | WatermelonDB / RN SQLite | ✅       | ❌               | ✅           | ❌         |
+| `adapter-null`         | No-op (测试桩)           | ❌       | ❌               | 部分         | ❌         |
 
-> 注意：内置适配器目前主要支持全局重放。聚合根级别的重放 (`getStreamEvents`) 暂未默认实现。
+> 注意：`getAggregate` 功能要求 `repo.getStreamEvents(...)` 支持。`adapter-pg` 和 `adapter-expo-sqlite` 已完整实现。
 
 ## 核心工作流 Core workflows
 
 ### 1) 接收事件 (Receive)
 
 `store.receive(flow)(input)` 是官方推荐的数据摄入路径。它替你处理了所有脏活累活：
+
 1. 自动生成全局唯一的事件 ID 和时间戳
 2. 执行生命周期钩子（validate 等）
 3. 持久化创建的事件
@@ -303,6 +308,7 @@ try {
 ## 文档索引
 
 **指南**
+
 - [架构设计](docs/architecture.md)
 - [EventFlow 参考手册](docs/event-flow-reference.md)
 - [OCC 与并发控制](docs/occ-and-concurrency.md)
@@ -310,7 +316,8 @@ try {
 - [适配器选择](docs/adapters.md)
 
 **适配器文档**
-- [TypeORM](packages/event-store-adapter-typeorm/readme.md) | [Prisma](packages/event-store-adapter-prisma/readme.md) | [MikroORM](packages/event-store-adapter-mikroorm/README.md) | [DynamoDB](packages/event-store-adapter-dynamodb/readme.md) | [WatermelonDB](packages/event-store-adapter-watermelondb/readme.md)
+
+- [PostgreSQL (native)](packages/event-store-adapter-pg/readme.md) | [Expo SQLite](packages/event-store-adapter-expo-sqlite/readme.md) | [TypeORM](packages/event-store-adapter-typeorm/readme.md) | [Prisma](packages/event-store-adapter-prisma/readme.md) | [MikroORM](packages/event-store-adapter-mikroorm/README.md) | [DynamoDB](packages/event-store-adapter-dynamodb/readme.md) | [WatermelonDB](packages/event-store-adapter-watermelondb/readme.md)
 
 ## 贡献 Contributing
 

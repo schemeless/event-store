@@ -1,5 +1,24 @@
 # Changelog
 
+## [3.1.0] - 2026-02-23
+
+### Added
+
+- **New adapter: `@schemeless/event-store-adapter-expo-sqlite`** — Native Expo SQLite adapter using `expo-sqlite` directly (no ORM dependency).
+  - Full `IEventStoreRepo` implementation: `init`, `storeEvents`, `getAllEvents`, `getStreamEvents`, `getStreamSequence`, `getEventById`, `findByCausationId`, `getSnapshot`, `saveSnapshot`, `resetStore`, `close`.
+  - Optimistic Concurrency Control (OCC) via `withExclusiveTransactionAsync` — same guarantee level as `adapter-pg`.
+  - Aggregate replay fully supported (`capabilities.aggregate = true`, `getStreamEvents`).
+  - Snapshot support (`getSnapshot` / `saveSnapshot`) with `INSERT OR REPLACE` semantics.
+  - WAL mode enabled by default for better read/write concurrency.
+  - Cursor-based pagination for `getAllEvents` with `(created, id)` composite key.
+  - Configurable table names (validated against injection at construction time).
+
+### Fixed
+
+- **`@schemeless/event-store-adapter-expo-sqlite`** — `getAllEvents` fallback iterator (when `startFromId` is not found) now correctly terminates after exhausting all matching rows.
+  - Previously, the inline iterator object returned from the fallback branch never advanced its cursor, causing an infinite loop in replay scenarios (P1).
+- **`@schemeless/event-store-adapter-expo-sqlite`** — Table names injected into SQL are now validated at construction time via `assertValidTableName` regex, preventing SQL injection or syntax errors from untrusted inputs (P2).
+
 ## [3.0.3] - 2026-02-08
 
 ### Fixed
@@ -69,6 +88,7 @@
 ### Added
 
 - **Key-Based Partitioning (Sharding)**: First-class support for sharded event processing.
+
   - New `getShardKey` method on `EventFlow`.
   - Intelligent routing to `mainQueue` and `sideEffectQueue` partitions.
   - Guarantees strict ordering for events with the same key.
@@ -83,12 +103,14 @@
 ## [2.8.2] - 2026-02-05
 
 ### Changed
+
 - **@schemeless/event-store-adapter-dynamodb**: Migrated from AWS SDK v2 to **AWS SDK v3** (`@aws-sdk/client-dynamodb`, `@aws-sdk/lib-dynamodb`).
 - Internal dependency synchronization to ^2.8.2.
 
 ## [2.8.1] - 2026-02-05
 
 ### Changed
+
 - **@schemeless/event-store-adapter-dynamodb**: Major reconstruction (v2).
   - Switched from full table scans to efficient **Time Bucket** iteration for global replay.
   - Introduced **Conditional Writes** to ensure event uniqueness and concurrency safety.

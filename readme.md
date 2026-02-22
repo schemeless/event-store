@@ -34,7 +34,8 @@ Most applications persist only the latest state (CRUD). Event sourcing persists 
 Imagine a User's Wallet Balance.
 
 **In a Traditional (CRUD) System:**
-You store one number. If the user deposits $100 and then withdraws $40, the database just shows $60. You don't know *how* they got there or if it was one transaction or ten.
+You store one number. If the user deposits $100 and then withdraws $40, the database just shows $60. You don't know _how_ they got there or if it was one transaction or ten.
+
 ```json
 // Current State in DB
 { "userId": "u-1", "balance": 60 }
@@ -42,22 +43,24 @@ You store one number. If the user deposits $100 and then withdraws $40, the data
 
 **In an Event Sourced System:**
 You store the history of transactions (events). The "Current Balance" is calculated by replaying these facts.
+
 ```text
 1. AccountOpened { date: "2023-01-01" }
 2. FundsDeposited { amount: 100 }
 3. FundsWithdrawn { amount: 40 }
 ```
-Now you know exactly *why* the balance is $60. Plus, you can answer questions like "What was the balance last Tuesday?" by only replaying events up to that date.
+
+Now you know exactly _why_ the balance is $60. Plus, you can answer questions like "What was the balance last Tuesday?" by only replaying events up to that date.
 In this library, that maps to: command ingestion via `receive(...)`, state transitions in `apply`, and historical reconstruction through `replay()`.
 
 ### Why do this?
 
-| Feature | Traditional CRUD | Event Sourcing |
-| :--- | :--- | :--- |
-| **Source of Truth** | The current table row | The immutable log of events |
-| **Audit Trail** | Requires manual "history tables" | Built-in event history (strong traceability) |
-| **Debugging** | Hard to reproduce complex states | **Time Travel**: Replay events to any point in the past |
-| **Business Intent** | Lossy (field `status` changed to `closed`) | Explicit (`AccountClosed` vs `AccountSuspended`) |
+| Feature             | Traditional CRUD                           | Event Sourcing                                          |
+| :------------------ | :----------------------------------------- | :------------------------------------------------------ |
+| **Source of Truth** | The current table row                      | The immutable log of events                             |
+| **Audit Trail**     | Requires manual "history tables"           | Built-in event history (strong traceability)            |
+| **Debugging**       | Hard to reproduce complex states           | **Time Travel**: Replay events to any point in the past |
+| **Business Intent** | Lossy (field `status` changed to `closed`) | Explicit (`AccountClosed` vs `AccountSuspended`)        |
 
 This library provides the **infrastructure** to make this pattern easy: receiving events, validating business rules, and persisting them to storage (SQL, DynamoDB, etc.).
 
@@ -80,7 +83,7 @@ Probably not a fit if:
 - **Database**: Choose an adapter based on your stack:
   - SQL: PostgreSQL (native), TypeORM, Prisma, or MikroORM
   - NoSQL: DynamoDB
-  - Mobile/offline: WatermelonDB (React Native)
+  - Mobile/offline: **Expo SQLite** (native `expo-sqlite`, recommended), WatermelonDB (React Native)
   - Test/stub: Null adapter
 
 ## Install
@@ -109,6 +112,7 @@ yarn add @schemeless/event-store-adapter-typeorm typeorm reflect-metadata sqlite
 Available adapters in this monorepo:
 
 - `@schemeless/event-store-adapter-pg` ⭐ **Recommended for PostgreSQL** — native `pg` driver, zero ORM overhead, JSONB storage
+- `@schemeless/event-store-adapter-expo-sqlite` ⭐ **Recommended for Expo / React Native** — native `expo-sqlite`, zero ORM overhead, full OCC + snapshot support
 - `@schemeless/event-store-adapter-typeorm`
 - `@schemeless/event-store-adapter-typeorm-v3`
 - `@schemeless/event-store-adapter-prisma`
@@ -134,17 +138,17 @@ type UserRegisteredPayload = {
 const userRegisteredFlow: EventFlow<UserRegisteredPayload> = {
   domain: 'user',
   type: 'registered',
-  
+
   // Wire up the receive function
   receive: (eventStore) => (eventInput) => eventStore.receive(userRegisteredFlow)(eventInput),
-  
+
   // Validation logic
   validate: (event) => {
     if (!event.payload.email.includes('@')) {
       throw new Error('invalid email');
     }
   },
-  
+
   // State changes / Projections
   apply: async (event) => {
     // Update projection/read model here
@@ -181,16 +185,17 @@ main().catch(console.error);
 
 ## Adapter capability matrix
 
-| Adapter package | Backend | Replay (`getAllEvents`) | OCC (`expectedSequence`) | Revert helpers (`getEventById` + `findByCausationId`) | Aggregate (`getStreamEvents`) |
-| --- | --- | --- | --- | --- | --- |
-| `@schemeless/event-store-adapter-pg` ⭐ | PostgreSQL via native `pg` (JSONB) | Yes | Yes | Yes | Yes |
-| `@schemeless/event-store-adapter-typeorm` | SQL via TypeORM | Yes | Yes | Yes | No |
-| `@schemeless/event-store-adapter-typeorm-v3` | SQL via TypeORM v3 flavor | Yes | No | Yes | No |
-| `@schemeless/event-store-adapter-prisma` | SQL via Prisma | Yes | No | Yes | No |
-| `@schemeless/event-store-adapter-mikroorm` | SQL via MikroORM | Yes | No | Yes | No |
-| `@schemeless/event-store-adapter-dynamodb` | DynamoDB (+ optional S3 payload offload) | Yes | Yes | Yes | Yes |
-| `@schemeless/event-store-adapter-watermelondb` | WatermelonDB / React Native SQLite | Yes | No | Yes | No |
-| `@schemeless/event-store-adapter-null` | No-op stub | No | No | Partial (stubbed) |
+| Adapter package                                  | Backend                                  | Replay (`getAllEvents`) | OCC (`expectedSequence`) | Revert helpers (`getEventById` + `findByCausationId`) | Aggregate (`getStreamEvents`) |
+| ------------------------------------------------ | ---------------------------------------- | ----------------------- | ------------------------ | ----------------------------------------------------- | ----------------------------- |
+| `@schemeless/event-store-adapter-pg` ⭐          | PostgreSQL via native `pg` (JSONB)       | Yes                     | Yes                      | Yes                                                   | Yes                           |
+| `@schemeless/event-store-adapter-expo-sqlite` ⭐ | Expo / React Native via `expo-sqlite`    | Yes                     | Yes                      | Yes                                                   | Yes                           |
+| `@schemeless/event-store-adapter-typeorm`        | SQL via TypeORM                          | Yes                     | Yes                      | Yes                                                   | No                            |
+| `@schemeless/event-store-adapter-typeorm-v3`     | SQL via TypeORM v3 flavor                | Yes                     | No                       | Yes                                                   | No                            |
+| `@schemeless/event-store-adapter-prisma`         | SQL via Prisma                           | Yes                     | No                       | Yes                                                   | No                            |
+| `@schemeless/event-store-adapter-mikroorm`       | SQL via MikroORM                         | Yes                     | No                       | Yes                                                   | No                            |
+| `@schemeless/event-store-adapter-dynamodb`       | DynamoDB (+ optional S3 payload offload) | Yes                     | Yes                      | Yes                                                   | Yes                           |
+| `@schemeless/event-store-adapter-watermelondb`   | WatermelonDB / React Native SQLite       | Yes                     | No                       | Yes                                                   | No                            |
+| `@schemeless/event-store-adapter-null`           | No-op stub                               | No                      | No                       | Partial (stubbed)                                     |
 
 Note: `getAggregate` requires `repo.getStreamEvents(...)`. Built-in adapters currently do not implement `getStreamEvents`, so aggregate replay capability is unavailable by default.
 
@@ -199,6 +204,7 @@ Note: `getAggregate` requires `repo.getStreamEvents(...)`. Built-in adapters cur
 ### 1) Receive events
 
 `store.receive(flow)(input)` is the standard ingestion path. It handles the heavy lifting:
+
 1. Generates globally unique event IDs and timestamps
 2. Runs lifecycle hooks (e.g., `validate`)
 3. Persists the created events
@@ -369,7 +375,7 @@ npm run start
 
 ### Adapter Docs
 
-- [PostgreSQL (native)](packages/event-store-adapter-pg/readme.md) | [TypeORM](packages/event-store-adapter-typeorm/readme.md) | [Prisma](packages/event-store-adapter-prisma/readme.md) | [MikroORM](packages/event-store-adapter-mikroorm/README.md) | [DynamoDB](packages/event-store-adapter-dynamodb/readme.md) | [WatermelonDB](packages/event-store-adapter-watermelondb/readme.md)
+- [PostgreSQL (native)](packages/event-store-adapter-pg/readme.md) | [Expo SQLite](packages/event-store-adapter-expo-sqlite/readme.md) | [TypeORM](packages/event-store-adapter-typeorm/readme.md) | [Prisma](packages/event-store-adapter-prisma/readme.md) | [MikroORM](packages/event-store-adapter-mikroorm/README.md) | [DynamoDB](packages/event-store-adapter-dynamodb/readme.md) | [WatermelonDB](packages/event-store-adapter-watermelondb/readme.md)
 
 ### Migration Guides
 
