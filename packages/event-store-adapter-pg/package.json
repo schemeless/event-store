@@ -1,0 +1,42 @@
+{
+    "name": "@schemeless/event-store-adapter-pg",
+    "version": "3.0.4",
+    "typescript:main": "src/index.ts",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "scripts": {
+        "dev": "node_modules/.bin/tsc -w",
+        "clean": "node_modules/.bin/rimraf ./dist",
+        "test": "node_modules/.bin/jest --passWithNoTests",
+        "compile": "yarn run clean && node_modules/.bin/tsc",
+        "prepublish": "yarn run clean && yarn run compile"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/schemeless/event-store.git"
+    },
+    "keywords": [],
+    "author": "akinoniku",
+    "bugs": {
+        "url": "https://github.com/schemeless/event-store/issues"
+    },
+    "dependencies": {
+        "@schemeless/event-store-types": "^3.0.4",
+        "debug": "^4.2.0",
+        "pg": "^8.11.0"
+    },
+    "devDependencies": {
+        "@types/debug": "^4.1.5",
+        "@types/jest": "^30.0.0",
+        "@types/node": "^14.14.7",
+        "@types/pg": "^8.11.0",
+        "delay.ts": "^1.1.0",
+        "jest": "^30.2.0",
+        "rimraf": "^3.0.2",
+        "ts-jest": "^29.4.6",
+        "typescript": "^4.0.5"
+    },
+    "publishConfig": {
+        "access": "public"
+    }
+}

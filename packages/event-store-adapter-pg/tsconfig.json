@@ -1,0 +1,24 @@
+{
+    "compilerOptions": {
+        "declaration": true,
+        "target": "es6",
+        "lib": [
+            "es7"
+        ],
+        "module": "commonjs",
+        "noUnusedLocals": false,
+        "noUnusedParameters": false,
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "skipLibCheck": true,
+        "strictPropertyInitialization": false,
+        "esModuleInterop": true
+    },
+    "exclude": [
+        "node_modules",
+        "**/*.test.ts"
+    ],
+    "include": [
+        "src/**/*.ts"
+    ]
+}

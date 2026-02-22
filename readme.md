@@ -78,7 +78,7 @@ Probably not a fit if:
 
 - **Node.js** 14+ (TypeScript 4.1+ recommended)
 - **Database**: Choose an adapter based on your stack:
-  - SQL: TypeORM, Prisma, or MikroORM
+  - SQL: PostgreSQL (native), TypeORM, Prisma, or MikroORM
   - NoSQL: DynamoDB
   - Mobile/offline: WatermelonDB (React Native)
   - Test/stub: Null adapter
@@ -92,7 +92,14 @@ yarn add @schemeless/event-store @schemeless/event-store-types
 # or: npm i @schemeless/event-store @schemeless/event-store-types
 ```
 
-Pick an adapter (example: TypeORM):
+Pick an adapter (example: native PostgreSQL — zero ORM overhead):
+
+```bash
+yarn add @schemeless/event-store-adapter-pg pg
+# or: npm i @schemeless/event-store-adapter-pg pg
+```
+
+Or use an ORM-based adapter (example: TypeORM):
 
 ```bash
 yarn add @schemeless/event-store-adapter-typeorm typeorm reflect-metadata sqlite3
@@ -101,6 +108,7 @@ yarn add @schemeless/event-store-adapter-typeorm typeorm reflect-metadata sqlite
 
 Available adapters in this monorepo:
 
+- `@schemeless/event-store-adapter-pg` ⭐ **Recommended for PostgreSQL** — native `pg` driver, zero ORM overhead, JSONB storage
 - `@schemeless/event-store-adapter-typeorm`
 - `@schemeless/event-store-adapter-typeorm-v3`
 - `@schemeless/event-store-adapter-prisma`
@@ -173,14 +181,15 @@ main().catch(console.error);
 
 ## Adapter capability matrix
 
-| Adapter package | Backend | Replay (`getAllEvents`) | OCC (`expectedSequence`) | Revert helpers (`getEventById` + `findByCausationId`) |
-| --- | --- | --- | --- | --- |
-| `@schemeless/event-store-adapter-typeorm` | SQL via TypeORM | Yes | Yes | Yes |
-| `@schemeless/event-store-adapter-typeorm-v3` | SQL via TypeORM v3 flavor | Yes | No | Yes |
-| `@schemeless/event-store-adapter-prisma` | SQL via Prisma | Yes | No | Yes |
-| `@schemeless/event-store-adapter-mikroorm` | SQL via MikroORM | Yes | No | Yes |
-| `@schemeless/event-store-adapter-dynamodb` | DynamoDB (+ optional S3 payload offload) | Yes | Yes | Yes |
-| `@schemeless/event-store-adapter-watermelondb` | WatermelonDB / React Native SQLite | Yes | No | Yes |
+| Adapter package | Backend | Replay (`getAllEvents`) | OCC (`expectedSequence`) | Revert helpers (`getEventById` + `findByCausationId`) | Aggregate (`getStreamEvents`) |
+| --- | --- | --- | --- | --- | --- |
+| `@schemeless/event-store-adapter-pg` ⭐ | PostgreSQL via native `pg` (JSONB) | Yes | Yes | Yes | Yes |
+| `@schemeless/event-store-adapter-typeorm` | SQL via TypeORM | Yes | Yes | Yes | No |
+| `@schemeless/event-store-adapter-typeorm-v3` | SQL via TypeORM v3 flavor | Yes | No | Yes | No |
+| `@schemeless/event-store-adapter-prisma` | SQL via Prisma | Yes | No | Yes | No |
+| `@schemeless/event-store-adapter-mikroorm` | SQL via MikroORM | Yes | No | Yes | No |
+| `@schemeless/event-store-adapter-dynamodb` | DynamoDB (+ optional S3 payload offload) | Yes | Yes | Yes | Yes |
+| `@schemeless/event-store-adapter-watermelondb` | WatermelonDB / React Native SQLite | Yes | No | Yes | No |
 | `@schemeless/event-store-adapter-null` | No-op stub | No | No | Partial (stubbed) |
 
 Note: `getAggregate` requires `repo.getStreamEvents(...)`. Built-in adapters currently do not implement `getStreamEvents`, so aggregate replay capability is unavailable by default.
@@ -360,7 +369,7 @@ npm run start
 
 ### Adapter Docs
 
-- [TypeORM](packages/event-store-adapter-typeorm/readme.md) | [Prisma](packages/event-store-adapter-prisma/readme.md) | [MikroORM](packages/event-store-adapter-mikroorm/README.md) | [DynamoDB](packages/event-store-adapter-dynamodb/readme.md) | [WatermelonDB](packages/event-store-adapter-watermelondb/readme.md)
+- [PostgreSQL (native)](packages/event-store-adapter-pg/readme.md) | [TypeORM](packages/event-store-adapter-typeorm/readme.md) | [Prisma](packages/event-store-adapter-prisma/readme.md) | [MikroORM](packages/event-store-adapter-mikroorm/README.md) | [DynamoDB](packages/event-store-adapter-dynamodb/readme.md) | [WatermelonDB](packages/event-store-adapter-watermelondb/readme.md)
 
 ### Migration Guides
 
