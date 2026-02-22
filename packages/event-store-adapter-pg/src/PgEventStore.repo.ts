@@ -112,9 +112,16 @@ export class PgEventStoreRepo implements IEventStoreRepo {
 
             // Idempotent migration: backfill any legacy NULL identifiers
             // so the NOT NULL + unique index works correctly on pre-existing tables.
-            await client.query(`
-        UPDATE ${this.tableName} SET identifier = '' WHERE identifier IS NULL;
-      `);
+            try {
+                await client.query(`
+          UPDATE ${this.tableName} SET identifier = '' WHERE identifier IS NULL;
+        `);
+            } catch (err: any) {
+                if (err.code === '23505' && err.constraint === this.idxStreamSequence) {
+                    throw new Error(`Migration blocked: Cannot migrate legacy NULL identifiers due to sequence collisions. Please resolve duplicates manually.`);
+                }
+                throw err;
+            }
             await client.query(`
         ALTER TABLE ${this.tableName} ALTER COLUMN identifier SET DEFAULT '';
       `);
