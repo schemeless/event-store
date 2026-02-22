@@ -53,14 +53,15 @@ describe('AsyncQueue', () => {
     const queue = new AsyncQueue<number, void>(
       async (task, done) => {
         log.push(task);
-        await delay(5);
+        await delay(10);
         done();
       },
       { concurrent: 1, filo: true }
     );
 
-    // We need to push multiple tasks quickly so they are in the queue buffer
-    queue.push(1); // Starts immediately
+    // We push 1 and wait for it to start, then buffer 2 and 3
+    queue.push(1);
+    await delay(5); // Task 1 is now active
     queue.push(2); // Buffered
     queue.push(3); // Buffered
 
