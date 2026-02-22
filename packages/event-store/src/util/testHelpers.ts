@@ -11,7 +11,7 @@ const defaultInMemDBOption = {
   dropSchema: true,
   synchronize: true,
   logger: 'advanced-console',
-  logging: 'all',
+  logging: ['error'],
 } as ConnectionOptions;
 
 const defaultInMenDBOptionEventSourcing: ConnectionOptions = Object.assign({}, defaultInMemDBOption, {

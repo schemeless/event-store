@@ -4,6 +4,7 @@ import type { CreatedEvent, SuccessEventObserver } from '@schemeless/event-store
 import { EventObserverState } from '@schemeless/event-store-types';
 
 import { makeObserverQueue } from './makeObserverQueue';
+import { logger } from '../util/logger';
 
 const makeEvent = (): CreatedEvent<any> => ({
   id: '1',
@@ -77,7 +78,7 @@ describe('makeObserverQueue', () => {
   });
 
   it('continues processing when a fire-and-forget observer throws', async () => {
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const loggerErrorSpy = jest.spyOn(logger, 'error').mockImplementation(() => undefined);
     const successApply = jest.fn().mockResolvedValue(undefined);
     const observers: SuccessEventObserver<any>[] = [
       {
@@ -108,8 +109,8 @@ describe('makeObserverQueue', () => {
     expect(successApply).toHaveBeenCalledTimes(2);
     expect(successApply).toHaveBeenNthCalledWith(1, firstEvent);
     expect(successApply).toHaveBeenNthCalledWith(2, secondEvent);
-    expect(consoleErrorSpy).toHaveBeenCalled();
+    expect(loggerErrorSpy).toHaveBeenCalled();
     processedSubscription.unsubscribe();
-    consoleErrorSpy.mockRestore();
+    loggerErrorSpy.mockRestore();
   });
 });

@@ -1,10 +1,12 @@
 # Changelog
 
-## [3.1.2] - 2026-02-23
+## [3.1.3] - 2026-02-23
 
 ### Fixed
 
-- **Logging Cleanup**: Removed accidental `console.log` debug statements from `RxQueue` and `makeObserverQueue` in the core package. Standardized remaining error logs to use the project's internal logger.
+- **Logging Cleanup**: Removed accidental `console.log` debug statements from `RxQueue` and `makeObserverQueue` in the core package.
+- **Test Stability**: Fixed a regression in `makeObserverQueue.test.ts` caused by logging standardization.
+- **Test Noise Reduction**: Reduced TypeORM query logging in the test suite for cleaner CI/CD logs.
 
 ## [3.1.1] - 2026-02-23
 
