@@ -1,6 +1,10 @@
 # @schemeless/event-store-react-native
 
-React Native compatible build of the [`@schemeless/event-store`](../event-store) runtime. It mirrors the Node.js implementation but swaps the internal queue implementation to [`react-native-better-queue`](https://github.com/YahyaASadiq/react-native-better-queue) so it can run inside React Native apps without relying on Node.js file system primitives.
+> [!IMPORTANT] > **DEPRECATED**: This package is now deprecated. Please use the core [`@schemeless/event-store`](../event-store) package instead.
+>
+> As of version 3.1.0, the core `@schemeless/event-store` package no longer depends on Node.js-specific native modules and is fully compatible with React Native environments out of the box.
+
+React Native compatible build of the [`@schemeless/event-store`](../event-store) runtime.
 
 ## Usage
 

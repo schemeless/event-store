@@ -1,5 +1,6 @@
 {
   "name": "@schemeless/event-store-react-native",
+  "deprecated": "This package is no longer needed. Please use @schemeless/event-store instead, which is now fully compatible with React Native.",
   "version": "3.1.0",
   "typescript:main": "src/index.ts",
   "main": "dist/index.js",

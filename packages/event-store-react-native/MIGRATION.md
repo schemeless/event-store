@@ -1,6 +1,16 @@
-# `@schemeless/event-store-react-native` Migration Guide (2.8.x -> 3.0.3)
+# `@schemeless/event-store-react-native` Migration Guide
 
-This guide is for teams upgrading React Native apps from `2.8.x` to `3.0.3`.
+> [!IMPORTANT] > **DEPRICATION NOTICE**: As of v3.1.0, this package is deprecated.
+> React Native users should migration to the core [`@schemeless/event-store`](../event-store) package.
+>
+> **How to migrate:**
+>
+> 1. Uninstall `@schemeless/event-store-react-native`.
+> 2. Install `@schemeless/event-store`.
+> 3. Update all imports from `@schemeless/event-store-react-native` to `@schemeless/event-store`.
+> 4. You can also uninstall `react-native-better-queue` as it is no longer needed.
+
+This guide is for teams upgrading React Native apps from `2.8.x`.
 
 ## Target Versions
 
