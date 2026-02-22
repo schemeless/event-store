@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.1.1] - 2026-02-23
+
+### Changed
+
+- **Queue System Refactor**: Replaced `better-queue` with a custom `AsyncQueue` implementation in the core package.
+  - Eliminated Node.js native dependencies in the queue system, making `@schemeless/event-store` fully compatible with React Native.
+  - Improved shutdown and drain reliability with precise task tracking and microtask-aware event signals.
+  - Added comprehensive unit tests for the custom queue logic.
+- **Dependency Cleanup**: Removed `better-queue` and `aws-sdk` (v2) from the core package.
+
+### Deprecated
+
+- **`@schemeless/event-store-react-native`**: This package is now deprecated. React Native users should migration to the core `@schemeless/event-store` package.
+
 ## [3.1.0] - 2026-02-23
 
 ### Added
