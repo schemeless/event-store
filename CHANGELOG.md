@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.1.4] - 2026-02-23
+
+### Fixed
+
+- **Core**: Fixed `this` context loss in `getAggregate` when calling `getStreamEvents` on the adapter instance.
+
 ## [3.1.3] - 2026-02-23
 
 ### Fixed

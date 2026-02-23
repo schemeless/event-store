@@ -168,7 +168,7 @@ export const makeEventStore =
       reducer: (state: State, event: IEventStoreEntity) => State,
       initialState: State
     ): Promise<AggregateResult<State>> => {
-      const getStreamEvents = eventStoreRepo.getStreamEvents;
+      const getStreamEvents = eventStoreRepo.getStreamEvents?.bind(eventStoreRepo);
       if (!capabilities.aggregate || !getStreamEvents) {
         const repoName = eventStoreRepo.constructor?.name || 'IEventStoreRepo';
         const reason =

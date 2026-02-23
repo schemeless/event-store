@@ -1,6 +1,6 @@
 {
   "name": "@schemeless/event-store-adapter-watermelondb",
-  "version": "3.1.3",
+  "version": "3.1.4",
   "typescript:main": "src/index.ts",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -21,7 +21,7 @@
     "url": "https://github.com/schemeless/event-store/issues"
   },
   "dependencies": {
-    "@schemeless/event-store-types": "^3.1.3"
+    "@schemeless/event-store-types": "^3.1.4"
   },
   "peerDependencies": {
     "@nozbe/watermelondb": ">=0.27.0",
