@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.2.1] - 2026-02-26
+
+#### Fixed
+
+- **@schemeless/event-store-react-native**: Re-exported new export/import utilities from core to maintain API alignment and fix contract tests.
+
 ## [3.2.0] - 2026-02-26
 
 #### Added

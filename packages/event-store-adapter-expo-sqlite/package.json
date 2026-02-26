@@ -1,6 +1,6 @@
 {
   "name": "@schemeless/event-store-adapter-expo-sqlite",
-  "version": "3.2.0",
+  "version": "3.2.1",
   "typescript:main": "src/index.ts",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -12,7 +12,7 @@
     "prepublish": "yarn run clean && yarn run compile"
   },
   "dependencies": {
-    "@schemeless/event-store-types": "^3.2.0"
+    "@schemeless/event-store-types": "^3.2.1"
   },
   "peerDependencies": {
     "expo-sqlite": ">=15.0.0"

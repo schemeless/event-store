@@ -1,6 +1,6 @@
 {
   "name": "@schemeless/dynamodb-orm",
-  "version": "3.2.0",
+  "version": "3.2.1",
   "typescript:main": "src/index.ts",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
