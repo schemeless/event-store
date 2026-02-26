@@ -22,6 +22,7 @@
 - **观察者模式** — 支持异步的观察者流水线（Pipeline），无论是从旁路触发通知（fire-and-forget）还是阻塞式处理。
 - **内置回滚 (Revert)** — 即使是事件溯源也能“后悔”。通过补偿事件机制，支持撤销整个因果相关的事件树。
 - **存储无关** — 业务逻辑与存储解耦。想从 SQL 迁移到 DynamoDB？业务代码一行都不用改。
+- **导出 / 导入** — 将完整事件日志快照为 JSON，可用于用户备份、跨设备迁移或给开发者分析。
 
 ## 核心概念：像“事件”一样思考
 
@@ -305,6 +306,57 @@ try {
 
 **重要：** 直接调用 `repo.storeEvents(...)` 需要你手动构造完整的 `CreatedEvent` 对象（包含 `id` 和 `created`）。大多数业务场景下，应该**优先使用** `store.receive(...)`，它会帮你自动处理这些字段。
 
+### 7) 导出与导入事件
+
+内置工具函数，可将整个事件仓库快照成一个普通的 JSON 可序列化数组——适用于用户数据备份、共享给开发者分析、或在不同存储适配器之间迁移数据。
+
+```ts
+import { exportEventsToArray, importEventsFromArray, createSnapshot, parseSnapshot } from '@schemeless/event-store';
+
+// ── 导出 ──────────────────────────────────────────────────────────────────────
+const events = await exportEventsToArray(store.eventStoreRepo, {
+  pageSize: 200, // 可选，默认 200
+  onProgress: (n) => console.log(`已导出 ${n} 条事件`),
+});
+const snapshot = createSnapshot(events); // 附加 exportedAt + count 元数据
+const json = JSON.stringify(snapshot); // 可直接写入文件或传输
+
+// ── 导入（还原）───────────────────────────────────────────────────────────────
+const snapshot = parseSnapshot(json); // 解析 JSON 并自动还原 Date 对象
+await importEventsFromArray(store.eventStoreRepo, snapshot.events, {
+  replace: true, // 可选：先清空仓库再导入
+  batchSize: 100, // 可选，默认 100
+  onProgress: (n) => console.log(`已导入 ${n} 条事件`),
+});
+```
+
+**React Native / Expo 示例：**
+
+```ts
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+
+// 保存备份到设备并分享
+const events = await exportEventsToArray(store.eventStoreRepo);
+const json = JSON.stringify(createSnapshot(events));
+const path = FileSystem.documentDirectory + 'backup.json';
+await FileSystem.writeAsStringAsync(path, json);
+await Sharing.shareAsync(path, { mimeType: 'application/json' });
+
+// 从备份文件还原
+const json = await FileSystem.readAsStringAsync(backupPath);
+await importEventsFromArray(store.eventStoreRepo, parseSnapshot(json).events, { replace: true });
+```
+
+这几个工具函数只负责 repo 层的 I/O，文件读写、分享弹窗和进度 UI 完全由你的应用层控制。
+
+| 函数                                         | 说明                                            |
+| -------------------------------------------- | ----------------------------------------------- |
+| `exportEventsToArray(repo, opts?)`           | 分页抓取所有事件 → `IEventStoreEntity[]`        |
+| `importEventsFromArray(repo, events, opts?)` | 按批写回事件；自动将日期字符串转为 `Date`       |
+| `createSnapshot(events)`                     | 包装为 `{ exportedAt, count, events }` 快照对象 |
+| `parseSnapshot(json)`                        | 解析 JSON 字符串，还原 `created` 为 `Date` 实例 |
+
 ## 文档索引
 
 **指南**
@@ -314,6 +366,7 @@ try {
 - [OCC 与并发控制](docs/occ-and-concurrency.md)
 - [回滚指南](docs/revert.md)
 - [适配器选择](docs/adapters.md)
+- [导出 / 导入指南](docs/export-import.md)
 
 **适配器文档**
 

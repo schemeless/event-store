@@ -137,20 +137,20 @@ Pass `EventStoreOptions` to `makeEventStore` to enable parallel processing:
 
 ```ts
 const eventStore = await makeEventStore(repo, {
-  mainQueueConcurrent: 5,       // Process 5 main events in parallel
+  mainQueueConcurrent: 5, // Process 5 main events in parallel
   sideEffectQueueConcurrent: 10, // Process 10 side effects in parallel
-  observerQueueConcurrent: 5,    // Process 5 observers in parallel
+  observerQueueConcurrent: 5, // Process 5 observers in parallel
 })([userRegisteredFlow]);
 ```
 
 > **Warning:** increasing `mainQueueConcurrent` > 1 effectively processes events in parallel. While `better-queue` attempts to respect order, high concurrency may affect strict sequential consistency for dependent events if they arrive simultaneously. Use with caution/testing if your event logic depends on strict global ordering.
-
 
 ### Key-Based Partitioning (Sharding)
 
 To solve race conditions with global parallelism, we support **Key-Based Partitioning**. This ensures events for the same entity (e.g., `userId`) are processed sequentially, while different entities are processed in parallel.
 
 1.  **Define Shard Key**: Implement `getShardKey` in your `EventFlow`:
+
     ```typescript
     const UserFlow: EventFlow = {
       // ...
@@ -171,15 +171,15 @@ To solve race conditions with global parallelism, we support **Key-Based Partiti
 
 ### When Do You NEED This?
 
-| Your Use Case | Solution | Need `getAggregate`? |
-|---------------|----------|----------------------|
-| Prevent concurrent writes to same stream | `expectedSequence` (OCC) | ❌ No |
-| Update projections/read models | `apply` hook (incremental) | ❌ No |
-| Validate based on **current aggregate state** (e.g., "balance >= amount") | `getAggregate` | ✅ Yes |
+| Your Use Case                                                             | Solution                   | Need `getAggregate`? |
+| ------------------------------------------------------------------------- | -------------------------- | -------------------- |
+| Prevent concurrent writes to same stream                                  | `expectedSequence` (OCC)   | ❌ No                |
+| Update projections/read models                                            | `apply` hook (incremental) | ❌ No                |
+| Validate based on **current aggregate state** (e.g., "balance >= amount") | `getAggregate`             | ✅ Yes               |
 
 **OCC (Optimistic Concurrency Control) is O(1)** – it only checks a version number, NOT by replaying events. If your validation logic only needs the event payload itself, you don't need snapshots.
 
-**Snapshots are for reconstructing aggregate state** – When your `validate` or `preApply` hook needs the *current state* of an aggregate (calculated from all past events), `getAggregate` helps. Snapshots optimize this by caching intermediate state.
+**Snapshots are for reconstructing aggregate state** – When your `validate` or `preApply` hook needs the _current state_ of an aggregate (calculated from all past events), `getAggregate` helps. Snapshots optimize this by caching intermediate state.
 
 ### Example: When You Need `getAggregate`
 
@@ -187,31 +187,27 @@ To solve race conditions with global parallelism, we support **Key-Based Partiti
 // In your EventFlow's validate hook:
 validate: async (event) => {
   // You need the current account balance to validate
-  const { state } = await eventStore.getAggregate(
-    'account', 
-    event.payload.accountId, 
-    accountReducer, 
-    { balance: 0 }
-  );
-  
+  const { state } = await eventStore.getAggregate('account', event.payload.accountId, accountReducer, { balance: 0 });
+
   if (state.balance < event.payload.amount) {
     throw new Error('Insufficient funds');
   }
-}
+};
 ```
 
 ### Using `getAggregate`
 
 ```typescript
 const { state, sequence } = await eventStore.getAggregate(
-  'user',           // domain
-  '123',            // identifier
-  userReducer,      // your reducer function
-  { balance: 0 }    // initial state
+  'user', // domain
+  '123', // identifier
+  userReducer, // your reducer function
+  { balance: 0 } // initial state
 );
 ```
 
 The helper automatically:
+
 1.  Tries to load a snapshot (if adapter supports it).
 2.  Fetches **only** events after the snapshot.
 3.  Reduces them to get the final state.
@@ -241,20 +237,18 @@ If omitted, support is inferred from the presence of `repo.getStreamEvents`.
 
 ### Adapter Capability Matrix (v3.x)
 
-| Adapter | `capabilities.aggregate` | `getAggregate` Support |
-|--------|---------------------------|------------------------|
-| `@schemeless/event-store-adapter-dynamodb` | `false` (declared) | ❌ No |
-| Other adapters | inferred / adapter-defined | Check adapter docs or `eventStore.capabilities.aggregate` at runtime |
-
+| Adapter                                    | `capabilities.aggregate`   | `getAggregate` Support                                               |
+| ------------------------------------------ | -------------------------- | -------------------------------------------------------------------- |
+| `@schemeless/event-store-adapter-dynamodb` | `false` (declared)         | ❌ No                                                                |
+| Other adapters                             | inferred / adapter-defined | Check adapter docs or `eventStore.capabilities.aggregate` at runtime |
 
 ### `EventStoreOptions` Reference
 
-| property                    | type     | default | description                                                                                                      |
-| --------------------------- | -------- | ------- | ---------------------------------------------------------------------------------------------------------------- |
+| property                    | type     | default | description                                                                                                           |
+| --------------------------- | -------- | ------- | --------------------------------------------------------------------------------------------------------------------- |
 | `mainQueueConcurrent`       | `number` | `1`     | Number of events processed in parallel by the main queue. Set > 1 for high throughput at the cost of strict ordering. |
-| `sideEffectQueueConcurrent` | `number` | `1`     | Number of side effects processed in parallel. Safe to increase as side effects are retryable and asynchronous.    |
-| `observerQueueConcurrent`   | `number` | `1`     | Number of observers processed in parallel. Safe to increase if observers are independent.                         |
-
+| `sideEffectQueueConcurrent` | `number` | `1`     | Number of side effects processed in parallel. Safe to increase as side effects are retryable and asynchronous.        |
+| `observerQueueConcurrent`   | `number` | `1`     | Number of observers processed in parallel. Safe to increase if observers are independent.                             |
 
 ### Fire-and-Forget Observers
 
@@ -266,15 +260,13 @@ const analyticsObserver: SuccessEventObserver = {
   priority: 1,
   fireAndForget: true, // Run asynchronously, do not wait
   apply: async (event) => {
-      await sendAnalytics(event);
+    await sendAnalytics(event);
   },
 };
 ```
 
 - **Non-blocking**: The main `receive()` call returns immediately after persistence, without waiting for this observer.
 - **Error Isolation**: If this observer throws an error, it is logged but does **not** fail the main event flow.
-
-
 
 The returned object exposes:
 
@@ -314,9 +306,57 @@ await eventStore.shutdown(30000);
 ```
 
 This is particularly useful for:
+
 - **Jest Tests**: Preventing "Store is not a constructor" or "file after teardown" errors.
 - **Kubernetes**: Handling `SIGTERM` signals gracefully.
 - **Updates**: Ensuring queues are empty before deploying new versions.
+
+## Export and Import Events
+
+The core package ships built-in utilities to snapshot the entire repository into a plain array and restore it later. This is adapter-agnostic — it works with every `IEventStoreRepo` implementation.
+
+```ts
+import { exportEventsToArray, importEventsFromArray, createSnapshot, parseSnapshot } from '@schemeless/event-store';
+
+// ── Export ──────────────────────────────────────────────────────────────────
+const events = await exportEventsToArray(eventStore.eventStoreRepo, {
+  pageSize: 200, // optional, default 200
+  onProgress: (n) => console.log(`exported ${n}`),
+});
+const json = JSON.stringify(createSnapshot(events));
+
+// ── Import (restore) ────────────────────────────────────────────────────────
+const { events } = parseSnapshot(json); // Date fields automatically restored
+await importEventsFromArray(eventStore.eventStoreRepo, events, {
+  replace: true, // call resetStore() before writing (optional)
+  batchSize: 100, // optional, default 100
+  onProgress: (n) => console.log(`imported ${n}`),
+});
+```
+
+**React Native / Expo integration example:**
+
+```ts
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+
+// Backup
+const json = JSON.stringify(createSnapshot(await exportEventsToArray(store.eventStoreRepo)));
+const path = FileSystem.documentDirectory + 'backup.json';
+await FileSystem.writeAsStringAsync(path, json);
+await Sharing.shareAsync(path, { mimeType: 'application/json' });
+
+// Restore
+const json = await FileSystem.readAsStringAsync(backupPath);
+await importEventsFromArray(store.eventStoreRepo, parseSnapshot(json).events, { replace: true });
+```
+
+| Function                                     | Description                                          |
+| -------------------------------------------- | ---------------------------------------------------- |
+| `exportEventsToArray(repo, opts?)`           | Pages through `getAllEvents` → `IEventStoreEntity[]` |
+| `importEventsFromArray(repo, events, opts?)` | Writes in batches; coerces date strings to `Date`    |
+| `createSnapshot(events)`                     | Adds `exportedAt` + `count` metadata                 |
+| `parseSnapshot(json)`                        | Parses JSON; restores `created` as `Date`            |
 
 ## Cascading Revert
 
@@ -396,7 +436,7 @@ To support evolving event schemas over time (e.g., changing a price field from a
 
 1.  **Tagging**: New events are automatically tagged with the flow's current `schemaVersion` in `event.meta.schemaVersion`.
 2.  **Upcasting**: When an older event (lower version) is processed (during `receive` or `replay`), the `upcast` hook is called to migrate it to the current structure.
-3.  **Pipeline**: Upcasting happens **before** validation, so your `validate` and `apply` logic only ever needs to handle the *current* schema version.
+3.  **Pipeline**: Upcasting happens **before** validation, so your `validate` and `apply` logic only ever needs to handle the _current_ schema version.
 
 ### Example
 
@@ -413,7 +453,7 @@ interface OrderPlacedPayloadV2 {
 export const orderPlacedFlow: EventFlow<OrderPlacedPayloadV2> = {
   domain: 'order',
   type: 'placed',
-  
+
   // 1. Set the current version
   schemaVersion: 2,
 

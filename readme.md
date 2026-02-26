@@ -24,6 +24,7 @@ This monorepo provides a core runtime (`@schemeless/event-store`), shared types 
 - **Observer pipeline** — React to committed events with async handlers (fire-and-forget or blocking)
 - **Revert support** — Undo event trees with compensating events (`canRevert`, `previewRevert`, `revert`)
 - **Pluggable storage** — Swap databases (SQL, DynamoDB, SQLite) without changing business logic
+- **Export / Import** — Snapshot and restore the full event log as JSON; ideal for user backups and developer analysis
 
 ## Core Concepts: Thinking in Events
 
@@ -300,6 +301,58 @@ try {
 
 Important: direct `repo.storeEvents(...)` expects `CreatedEvent[]` (including `id` and `created`). Most applications should prefer `store.receive(...)`, which creates those fields for you.
 
+### 7) Export and import events
+
+Use the built-in utilities to snapshot the entire event store to a plain JSON-serialisable array — useful for user backups, sharing data with developers for debugging, or migrating between storage adapters.
+
+```ts
+import { exportEventsToArray, importEventsFromArray, createSnapshot, parseSnapshot } from '@schemeless/event-store';
+
+// ── Export ────────────────────────────────────────────────────────────────────
+const events = await exportEventsToArray(store.eventStoreRepo, {
+  pageSize: 200, // optional, default 200
+  onProgress: (n) => console.log(`${n} events exported`),
+});
+
+const snapshot = createSnapshot(events); // adds exportedAt + count metadata
+const json = JSON.stringify(snapshot); // ready to write to file / share
+
+// ── Import (restore) ──────────────────────────────────────────────────────────
+const snapshot = parseSnapshot(json); // parses JSON and restores Date objects
+await importEventsFromArray(store.eventStoreRepo, snapshot.events, {
+  replace: true, // clears the store first (optional)
+  batchSize: 100, // optional, default 100
+  onProgress: (n) => console.log(`${n} events imported`),
+});
+```
+
+**React Native / Expo example:**
+
+```ts
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+
+// Save backup to device and share
+const events = await exportEventsToArray(store.eventStoreRepo);
+const json = JSON.stringify(createSnapshot(events));
+const path = FileSystem.documentDirectory + 'backup.json';
+await FileSystem.writeAsStringAsync(path, json);
+await Sharing.shareAsync(path, { mimeType: 'application/json' });
+
+// Restore from a backup file
+const json = await FileSystem.readAsStringAsync(backupPath);
+await importEventsFromArray(store.eventStoreRepo, parseSnapshot(json).events, { replace: true });
+```
+
+The utilities only orchestrate repo I/O — file system access, sharing dialogs, and UI progress bars remain in your application layer.
+
+| Function                                     | Description                                                         |
+| -------------------------------------------- | ------------------------------------------------------------------- |
+| `exportEventsToArray(repo, opts?)`           | Fetches all events via `getAllEvents` pages → `IEventStoreEntity[]` |
+| `importEventsFromArray(repo, events, opts?)` | Writes events in batches; coerces date strings to `Date`            |
+| `createSnapshot(events)`                     | Wraps events with `{ exportedAt, count, events }`                   |
+| `parseSnapshot(json)`                        | Parses JSON string; restores `created` as `Date` instances          |
+
 ## Performance and concurrency
 
 By default, queues are sequential (`1`) for strict ordering. You can tune queue concurrency:
@@ -371,6 +424,7 @@ npm run start
 - [OCC and concurrency](docs/occ-and-concurrency.md)
 - [Revert guide](docs/revert.md)
 - [Adapter selection guide](docs/adapters.md)
+- [Export / Import guide](docs/export-import.md)
 - [Runtime deep dive](packages/event-store/readme.md)
 
 ### Adapter Docs

@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.2.0] - 2026-02-26
+
+#### Added
+
+- **Core**: Added comprehensive **Export and Import** utilities for snapshotting and restoring the full event log.
+  - `exportEventsToArray`: High-level utility to page through all events into a flat list.
+  - `importEventsFromArray`: Batch-writing utility with automatic `Date` coercion and optional `replace` (clean slate) mode.
+  - `createSnapshot` / `parseSnapshot`: Helper functions to wrap event logs with metadata and preserve `Date` instances through JSON serialisation.
+- **Documentation**: Added a dedicated **[Export / Import guide](docs/export-import.md)** covering everything from basic Node.js backups to complex React Native / Expo sharing workflows.
+
+#### Fixed
+
+- **@schemeless/event-store-adapter-pg**: Fixed a `25P02` (`IN_FAILED_SQL_TRANSACTION`) error that occurred when subsequent repository operations were attempted after a stream sequence conflict.
+- **Documentation**: Standardised feature lists and cross-links across all README variants (English, Chinese, and core package).
+
 ## [3.1.4] - 2026-02-23
 
 ### Fixed
