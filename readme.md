@@ -378,7 +378,6 @@ Guidance:
 ```txt
 packages/
   event-store/                 Core runtime
-  event-store-react-native/    React Native build of the runtime
   event-store-types/           Shared types
   event-store-adapter-*/       Persistence adapters
 examples/

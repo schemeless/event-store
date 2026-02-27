@@ -1,6 +1,6 @@
 # @schemeless/event-store-adapter-watermelondb
 
-WatermelonDB-powered persistence layer for `@schemeless/event-store-react-native`. It stores every emitted event inside a
+WatermelonDB-powered persistence layer for `@schemeless/event-store`. It stores every emitted event inside a
 high-performance SQLite database so that React Native applications can replay and synchronise their domain history offline.
 
 ## Installation
@@ -51,7 +51,7 @@ If you already have an application schema, simply append `eventStoreSchema` to y
 ```ts
 import { appSchema, Database } from '@nozbe/watermelondb';
 import SQLiteAdapter from '@nozbe/watermelondb/adapters/sqlite';
-import { makeEventStore } from '@schemeless/event-store-react-native';
+import { makeEventStore } from '@schemeless/event-store';
 import { EventStoreRepo, eventStoreSchema } from '@schemeless/event-store-adapter-watermelondb';
 import { eventFlows } from './eventFlows';
 
