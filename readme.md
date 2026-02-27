@@ -272,6 +272,8 @@ if (check.canRevert) {
 
 Only root events can be reverted. Every event in the causal tree must define `compensate`.
 
+The framework automatically handles metadata generation for compensating events (generating `id`, `created`, `causationId`, `correlationId`, `identifier`, and `schemaVersion`), ensuring consistent traceability with the original event.
+
 ### 6) Optimistic concurrency control (OCC)
 
 If you use repository-level writes directly, pass `expectedSequence`:

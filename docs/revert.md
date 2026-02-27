@@ -29,10 +29,21 @@ Attempting to revert non-root events fails by design.
 
 `compensate(originalEvent)` should return one or more base events that semantically reverse the original effect.
 
+The framework automatically populates the following metadata for compensating events:
+
+- `id`: Unique ULID for the new event.
+- `created`: Current timestamp.
+- `causationId`: Points to the ID of the event being reverted.
+- `correlationId`: Inherited from the original event.
+- `identifier`: Inherited from the original event.
+- `meta.schemaVersion`: Injected from the target flow's `schemaVersion`.
+- `meta.isCompensating`: Set to `true`.
+- `meta.compensatesEventId`: Set to the ID of the event being reverted.
+
 Recommendations:
 
 - Keep compensation idempotent at business level
-- Preserve identifiers/correlation context when appropriate
+- You only need to return the business payload; the framework handles the event system fields.
 - Validate compensation events with the same rigor as normal events
 
 ## Safe workflow
@@ -61,4 +72,3 @@ console.log('generated compensating events:', result.compensatingEvents.length);
 ## Operational note
 
 Revert is a domain operation, not just a technical rollback. Define compensation semantics with product/domain stakeholders before enabling it in production workflows.
-

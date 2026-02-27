@@ -1,3 +1,5 @@
+import { defaultEventCreator } from '../operators/defaultEventCreator';
+import { getEventFlow } from '../operators/getEventFlow';
 import type {
   BaseEvent,
   CanRevertResult,
@@ -47,6 +49,48 @@ export const makeRevert = ({ repo, eventFlowMap, storeEvents }: MakeRevertDeps) 
     }
 
     return descendants;
+  };
+
+  /**
+   * Transforms BaseEvents from compensate() into fully-qualified CreatedEvents.
+   */
+  const materializeCompensatingEvents = (
+    baseEvents: BaseEvent<any> | BaseEvent<any>[],
+    originalEvent: CreatedEvent<any>
+  ): CreatedEvent<any>[] => {
+    const events = Array.isArray(baseEvents) ? baseEvents : [baseEvents];
+
+    return events.map((baseEvent) => {
+      // 1. Inject schemaVersion if missing
+      const meta = baseEvent.meta || {};
+      if (meta.schemaVersion === undefined) {
+        try {
+          const flow = getEventFlow(eventFlowMap)(baseEvent);
+          meta.schemaVersion = flow.schemaVersion || 1;
+        } catch (e) {
+          meta.schemaVersion = 1;
+        }
+      }
+
+      // 2. Use defaultEventCreator for id, created, causationId, correlationId, identifier
+      const createdEvent = defaultEventCreator(
+        {
+          ...baseEvent,
+          meta,
+        },
+        originalEvent
+      );
+
+      // 3. Finalize compensation metadata
+      return {
+        ...createdEvent,
+        meta: {
+          ...createdEvent.meta,
+          isCompensating: true,
+          compensatesEventId: originalEvent.id,
+        },
+      };
+    });
   };
 
   /**
@@ -149,21 +193,11 @@ export const makeRevert = ({ repo, eventFlowMap, storeEvents }: MakeRevertDeps) 
 
     if (eventFlow?.compensate) {
       const compensation = eventFlow.compensate(event);
-      const baseEvents = Array.isArray(compensation) ? compensation : [compensation];
-
-      // Add revert metadata to each compensating event
-      const eventsWithMeta = baseEvents.map((e) => ({
-        ...e,
-        meta: {
-          ...(e.meta ?? {}),
-          isCompensating: true,
-          compensatesEventId: event.id,
-        },
-      }));
+      const materializedEvents = materializeCompensatingEvents(compensation, event);
 
       // Store compensating events
-      await storeEvents(eventsWithMeta as CreatedEvent<any>[]);
-      compensatingEvents.push(...(eventsWithMeta as CreatedEvent<any>[]));
+      await storeEvents(materializedEvents);
+      compensatingEvents.push(...materializedEvents);
     }
 
     return {

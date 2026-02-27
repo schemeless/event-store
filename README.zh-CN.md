@@ -277,6 +277,8 @@ if (check.canRevert) {
 
 注意：只有根事件（Root Event）可以被回滚。因果树中的每个事件都必须定义 `compensate` 逻辑才能支持回滚。
 
+框架会自动处理补偿事件的元数据生成（包括自动补全 `id`、`created`、`causationId`、`correlationId`、`identifier` 以及 `schemaVersion`），确保回滚链路的可追溯性与一致性。
+
 ### 6) 乐观并发控制 (OCC)
 
 如果你绕过 `store.receive` 直接使用 repository 层的写入操作，请务必传入 `expectedSequence` 以防止并发冲突：

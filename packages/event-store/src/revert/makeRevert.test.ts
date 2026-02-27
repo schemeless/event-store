@@ -267,5 +267,107 @@ describe('makeRevert', () => {
         compensatesEventId: 'evt-1',
       });
     });
+
+    it('should automatically populate id, created, and tracing fields for compensating events', async () => {
+      const rootEvent = createMockEvent('evt-1', 'order', 'placed');
+      rootEvent.identifier = 'user-1';
+      rootEvent.correlationId = 'corr-123';
+
+      mockRepo.getEventById.mockResolvedValue(rootEvent);
+      mockRepo.findByCausationId.mockResolvedValue([]);
+
+      const { revert } = makeRevert({ repo: mockRepo, eventFlowMap, storeEvents });
+      const result = await revert('evt-1');
+
+      const compEvent = result.compensatingEvents[0];
+      expect(compEvent.id).toBeDefined();
+      expect(compEvent.id).not.toBe(rootEvent.id);
+      expect(compEvent.created).toBeInstanceOf(Date);
+      expect(compEvent.causationId).toBe(rootEvent.id);
+      expect(compEvent.correlationId).toBe(rootEvent.correlationId);
+      expect(compEvent.identifier).toBe(rootEvent.identifier);
+    });
+
+    it('should inject schemaVersion from flow into compensating events', async () => {
+      const flowWithVersion: EventFlow = {
+        domain: 'order',
+        type: 'versioned',
+        schemaVersion: 5,
+        receive: jest.fn() as any,
+        compensate: () => ({ domain: 'order', type: 'reverted_v', payload: {} }),
+      };
+
+      const revertedFlow: EventFlow = {
+        domain: 'order',
+        type: 'reverted_v',
+        schemaVersion: 2,
+        receive: jest.fn() as any,
+      };
+
+      const flowMap = {
+        order__versioned: flowWithVersion,
+        order__reverted_v: revertedFlow,
+      };
+
+      const rootEvent = createMockEvent('evt-1', 'order', 'versioned');
+      mockRepo.getEventById.mockResolvedValue(rootEvent);
+      mockRepo.findByCausationId.mockResolvedValue([]);
+
+      const { revert } = makeRevert({ repo: mockRepo, eventFlowMap: flowMap, storeEvents });
+      const result = await revert('evt-1');
+
+      expect(result.compensatingEvents[0].meta?.schemaVersion).toBe(2);
+    });
+
+    it('should overwrite manual id in compensate() to ensure uniqueness', async () => {
+      const flow: EventFlow = {
+        domain: 'order',
+        type: 'placed',
+        receive: jest.fn() as any,
+        compensate: () => ({
+          domain: 'order',
+          type: 'voided',
+          id: 'manual-id',
+          payload: {},
+        }),
+      };
+
+      const flowMap = { order__placed: flow };
+      const rootEvent = createMockEvent('evt-1', 'order', 'placed');
+      mockRepo.getEventById.mockResolvedValue(rootEvent);
+      mockRepo.findByCausationId.mockResolvedValue([]);
+
+      const { revert } = makeRevert({ repo: mockRepo, eventFlowMap: flowMap, storeEvents });
+      const result = await revert('evt-1');
+
+      expect(result.compensatingEvents[0].id).toBeDefined();
+      expect(result.compensatingEvents[0].id).not.toBe('manual-id');
+    });
+
+    it('should correctly set causationId in deep trees', async () => {
+      const rootEvent = createMockEvent('root', 'order', 'placed');
+      const child = createMockEvent('child', 'account', 'transfer', 'root');
+      const grandchild = createMockEvent('grandchild', 'account', 'transfer', 'child');
+
+      mockRepo.getEventById.mockResolvedValue(rootEvent);
+      mockRepo.findByCausationId.mockImplementation(async (id: string) => {
+        if (id === 'root') return [child];
+        if (id === 'child') return [grandchild];
+        return [];
+      });
+
+      const { revert } = makeRevert({ repo: mockRepo, eventFlowMap, storeEvents });
+      const result = await revert('root');
+
+      // Order: grandchild -> child -> root
+      expect(result.childResults[0].childResults[0].revertedEventId).toBe('grandchild');
+      expect(result.childResults[0].childResults[0].compensatingEvents[0].causationId).toBe('grandchild');
+
+      expect(result.childResults[0].revertedEventId).toBe('child');
+      expect(result.childResults[0].compensatingEvents[0].causationId).toBe('child');
+
+      expect(result.revertedEventId).toBe('root');
+      expect(result.compensatingEvents[0].causationId).toBe('root');
+    });
   });
 });

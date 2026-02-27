@@ -1,6 +1,6 @@
 {
   "name": "@schemeless/event-store-adapter-typeorm-v3",
-  "version": "3.2.1",
+  "version": "3.2.2",
   "typescript:main": "src/index.ts",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -21,7 +21,7 @@
     "url": "https://github.com/schemeless/event-store/issues"
   },
   "dependencies": {
-    "@schemeless/event-store-types": "^3.2.1",
+    "@schemeless/event-store-types": "^3.2.2",
     "debug": "^4.2.0",
     "typeorm": "^0.3.0"
   },
