@@ -62,7 +62,7 @@ describe('makeRevert', () => {
     it('should return false if repo does not support revert operations', async () => {
       const repoWithoutSupport = { ...mockRepo, getEventById: undefined };
       const { canRevert } = makeRevert({ repo: repoWithoutSupport as any, eventFlowMap, storeEvents });
-      await expect(canRevert('evt-1')).rejects.toThrow('Revert operations require repository to implement');
+      await expect(canRevert('evt-1')).rejects.toThrow(/Repository must implement/);
     });
 
     it('should return false if event not found', async () => {
@@ -140,7 +140,7 @@ describe('makeRevert', () => {
       const nonRootEvent = createMockEvent('evt-2', 'account', 'transfer', 'evt-1');
       mockRepo.getEventById.mockResolvedValue(nonRootEvent);
       const { previewRevert } = makeRevert({ repo: mockRepo, eventFlowMap, storeEvents });
-      await expect(previewRevert('evt-2')).rejects.toThrow('Cannot preview revert for non-root event');
+      await expect(previewRevert('evt-2')).rejects.toThrow(/is not a root event/);
     });
 
     it('should return root event and all descendants', async () => {
@@ -169,7 +169,7 @@ describe('makeRevert', () => {
       const nonRootEvent = createMockEvent('evt-2', 'account', 'transfer', 'evt-1');
       mockRepo.getEventById.mockResolvedValue(nonRootEvent);
       const { revert } = makeRevert({ repo: mockRepo, eventFlowMap, storeEvents });
-      await expect(revert('evt-2')).rejects.toThrow('Cannot revert event evt-2');
+      await expect(revert('evt-2')).rejects.toThrow(/is not a root event/);
     });
 
     it('should revert a single root event with no children', async () => {

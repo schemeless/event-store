@@ -6,7 +6,7 @@
 
 - `domain: string`
 - `type: string`
-- `receive: (eventStore) => (eventInput) => Promise<[CreatedEvent, ...]>`
+- `kind: 'simple' | 'aggregate'` (highly recommended, enables strict typing)
 
 ## Core optional fields
 
@@ -28,16 +28,16 @@
 
 ## Signature reference
 
-| Field | Signature |
-| --- | --- |
-| `receive` | `(eventStore) => (eventInputArgs) => Promise<[CreatedEvent<Payload>, ...CreatedEvent<any>[]]>` |
-| `validate` | `(event) => Promise<Error \\| void> \\| Error \\| void` |
-| `preApply` | `(event: CreatedEvent<PartialPayload>) => Promise<CreatedEvent<Payload> \\| void> \\| CreatedEvent<Payload> \\| void` |
-| `apply` | `(event) => Promise<void> \\| void` |
-| `sideEffect` | `(event) => Promise<void \\| BaseEvent<any>[]> \\| void \\| BaseEvent<any>[]` |
-| `cancelApply` | `(event) => Promise<void> \\| void` |
-| `createConsequentEvents` | `(causalEvent) => Promise<BaseEvent<any>[]> \\| BaseEvent<any>[]` |
-| `compensate` | `(originalEvent) => BaseEvent<any> \\| BaseEvent<any>[]` |
+| Field                    | Signature                                                                  |
+| ------------------------ | -------------------------------------------------------------------------- | -------------------- | ------------------------ | ----------------- |
+| `receive`                | _(deprecated)_ `(eventStore) => (eventInputArgs) => Promise<...>`          |
+| `validate`               | `(event) => Promise<Error \\                                               | void> \\             | Error \\                 | void`             |
+| `preApply`               | `(event: CreatedEvent<PartialPayload>) => Promise<CreatedEvent<Payload> \\ | void> \\             | CreatedEvent<Payload> \\ | void`             |
+| `apply`                  | `(event) => Promise<void> \\                                               | void`                |
+| `sideEffect`             | `(event) => Promise<void \\                                                | BaseEvent<any>[]> \\ | void \\                  | BaseEvent<any>[]` |
+| `cancelApply`            | `(event) => Promise<void> \\                                               | void`                |
+| `createConsequentEvents` | `(causalEvent) => Promise<BaseEvent<any>[]> \\                             | BaseEvent<any>[]`    |
+| `compensate`             | `(originalEvent) => BaseEvent<any> \\                                      | BaseEvent<any>[]`    |
 
 ## Schema evolution hooks
 
@@ -54,7 +54,7 @@ Events with the same shard key are processed sequentially in the same partition.
 
 ## Input and output shapes
 
-`receive` accepts `BaseEventInput`:
+`eventStore.submit(flow, input)` accepts `BaseEventInput`:
 
 - `payload` (required)
 - `meta` (optional)
@@ -62,7 +62,7 @@ Events with the same shard key are processed sequentially in the same partition.
 - `correlationId` (optional)
 - `created` (optional)
 
-`receive` resolves to created event array where each event has:
+`submit` resolves to created event array where each event has:
 
 - framework-generated `id` (ULID-like)
 - normalized `created: Date`
@@ -84,9 +84,10 @@ import type { EventFlow } from '@schemeless/event-store-types';
 type Payload = { id: string };
 
 export const UserCreated: EventFlow<Payload> = {
+  kind: 'simple',
   domain: 'user',
   type: 'created',
-  receive: (es) => (input) => es.receive(UserCreated)(input),
+  // receive is deprecated: use eventStore.submit(UserCreated, input) instead
   validate: (event) => {
     if (!event.payload.id) throw new Error('id is required');
   },

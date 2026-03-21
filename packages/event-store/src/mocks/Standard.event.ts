@@ -14,6 +14,7 @@ function wait(ms = 1000, value = null) {
 }
 
 export const StandardEvent: EventFlow<Payload> = {
+  kind: 'simple',
   domain: DOMAIN,
   type: TYPE,
   samplePayload: {

@@ -1,7 +1,9 @@
 import type { Observable } from 'rxjs';
 import type {
+  BaseEventInput,
   CanRevertResult,
   CreatedEvent,
+  EventFlow,
   EventObserverState,
   EventOutputState,
   IEventStoreEntity,
@@ -55,13 +57,55 @@ export interface EventStoreCapabilities {
 }
 
 export interface EventStore {
+  /**
+   * @deprecated Internal implementation detail. Do not use directly.
+   * Use `submit()` for sending events and `on('processed', handler)` for notifications.
+   * Will be removed in v5.
+   */
   mainQueue: ReturnType<typeof makeMainQueue>;
+
+  /**
+   * @deprecated Internal implementation detail. Do not use directly.
+   * Will be removed in v5.
+   */
   sideEffectQueue: ReturnType<typeof makeSideEffectQueue>;
+
+  /**
+   * @deprecated Use `submit(flow, input)` instead. Will be removed in v5.
+   */
   receive: ReturnType<typeof makeReceive>;
+
+  /**
+   * Submit an event for processing. This is the preferred API over `receive`.
+   * Validates, applies, persists, runs side effects, and notifies observers.
+   *
+   * @param flow - The EventFlow definition for this event type
+   * @param input - The event input (payload, identifier, etc.)
+   * @returns All created events (root + consequent events)
+   * @throws ValidationError if validation fails
+   */
+  submit: <PartialPayload, Payload extends PartialPayload>(
+    flow: EventFlow<PartialPayload, Payload>,
+    input: BaseEventInput<PartialPayload>
+  ) => Promise<[CreatedEvent<Payload>, ...Array<CreatedEvent<any>>]>;
+
   replay: ReturnType<typeof makeReplay>;
   eventStoreRepo: IEventStoreRepo;
   capabilities: EventStoreCapabilities;
+
+  /**
+   * @deprecated Use `on('processed', handler)` instead. Will be removed in v5.
+   * Requires RxJS subscription.
+   */
   output$: Observable<EventOutput>;
+
+  /**
+   * Subscribe to event processing notifications.
+   * Alternative to output$ that doesn't require RxJS.
+   *
+   * @returns Unsubscribe function
+   */
+  on: (event: 'processed', handler: (output: EventOutput) => void) => () => void;
 
   /**
    * Load aggregate state by replaying events (with optional snapshot optimization).

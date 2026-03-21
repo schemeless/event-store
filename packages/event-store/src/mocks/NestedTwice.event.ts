@@ -15,6 +15,7 @@ interface Payload {
 }
 
 export const NestedTwiceEvent: EventFlow<Payload> = {
+  kind: 'simple',
   domain: DOMAIN,
   type: TYPE,
   samplePayload: {

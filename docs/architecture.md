@@ -21,17 +21,17 @@ If validation/apply fails, created events in the same chain are marked canceled 
 
 Every persisted event follows this baseline shape:
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `id` | `string` | Framework-generated event id |
-| `domain` | `string` | Domain namespace (`Account`, `Order`, etc.) |
-| `type` | `string` | Event type inside domain |
-| `payload` | `object` | Business payload |
-| `meta` | `object?` | Optional metadata/extensions |
-| `created` | `Date` | Event creation timestamp |
-| `identifier` | `string?` | Developer-provided actor/stream identifier |
-| `correlationId` | `string?` | Root causal chain id |
-| `causationId` | `string?` | Immediate parent event id |
+| Field           | Type      | Notes                                       |
+| --------------- | --------- | ------------------------------------------- |
+| `id`            | `string`  | Framework-generated event id                |
+| `domain`        | `string`  | Domain namespace (`Account`, `Order`, etc.) |
+| `type`          | `string`  | Event type inside domain                    |
+| `payload`       | `object`  | Business payload                            |
+| `meta`          | `object?` | Optional metadata/extensions                |
+| `created`       | `Date`    | Event creation timestamp                    |
+| `identifier`    | `string?` | Developer-provided actor/stream identifier  |
+| `correlationId` | `string?` | Root causal chain id                        |
+| `causationId`   | `string?` | Immediate parent event id                   |
 
 ## Queues and processing model
 
@@ -92,11 +92,11 @@ Account/Debit
 
 Use replay to rebuild read models/projections after deployment or migration.
 
-## Output stream (`output$`)
+## Event Notifications
 
-`EventStore.output$` emits lifecycle outcomes from main processing and side effects.
+`eventStore.on('processed', handler)` emits lifecycle outcomes from main processing and side effects. _(Note: `EventStore.output$` is deprecated)_
 
-State families emitted by `output$`:
+State families emitted to the handler:
 
 - Event states: `Event:success`, `Event:invalid`, `Event:canceled`, `Event:reverted`, `Event:revertFailed`
 - Side-effect states: `SideEffects:done`, `SideEffects:retry`, `SideEffects:fail`

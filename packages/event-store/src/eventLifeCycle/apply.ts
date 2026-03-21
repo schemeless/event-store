@@ -1,5 +1,6 @@
 import type { CreatedEvent, EventFlow, IEventStoreEntity } from '@schemeless/event-store-types';
 import { logEvent } from '../util/logEvent';
+import { AggregateError } from '@schemeless/event-store-types';
 import { isAggregateEventFlow } from '../operators/isAggregateEventFlow';
 import { aggregateStateCache } from './aggregateStateCache';
 
@@ -23,7 +24,7 @@ export const apply = async (
 
   const identifier = eventFlow.aggregate.getIdentifier?.(event) ?? event.identifier;
   if (!identifier) {
-    throw new Error(`AggregateEventFlow ${eventFlow.domain}/${eventFlow.type} requires an identifier`);
+    throw new AggregateError(eventFlow, 'no_identifier');
   }
 
   if (!aggregateStateCache.hasByEventId(event.id)) {
@@ -35,7 +36,7 @@ export const apply = async (
       aggregateStateCache.set(event.id, eventFlow.domain, identifier, cachedState);
     } else {
       if (!getAggregate) {
-        throw new Error(`AggregateEventFlow ${eventFlow.domain}/${eventFlow.type} requires getAggregate() support`);
+        throw new AggregateError(eventFlow, 'no_loader');
       }
       const { state } = await getAggregate(
         eventFlow.domain,
@@ -56,7 +57,7 @@ export const apply = async (
 
   const nextState = await eventFlow.apply(event, currentState as any);
   if (typeof nextState === 'undefined') {
-    throw new Error(`AggregateEventFlow ${eventFlow.domain}/${eventFlow.type} apply() must return state`);
+    throw new AggregateError(eventFlow, 'apply_must_return_state');
   }
 
   aggregateStateCache.set(event.id, eventFlow.domain, identifier, nextState);

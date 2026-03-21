@@ -57,6 +57,7 @@ export interface EventFlow<
   Payload extends PartialPayload = PartialPayload,
   META extends EventMeta = EventMeta
 > {
+  readonly kind?: 'simple';
   readonly domain: string;
   readonly type: string;
   readonly description?: string;
@@ -102,6 +103,11 @@ export interface EventFlow<
    */
   readonly getShardKey?: (event: BaseEvent<Payload, META>) => string | undefined;
 
+  /**
+   * @deprecated The `receive` pattern will be replaced in v5.
+   * Instead of `const send = MyEvent.receive(eventStore); await send(input);`
+   * use `await eventStore.submit(MyEvent, input);` directly.
+   */
   readonly receive: (eventStore: {
     receive: (
       eventFlow: EventFlow<PartialPayload, Payload, META>
@@ -155,7 +161,8 @@ export interface AggregateEventFlow<
   Payload extends PartialPayload = PartialPayload,
   State = any,
   META extends EventMeta = EventMeta
-> extends Omit<EventFlow<PartialPayload, Payload, META>, 'validate' | 'apply'> {
+> extends Omit<EventFlow<PartialPayload, Payload, META>, 'validate' | 'apply' | 'kind'> {
+  readonly kind?: 'aggregate';
   readonly aggregate: AggregateConfig<State>;
 
   readonly validate?: (event: CreatedEvent<Payload, META>, state: State) => Promise<Error | void> | Error | void;
@@ -213,3 +220,11 @@ export enum EventOutputState {
 export enum EventObserverState {
   success = 'Observer:success',
 }
+
+/**
+ * Use this type when defining new EventFlows.
+ * The `kind` field enables TypeScript to narrow the type automatically.
+ */
+export type TypedEventFlow<P = any, S = any> =
+  | (EventFlow<P, P> & { readonly kind: 'simple' })
+  | (AggregateEventFlow<P, P, S> & { readonly kind: 'aggregate' });

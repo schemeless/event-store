@@ -15,7 +15,8 @@ import { makeReceive } from './queue/makeReceive';
 import { makeReplay } from './makeReplay';
 import { makeSideEffectQueue } from './queue/makeSideEffectQueue';
 import { from, merge } from 'rxjs';
-import { AggregateResult, EventStore, EventStoreOptions } from './EventStore.types';
+import { AggregateResult, EventOutput, EventStore, EventStoreOptions } from './EventStore.types';
+import { AggregateError, ShutdownTimeoutError } from '@schemeless/event-store-types';
 import { makeRevert } from './revert/makeRevert';
 import { isAggregateEventFlow } from './operators/isAggregateEventFlow';
 
@@ -43,11 +44,8 @@ export const makeEventStore =
 
     const hasAggregateEventFlow = eventFlows.some((flow) => isAggregateEventFlow(flow));
     if (hasAggregateEventFlow && !capabilities.aggregate) {
-      const aggregateFlow = eventFlows.find((flow) => isAggregateEventFlow(flow));
-      throw new Error(
-        `AggregateEventFlow "${aggregateFlow?.domain}/${aggregateFlow?.type}" requires adapter with getStreamEvents() support. ` +
-          `Current adapter does not declare aggregate capability.`
-      );
+      const aggregateFlow = eventFlows.find((flow) => isAggregateEventFlow(flow))!;
+      throw new AggregateError(aggregateFlow, 'capability_missing');
     }
 
     const getAggregate: EventStore['getAggregate'] = async <State>(
@@ -58,15 +56,7 @@ export const makeEventStore =
     ): Promise<AggregateResult<State>> => {
       const getStreamEvents = eventStoreRepo.getStreamEvents?.bind(eventStoreRepo);
       if (!capabilities.aggregate || !getStreamEvents) {
-        const repoName = eventStoreRepo.constructor?.name || 'IEventStoreRepo';
-        const reason =
-          declaredAggregateCapability === false
-            ? `${repoName} declares capabilities.aggregate=false`
-            : `${repoName} does not implement getStreamEvents(domain, identifier, fromSequence)`;
-        throw new Error(
-          `getAggregate is unavailable for this repository. ${reason}. ` +
-            `Use an adapter that implements getStreamEvents, or avoid getAggregate and validate from projections/OCC.`
-        );
+        throw new AggregateError({ domain, type: '*' }, 'capability_missing');
       }
 
       let state = initialState;
@@ -151,8 +141,34 @@ export const makeEventStore =
     const doneAndSideEffect$ = merge(mainQueueProcessed$, sideEffectQueue.processed$).pipe(Rx.share());
     // const { result$, observerQueue } = assignObserver(doneAndSideEffect$, successEventObservers);
     const output$ = doneAndSideEffect$;
+    const eventHandlers: Array<(output: EventOutput) => void> = [];
+
+    const on: EventStore['on'] = (event, handler) => {
+      if (event !== 'processed') throw new Error(`Unknown event: ${event}`);
+      eventHandlers.push(handler);
+      return () => {
+        const idx = eventHandlers.indexOf(handler);
+        if (idx !== -1) eventHandlers.splice(idx, 1);
+      };
+    };
+
     // Ensure queues start draining even if callers only subscribe later.
-    const outputSubscription = output$.subscribe(() => undefined);
+    const outputSubscription = output$.subscribe((output) => {
+      for (const handler of eventHandlers) {
+        try {
+          handler(output);
+        } catch (e) {
+          console.error(`Event handler error: ${e}`);
+        }
+      }
+    });
+
+    const receiveHandler = makeReceive(mainQueue, successEventObservers, {
+      observerQueueConcurrent,
+      eventFlowMap,
+    });
+
+    const submit: EventStore['submit'] = (flow: any, input: any) => receiveHandler(flow)(input) as any;
 
     // Create revert functions
     const { canRevert, previewRevert, revert } = makeRevert({
@@ -199,7 +215,7 @@ export const makeEventStore =
       let timer: ReturnType<typeof setTimeout> | undefined;
       const timeoutPromise = new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
-          reject(new Error('EventStore shutdown timeout'));
+          reject(new ShutdownTimeoutError(timeout));
         }, timeout);
         const nodeTimer = timer as ReturnType<typeof setTimeout> & { unref?: () => void };
         nodeTimer.unref?.();
@@ -218,10 +234,9 @@ export const makeEventStore =
     return {
       mainQueue,
       sideEffectQueue,
-      receive: makeReceive(mainQueue, successEventObservers, {
-        observerQueueConcurrent,
-        eventFlowMap,
-      }),
+      receive: receiveHandler,
+      submit,
+      on,
       replay: makeReplay(eventFlows, successEventObservers, eventStoreRepo),
       eventStoreRepo: eventStoreRepo,
       capabilities,

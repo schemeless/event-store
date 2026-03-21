@@ -1,5 +1,23 @@
 # Changelog
 
+## [4.0.0] - 2026-03-21
+
+### Breaking Changes
+
+- **Core API**: Introduced the `eventStore.submit(Event, input)` API to replace the curried `Event.receive(eventStore)(input)` pattern. The curried pattern is now deprecated.
+- **Error Handling**: Replaced generic `Error` throws with structured error types (`EventStoreError`, `ValidationError`, `FlowNotFoundError`, `AggregateError`, `ShutdownTimeoutError`, `RevertError`).
+- **RxJS Dependency**: Deprecated `eventStore.output$` and internal RxJS queues. Event listeners should now use the new `eventStore.on('processed', handler)`.
+
+### Added
+
+- **Discriminated Unions**: Added `kind: 'simple' | 'aggregate'` discriminant to the `EventFlow` interface, enabling strict type narrowing.
+
+### Deprecated
+
+- **Core**: The `receive` property on `EventFlow` is deprecated. Use `eventStore.submit()` instead.
+- **Core**: `EventStore.output$` is deprecated. Use `EventStore.on('processed', ...)` instead.
+- **Core**: Exposure of internal queue types `EventStore.mainQueue` and `EventStore.sideEffectQueue` are deprecated from the public API type.
+
 ## [3.2.2] - 2026-02-27
 
 ### Fixed

@@ -1,5 +1,6 @@
 import { defaultEventCreator } from '../operators/defaultEventCreator';
 import { getEventFlow } from '../operators/getEventFlow';
+import { RevertError } from '@schemeless/event-store-types';
 import type {
   BaseEvent,
   CanRevertResult,
@@ -28,10 +29,7 @@ export const makeRevert = ({ repo, eventFlowMap, storeEvents }: MakeRevertDeps) 
    */
   const checkRepoSupport = (): void => {
     if (!repo.getEventById || !repo.findByCausationId) {
-      throw new Error(
-        'Revert operations require repository to implement getEventById and findByCausationId methods. ' +
-          'Please update your event store adapter to the latest version.'
-      );
+      throw new RevertError('', 'repo_not_supported');
     }
   };
 
@@ -152,15 +150,11 @@ export const makeRevert = ({ repo, eventFlowMap, storeEvents }: MakeRevertDeps) 
 
     const event = (await repo.getEventById!(eventId)) as CreatedEvent<any> | null;
     if (!event) {
-      throw new Error(`Event not found: ${eventId}`);
+      throw new RevertError(eventId, 'not_found');
     }
 
     if (event.causationId != null) {
-      throw new Error(
-        `Cannot preview revert for non-root event. ` +
-          `Event ${eventId} was caused by ${event.causationId}. ` +
-          `Please preview the root event instead.`
-      );
+      throw new RevertError(eventId, 'not_root');
     }
 
     const descendants = await collectEventTree(event);
@@ -217,6 +211,9 @@ export const makeRevert = ({ repo, eventFlowMap, storeEvents }: MakeRevertDeps) 
     // 1. Validate revertability
     const validation = await canRevert(eventId);
     if (!validation.canRevert) {
+      if (validation.reason?.includes('not found')) throw new RevertError(eventId, 'not_found');
+      if (validation.reason?.includes('not a root')) throw new RevertError(eventId, 'not_root');
+      if (validation.reason?.includes("'compensate' hook")) throw new RevertError(eventId, 'missing_compensate');
       throw new Error(`Cannot revert event ${eventId}: ${validation.reason}`);
     }
 

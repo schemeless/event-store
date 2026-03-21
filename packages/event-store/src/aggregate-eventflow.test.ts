@@ -92,6 +92,7 @@ const makeAggregateFlow = (
     domain: 'counter',
     type: hooks.type || 'incremented',
     receive: (eventStore) => eventStore.receive(flow as any),
+    kind: 'aggregate',
     aggregate: {
       initialState: { count: 0 },
       reducer: (state, event) => ({ count: state.count + event.payload.amount }),

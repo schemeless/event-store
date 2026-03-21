@@ -50,7 +50,7 @@ describe('EventStore Snapshot Support', () => {
     const es = await makeEventStore(repoWithoutStreamSupport)([]);
 
     await expect(es.getAggregate(mockDomain, mockIdentifier, mockReducer, initialState)).rejects.toThrow(
-      'getAggregate is unavailable for this repository'
+      /requires adapter with getStreamEvents/
     );
   });
 
@@ -62,7 +62,7 @@ describe('EventStore Snapshot Support', () => {
     const es = await makeEventStore(repoWithExplicitAggregateOff)([]);
 
     await expect(es.getAggregate(mockDomain, mockIdentifier, mockReducer, initialState)).rejects.toThrow(
-      'declares capabilities.aggregate=false'
+      /requires adapter with getStreamEvents/
     );
   });
 

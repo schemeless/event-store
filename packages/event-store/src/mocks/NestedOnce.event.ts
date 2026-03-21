@@ -11,6 +11,7 @@ interface Payload {
 }
 
 export const NestedOnceEvent: EventFlow<Payload> = {
+  kind: 'simple',
   domain: DOMAIN,
   type: TYPE,
   samplePayload: {

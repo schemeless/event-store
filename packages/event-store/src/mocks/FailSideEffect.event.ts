@@ -10,6 +10,7 @@ interface Payload {
 }
 
 export const FailsSideEffectEvent: EventFlow<Payload> = {
+  kind: 'simple',
   domain: DOMAIN,
   type: TYPE,
   samplePayload: {
