@@ -202,7 +202,7 @@ main().catch(console.error);
 | `adapter-null`         | No-op (测试桩)           | ❌       | ❌               | 部分         | ❌         |
 
 > 注意：`getAggregate` 功能要求 `repo.getStreamEvents(...)` 支持。`adapter-pg` 和 `adapter-expo-sqlite` 已完整实现。
-
+嗯。 
 ## 聚合事件流 AggregateEventFlow
 
 如果某个事件流负责维护聚合状态，可以直接声明为 `AggregateEventFlow`。框架会在 `validate` 和 `apply` 之前自动加载当前聚合状态，并在 replay 时把同一份状态传给观察者。
