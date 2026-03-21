@@ -1,13 +1,10 @@
-import { Subject } from 'rxjs';
-
-import type { SuccessEventObserver } from '@schemeless/event-store-types';
-
 import { makeReplay } from './makeReplay';
-import { makeObserverQueue } from './queue/makeObserverQueue';
+import { runObservers } from './pipeline/ObserverRunner';
+import type { SuccessEventObserver, AggregateEventObserver } from '@schemeless/event-store-types';
 
-jest.mock('./queue/makeObserverQueue');
-
-const makeObserverQueueMock = makeObserverQueue as jest.MockedFunction<typeof makeObserverQueue>;
+jest.mock('./pipeline/ObserverRunner', () => ({
+  runObservers: jest.fn().mockResolvedValue(undefined),
+}));
 
 describe('makeReplay', () => {
   beforeEach(() => {
@@ -15,11 +12,19 @@ describe('makeReplay', () => {
   });
 
   const buildIterator = (events: any[][]) =>
-    (async function* () {
-      for (const page of events) {
-        yield page;
+    ({
+      [Symbol.asyncIterator]() {
+        let i = 0;
+        return {
+          async next() {
+            if (i < events.length) {
+              return { done: false, value: events[i++] };
+            }
+            return { done: true, value: undefined };
+          }
+        };
       }
-    })();
+    });
 
   it('replays events using the registered event flows', async () => {
     const apply = jest.fn().mockResolvedValue(undefined);
@@ -35,17 +40,6 @@ describe('makeReplay', () => {
       apply: jest.fn(),
     };
 
-    const observerQueueDrained$ = new Subject<void>();
-    const observerPush = jest.fn(() => {
-      observerQueueDrained$.next();
-    });
-
-    makeObserverQueueMock.mockReturnValue({
-      processed$: new Subject(),
-      queueInstance: { drained$: observerQueueDrained$ } as any,
-      push: observerPush as any,
-    } as any);
-
     const storedEvent = {
       id: 'evt-1',
       domain: 'user',
@@ -59,7 +53,6 @@ describe('makeReplay', () => {
     };
 
     const replay = makeReplay([eventFlow as any], [successObserver], repo as any);
-
     await replay('start-id');
 
     expect(repo.getAllEvents).toHaveBeenCalledWith(200, 'start-id');
@@ -69,50 +62,36 @@ describe('makeReplay', () => {
         created: expect.any(Date),
       })
     );
-    expect(makeObserverQueueMock).toHaveBeenCalledWith(
-      [successObserver],
-      expect.objectContaining({
-        getAggregateState: expect.any(Function),
-        hasAggregateState: expect.any(Function),
-      })
+    
+    expect(runObservers).toHaveBeenCalledWith(
+      [
+        {
+          event: expect.objectContaining({ id: 'evt-1' }),
+          aggregateState: undefined,
+        }
+      ],
+      [successObserver]
     );
-    expect(observerPush).toHaveBeenCalledWith(expect.objectContaining({ id: 'evt-1' }));
   });
 
-  it('calls aggregate apply during replay and clears per-event state after observers run', async () => {
+  it('calls aggregate apply during replay and passes per-event state to runObservers', async () => {
     const apply = jest.fn((_event, state) => ({ count: state.count + _event.payload.amount * 10 }));
     const eventFlow = {
       domain: 'counter',
       type: 'incremented',
       aggregate: {
+        getIdentifier: (e: any) => e.identifier,
         initialState: { count: 0 },
-        reducer: (state, event) => ({ count: state.count + event.payload.amount }),
+        reducer: (state: any, event: any) => ({ count: state.count + event.payload.amount }),
       },
       apply,
     };
-    const aggregateObserver = {
+    const aggregateObserver: AggregateEventObserver<any, any> = {
       aggregate: true,
       filters: [{ domain: 'counter', type: 'incremented' }],
       priority: 0,
       apply: jest.fn(),
     };
-
-    const processed$ = new Subject<any>();
-    const drained$ = new Subject<void>();
-    const observerPush = jest.fn((event) => {
-      processed$.next({ event, state: 'success' });
-      drained$.next();
-    });
-    let observerOptions: any;
-
-    makeObserverQueueMock.mockImplementation((_observers, options) => {
-      observerOptions = options;
-      return {
-        processed$,
-        queueInstance: { drained$ } as any,
-        push: observerPush as any,
-      } as any;
-    });
 
     const storedEvent = {
       id: 'evt-2',
@@ -138,6 +117,16 @@ describe('makeReplay', () => {
       }),
       { count: 0 }
     );
-    expect(observerOptions.hasAggregateState(storedEvent)).toBe(false);
+    
+    // the reducer should output { count: 1 } (0 + 1)
+    expect(runObservers).toHaveBeenCalledWith(
+      [
+        {
+          event: expect.objectContaining({ id: 'evt-2' }),
+          aggregateState: { count: 1 },
+        }
+      ],
+      [aggregateObserver]
+    );
   });
 });

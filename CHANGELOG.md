@@ -1,5 +1,18 @@
 # Changelog
 
+## [5.0.0] - 2026-03-21
+
+### Breaking Changes
+
+- **RxJS Removed**: Entirely removed `rxjs` and `ramda` from the core `@schemeless/event-store` package dependencies. 
+- **Core Pipeline Refactored**: Removed the internal observable queues (`mainQueue`, `receive`, `sideEffectQueue`, `observerQueue`).
+- **Global State Removed**: `aggregateStateCache` singleton is completely deleted. Aggregate state during processing is passed down the causal tree safely and transparently via pure functions (`processEventTree`).
+
+### Performance & Stability
+- Rollbacks of deep event chains are now fully synchronous and deterministic upon validation failures.
+- Native `Promise`-based async processing allows for superior debugging and stack traces.
+
+
 ## [4.0.0] - 2026-03-21
 
 ### Breaking Changes

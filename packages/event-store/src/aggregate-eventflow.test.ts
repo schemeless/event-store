@@ -7,7 +7,6 @@ import type {
   IEventStoreRepo,
 } from '@schemeless/event-store-types';
 import { makeEventStore } from './makeEventStore';
-import { aggregateStateCache, clearAggregateStateForEvents } from './eventLifeCycle/aggregateStateCache';
 
 type CounterState = { count: number };
 
@@ -178,40 +177,6 @@ describe('AggregateEventFlow', () => {
     expect(repo.getStreamEvents).toHaveBeenCalledTimes(1);
   });
 
-  it('clears cached aggregate state entries after a failed causal chain', () => {
-    const flow = makeAggregateFlow({});
-    const eventFlowMap = {
-      counter__incremented: flow,
-    } as any;
-
-    const rootEvent: CreatedEvent<{ amount: number }> = {
-      id: 'root-event',
-      domain: 'counter',
-      type: 'incremented',
-      payload: { amount: 1 },
-      identifier: 'acct-1',
-      created: new Date(),
-    };
-    const childEvent: CreatedEvent<{ amount: number }> = {
-      id: 'child-event',
-      domain: 'counter',
-      type: 'incremented',
-      payload: { amount: 99 },
-      identifier: 'acct-1',
-      created: new Date(),
-      causationId: 'root-event',
-      correlationId: 'root-event',
-    };
-
-    aggregateStateCache.set(rootEvent.id, rootEvent.domain, rootEvent.identifier!, { count: 1 });
-    aggregateStateCache.set(childEvent.id, childEvent.domain, childEvent.identifier!, { count: 2 });
-
-    clearAggregateStateForEvents(eventFlowMap, [rootEvent, childEvent]);
-
-    expect(aggregateStateCache.hasByEventId(rootEvent.id)).toBe(false);
-    expect(aggregateStateCache.hasByEventId(childEvent.id)).toBe(false);
-    expect(aggregateStateCache.hasByAggregateKey('counter', 'acct-1')).toBe(false);
-  });
 
   it('passes aggregate state to replay observers', async () => {
     const repo = createInMemoryRepo();

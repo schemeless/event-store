@@ -13,10 +13,7 @@ import type {
   SideEffectsState,
 } from '@schemeless/event-store-types';
 
-import { makeMainQueue } from './queue/makeMainQueue';
-import { makeReceive } from './queue/makeReceive';
 import { makeReplay } from './makeReplay';
-import { makeSideEffectQueue } from './queue/makeSideEffectQueue';
 
 export interface EventOutput<Payload = any> {
   state: SideEffectsState | EventOutputState | EventObserverState;
@@ -62,18 +59,21 @@ export interface EventStore {
    * Use `submit()` for sending events and `on('processed', handler)` for notifications.
    * Will be removed in v5.
    */
-  mainQueue: ReturnType<typeof makeMainQueue>;
+  mainQueue: any;
 
   /**
    * @deprecated Internal implementation detail. Do not use directly.
    * Will be removed in v5.
    */
-  sideEffectQueue: ReturnType<typeof makeSideEffectQueue>;
+  sideEffectQueue: any;
 
   /**
    * @deprecated Use `submit(flow, input)` instead. Will be removed in v5.
    */
-  receive: ReturnType<typeof makeReceive>;
+  receive: <PartialPayload, Payload extends PartialPayload>(
+    flow: EventFlow<PartialPayload, Payload>
+  ) => (input: BaseEventInput<PartialPayload>) => Promise<[CreatedEvent<Payload>, ...Array<CreatedEvent<any>>]>;
+
 
   /**
    * Submit an event for processing. This is the preferred API over `receive`.

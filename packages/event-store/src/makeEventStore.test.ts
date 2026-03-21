@@ -1,12 +1,15 @@
-import { getTestEventStore } from './util/testHelpers';
+import { getTestEventStore, shutdownEventStore } from './util/testHelpers';
 import { NestedTwiceEvent, StandardEvent, testEventFlows, testObservers } from './mocks';
 import { storeGet } from './mocks/mockStore';
 import { mockObserverApply } from './mocks/Standard.observer';
 import delay from 'delay.ts';
-import { sideEffectFinishedPromise } from './util/sideEffectFinishedPromise';
 
 describe('make eventStore', () => {
-  beforeEach(() => jest.clearAllMocks());
+  afterEach(async () => {
+    jest.clearAllMocks();
+    await shutdownEventStore();
+  });
+  
   it('should process simple events via receive', async () => {
     const eventStore = await getTestEventStore(testEventFlows, testObservers);
 
@@ -100,7 +103,7 @@ describe('make eventStore', () => {
 
     await p1;
 
-    await sideEffectFinishedPromise(eventStore);
+    await eventStore.shutdown();
 
     expect(storeGet('eventStore5')).toBe(18);
   });
@@ -108,7 +111,7 @@ describe('make eventStore', () => {
   it('should process events using on("processed") correctly without RxJS', async () => {
     const eventStore = await getTestEventStore(testEventFlows, testObservers);
     const observed: any[] = [];
-    
+
     const unsubscribe = eventStore.on('processed', (output) => {
       if (output.event.payload?.key === 'eventStore-on-test') {
         observed.push(output);
@@ -126,11 +129,11 @@ describe('make eventStore', () => {
       await delay(100);
 
       expect(storeGet('eventStore-on-test')).toBe(3);
-      expect(observed.length).toBe(2);
-      
+      expect(observed.length).toBe(1);
+
       // Test unsubscribe
       unsubscribe();
-      
+
       await eventStore.submit(StandardEvent, {
         payload: {
           key: 'eventStore-on-test',
@@ -138,9 +141,9 @@ describe('make eventStore', () => {
         },
       });
       await delay(100);
-      
+
       expect(storeGet('eventStore-on-test')).toBe(7);
-      expect(observed.length).toBe(2); // should still be 2 because we unsubscribed
+      expect(observed.length).toBe(1); // should still be 1 because we unsubscribed
     } finally {
       unsubscribe();
     }

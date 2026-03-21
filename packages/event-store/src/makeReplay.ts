@@ -9,9 +9,11 @@ import { registerEventFlowTypes } from './operators/registerEventFlowTypes';
 import { logger } from './util/logger';
 import { getEventFlow } from './operators/getEventFlow';
 import { logEvent } from './util/logEvent';
-import { makeObserverQueue } from './queue/makeObserverQueue';
-import { aggregateKey } from './eventLifeCycle/aggregateStateCache';
 import { isAggregateEventFlow } from './operators/isAggregateEventFlow';
+import { runObservers, ProcessedEventWithState } from './pipeline/ObserverRunner';
+
+// A simple utility to scope aggregate keys per domain.
+const aggregateKey = (domain: string, id: string) => `${domain}__${id}`;
 
 export const makeReplay =
   (
@@ -25,31 +27,19 @@ export const makeReplay =
     logger.info('replay starting');
     const eventStoreIterator = await eventStoreRepo.getAllEvents(pageSize, startFromId);
     const aggregateStateByAggregateKey = new Map<string, unknown>();
-    const aggregateStateByEventId = new Map<string, unknown>();
-    const observerQueue = makeObserverQueue(successEventObservers, {
-      getAggregateState: (event) => aggregateStateByEventId.get(event.id),
-      hasAggregateState: (event) => aggregateStateByEventId.has(event.id),
-    });
-    const hasAggregateObserverForEvent = (event: CreatedEvent<any>): boolean =>
-      successEventObservers.some(
-        (observer) =>
-          (observer as any).aggregate === true &&
-          observer.filters.some((filter) => filter.domain === event.domain && filter.type === event.type)
-      );
-    const subscription = observerQueue.processed$.subscribe({
-      next: ({ event }) => {
-        aggregateStateByEventId.delete(event.id);
-      },
-    });
-    observerQueue.queueInstance.drained$.subscribe(() => logger.debug(`observerQueue drained`));
+
     for await (const events of eventStoreIterator) {
       if (events.length > 0) {
         logger.info(`replaying ${events.length}`);
-        await events.reduce<Promise<any>>(async (acc, currentEvent) => {
-          if (acc) await acc;
-          Object.assign(currentEvent, { created: new Date(currentEvent.created) });
+        
+        for (const rawEvent of events) {
+          Object.assign(rawEvent, { created: new Date(rawEvent.created) });
+          const currentEvent = rawEvent as CreatedEvent<any>;
           const EventFlow = getEventFlow(eventFlowMap)(currentEvent);
-          logEvent(currentEvent as CreatedEvent<any>, '✅️️', 'Apply');
+          logEvent(currentEvent, '✅️️', 'Apply');
+          
+          let aggregateState: unknown = undefined;
+
           if (isAggregateEventFlow(EventFlow)) {
             const aggregateEventFlow = EventFlow as any;
             const identifier = aggregateEventFlow.aggregate.getIdentifier?.(currentEvent) ?? currentEvent.identifier;
@@ -63,10 +53,11 @@ export const makeReplay =
             const currentState = aggregateStateByAggregateKey.has(key)
               ? aggregateStateByAggregateKey.get(key)
               : aggregateEventFlow.aggregate.initialState;
+              
             if (aggregateEventFlow.apply) {
               const replayApplyState = await aggregateEventFlow.apply(
-                currentEvent as CreatedEvent<any>,
-                currentState as any
+                currentEvent,
+                currentState
               );
               if (typeof replayApplyState === 'undefined') {
                 throw new Error(
@@ -74,9 +65,10 @@ export const makeReplay =
                 );
               }
             }
+            
             const nextState = aggregateEventFlow.aggregate.reducer(
-              currentState as any,
-              currentEvent as CreatedEvent<any>
+              currentState,
+              currentEvent
             );
 
             if (typeof nextState === 'undefined') {
@@ -86,14 +78,18 @@ export const makeReplay =
             }
 
             aggregateStateByAggregateKey.set(key, nextState);
-            if (hasAggregateObserverForEvent(currentEvent)) {
-              aggregateStateByEventId.set(currentEvent.id, nextState);
-            }
+            aggregateState = nextState;
           } else if (EventFlow.apply) {
-            await EventFlow.apply(currentEvent as CreatedEvent<any>);
+            await EventFlow.apply(currentEvent);
           }
-          observerQueue.push(currentEvent as CreatedEvent<any>);
-        }, null);
+          
+          const processed: ProcessedEventWithState = {
+            event: currentEvent,
+            aggregateState,
+          };
+          
+          await runObservers([processed], successEventObservers);
+        }
       } else {
         logger.info(`replay apply done, waiting for observer finished`);
         break;
