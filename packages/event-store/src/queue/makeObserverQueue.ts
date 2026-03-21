@@ -1,4 +1,9 @@
-import { CreatedEvent, EventObserverState, SuccessEventObserver } from '@schemeless/event-store-types';
+import {
+  AggregateEventObserver,
+  CreatedEvent,
+  EventObserverState,
+  SuccessEventObserver,
+} from '@schemeless/event-store-types';
 import { createRxQueue } from './RxQueue';
 import * as R from 'ramda';
 import * as Rx from 'rxjs/operators';
@@ -7,9 +12,11 @@ import { Observable } from 'rxjs';
 import { EventOutput } from '../EventStore.types';
 import { logger } from '../util/logger';
 
-type ObserverMap = { [domainType: string]: SuccessEventObserver[] };
+type ObserverMap = { [domainType: string]: Array<SuccessEventObserver<any> | AggregateEventObserver<any, any>> };
 
-const makeObserverMap = (successEventObservers: SuccessEventObserver[]) => {
+const makeObserverMap = (
+  successEventObservers: Array<SuccessEventObserver<any> | AggregateEventObserver<any, any>>
+) => {
   const observerMap: ObserverMap = successEventObservers.reduce((acc, observer) => {
     observer.filters.forEach((filter) => {
       const domainType = filter.domain + '__' + filter.type;
@@ -24,10 +31,12 @@ const makeObserverMap = (successEventObservers: SuccessEventObserver[]) => {
 
 export interface ObserverQueueOptions {
   concurrent?: number;
+  getAggregateState?: (event: CreatedEvent<any>) => unknown;
+  hasAggregateState?: (event: CreatedEvent<any>) => boolean;
 }
 
 export const makeObserverQueue = (
-  successEventObservers: SuccessEventObserver<any>[],
+  successEventObservers: Array<SuccessEventObserver<any> | AggregateEventObserver<any, any>>,
   options: ObserverQueueOptions = {}
 ) => {
   const { concurrent = 1 } = options;
@@ -41,6 +50,22 @@ export const makeObserverQueue = (
     Rx.mergeMap(async ({ done, task: createdEvent }) => {
       const thisDomainType = createdEvent.domain + '__' + createdEvent.type;
       const observersToApply = observerMap[thisDomainType];
+      const aggregateState = options.getAggregateState?.(createdEvent);
+      const hasAggregateState = options.hasAggregateState?.(createdEvent) ?? false;
+
+      const applyObserver = async (observerToApply: SuccessEventObserver<any> | AggregateEventObserver<any, any>) => {
+        const wantsAggregateState = (observerToApply as any).aggregate === true;
+        if (wantsAggregateState) {
+          if (!hasAggregateState) {
+            throw new Error(
+              `Aggregate observer for ${createdEvent.domain}/${createdEvent.type} expected aggregate state but none was available`
+            );
+          }
+          return (observerToApply as AggregateEventObserver<any, any>).apply?.(createdEvent, aggregateState);
+        }
+        return (observerToApply as SuccessEventObserver<any>).apply?.(createdEvent);
+      };
+
       if (!observersToApply || observersToApply.length === 0) {
         logEvent(createdEvent, '👀', 'No observers to apply');
         done();
@@ -52,12 +77,12 @@ export const makeObserverQueue = (
           if (observerToApply.fireAndForget) {
             // Fire and forget: execute without waiting
             Promise.resolve()
-              .then(() => observerToApply.apply(createdEvent))
+              .then(() => applyObserver(observerToApply))
               .catch((err) => {
                 logger.error(`Fire-and-forget observer failed: ${err}`);
               });
           } else {
-            await observerToApply.apply(createdEvent);
+            await applyObserver(observerToApply);
           }
         }
         logEvent(createdEvent, '👀', 'Applied observers');

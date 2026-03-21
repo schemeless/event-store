@@ -69,7 +69,75 @@ describe('makeReplay', () => {
         created: expect.any(Date),
       })
     );
-    expect(makeObserverQueueMock).toHaveBeenCalledWith([successObserver]);
+    expect(makeObserverQueueMock).toHaveBeenCalledWith(
+      [successObserver],
+      expect.objectContaining({
+        getAggregateState: expect.any(Function),
+        hasAggregateState: expect.any(Function),
+      })
+    );
     expect(observerPush).toHaveBeenCalledWith(expect.objectContaining({ id: 'evt-1' }));
+  });
+
+  it('calls aggregate apply during replay and clears per-event state after observers run', async () => {
+    const apply = jest.fn((_event, state) => ({ count: state.count + _event.payload.amount * 10 }));
+    const eventFlow = {
+      domain: 'counter',
+      type: 'incremented',
+      aggregate: {
+        initialState: { count: 0 },
+        reducer: (state, event) => ({ count: state.count + event.payload.amount }),
+      },
+      apply,
+    };
+    const aggregateObserver = {
+      aggregate: true,
+      filters: [{ domain: 'counter', type: 'incremented' }],
+      priority: 0,
+      apply: jest.fn(),
+    };
+
+    const processed$ = new Subject<any>();
+    const drained$ = new Subject<void>();
+    const observerPush = jest.fn((event) => {
+      processed$.next({ event, state: 'success' });
+      drained$.next();
+    });
+    let observerOptions: any;
+
+    makeObserverQueueMock.mockImplementation((_observers, options) => {
+      observerOptions = options;
+      return {
+        processed$,
+        queueInstance: { drained$ } as any,
+        push: observerPush as any,
+      } as any;
+    });
+
+    const storedEvent = {
+      id: 'evt-2',
+      domain: 'counter',
+      type: 'incremented',
+      payload: { amount: 1 },
+      identifier: 'acct-1',
+      created: new Date('2020-01-01T00:00:00.000Z').toISOString(),
+    };
+
+    const repo = {
+      getAllEvents: jest.fn(async () => buildIterator([[storedEvent], []])),
+    };
+
+    const replay = makeReplay([eventFlow as any], [aggregateObserver as any], repo as any);
+    await replay('start-id');
+
+    expect(apply).toHaveBeenCalledTimes(1);
+    expect(apply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'evt-2',
+        created: expect.any(Date),
+      }),
+      { count: 0 }
+    );
+    expect(observerOptions.hasAggregateState(storedEvent)).toBe(false);
   });
 });

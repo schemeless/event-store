@@ -48,11 +48,15 @@ export interface CreatedEvent<Payload, META extends EventMeta = EventMeta> exten
   readonly created: Date;
 }
 
-export interface StoredEvent<Payload, META extends EventMeta = EventMeta> extends CreatedEvent<Payload, META> { }
+export interface StoredEvent<Payload, META extends EventMeta = EventMeta> extends CreatedEvent<Payload, META> {}
 
 export type Event<Payload, META extends EventMeta = EventMeta> = StoredEvent<Payload, META>;
 
-export interface EventFlow<PartialPayload = any, Payload extends PartialPayload = PartialPayload> {
+export interface EventFlow<
+  PartialPayload = any,
+  Payload extends PartialPayload = PartialPayload,
+  META extends EventMeta = EventMeta
+> {
   readonly domain: string;
   readonly type: string;
   readonly description?: string;
@@ -61,7 +65,7 @@ export interface EventFlow<PartialPayload = any, Payload extends PartialPayload 
     readonly sideEffectFailedRetryAllowed?: number;
   };
 
-  readonly eventType?: CreatedEvent<Payload>;
+  readonly eventType?: CreatedEvent<Payload, META>;
   readonly payloadType?: PartialPayload | Payload;
 
   readonly samplePayload?: PartialPayload | Payload;
@@ -82,44 +86,48 @@ export interface EventFlow<PartialPayload = any, Payload extends PartialPayload 
    * @returns Updated event with migrated payload, or void to use the original
    */
   readonly upcast?: (
-    event: CreatedEvent<any>,
+    event: CreatedEvent<any, META>,
     fromVersion: number
-  ) => CreatedEvent<Payload> | Promise<CreatedEvent<Payload>> | void;
+  ) => CreatedEvent<Payload, META> | Promise<CreatedEvent<Payload, META>> | void;
 
   /**
    * Extract the shard key for event routing.
    * Events with the same shard key will be processed sequentially in the same partition.
    * Events with different shard keys can be processed in parallel.
-   * 
+   *
    * @param event - The event to extract the shard key from
    * @returns The shard key string, or undefined to use fallback (identifier)
    * @example
    * getShardKey: (event) => event.payload.userId
    */
-  readonly getShardKey?: (event: BaseEvent<Payload>) => string | undefined;
+  readonly getShardKey?: (event: BaseEvent<Payload, META>) => string | undefined;
 
   readonly receive: (eventStore: {
     receive: (
-      eventFlow: EventFlow<PartialPayload, Payload>
-    ) => (eventInput: BaseEventInput<PartialPayload>) => Promise<[CreatedEvent<Payload>, ...Array<CreatedEvent<any>>]>;
+      eventFlow: EventFlow<PartialPayload, Payload, META>
+    ) => (
+      eventInput: BaseEventInput<PartialPayload, META>
+    ) => Promise<[CreatedEvent<Payload, META>, ...Array<CreatedEvent<any>>]>;
   }) => (
-    eventInputArgs: BaseEventInput<PartialPayload>
-  ) => Promise<[CreatedEvent<Payload>, ...Array<CreatedEvent<any>>]>;
+    eventInputArgs: BaseEventInput<PartialPayload, META>
+  ) => Promise<[CreatedEvent<Payload, META>, ...Array<CreatedEvent<any>>]>;
 
-  readonly validate?: (event: CreatedEvent<Payload>) => Promise<Error | void> | Error | void;
+  readonly validate?: (event: CreatedEvent<Payload, META>) => Promise<Error | void> | Error | void;
 
   readonly preApply?: (
-    event: CreatedEvent<PartialPayload>
-  ) => Promise<CreatedEvent<Payload> | void> | CreatedEvent<Payload> | void;
+    event: CreatedEvent<PartialPayload, META>
+  ) => Promise<CreatedEvent<Payload, META> | void> | CreatedEvent<Payload, META> | void;
 
-  readonly apply?: (event: CreatedEvent<Payload>) => Promise<void> | void;
+  readonly apply?: (event: CreatedEvent<Payload, META>) => Promise<void> | void;
 
-  readonly sideEffect?: (event: CreatedEvent<Payload>) => Promise<void | BaseEvent<any>[]> | void | BaseEvent<any>[];
+  readonly sideEffect?: (
+    event: CreatedEvent<Payload, META>
+  ) => Promise<void | BaseEvent<any>[]> | void | BaseEvent<any>[];
 
-  readonly cancelApply?: (event: CreatedEvent<Payload>) => Promise<void> | void;
+  readonly cancelApply?: (event: CreatedEvent<Payload, META>) => Promise<void> | void;
 
   readonly createConsequentEvents?: (
-    causalEvent: CreatedEvent<Payload>
+    causalEvent: CreatedEvent<Payload, META>
   ) => Promise<BaseEvent<any>[]> | BaseEvent<any>[];
 
   /**
@@ -133,7 +141,32 @@ export interface EventFlow<PartialPayload = any, Payload extends PartialPayload 
    * @param originalEvent - The event being reverted
    * @returns Compensating event(s) to persist
    */
-  readonly compensate?: (originalEvent: CreatedEvent<Payload>) => BaseEvent<any> | BaseEvent<any>[];
+  readonly compensate?: (originalEvent: CreatedEvent<Payload, META>) => BaseEvent<any> | BaseEvent<any>[];
+}
+
+export interface AggregateConfig<State> {
+  readonly reducer: (state: State, event: CreatedEvent<any>) => State;
+  readonly initialState: State;
+  readonly getIdentifier?: (event: BaseEvent<any>) => string | undefined;
+}
+
+export interface AggregateEventFlow<
+  PartialPayload = any,
+  Payload extends PartialPayload = PartialPayload,
+  State = any,
+  META extends EventMeta = EventMeta
+> extends Omit<EventFlow<PartialPayload, Payload, META>, 'validate' | 'apply'> {
+  readonly aggregate: AggregateConfig<State>;
+
+  readonly validate?: (event: CreatedEvent<Payload, META>, state: State) => Promise<Error | void> | Error | void;
+
+  readonly apply?: (event: CreatedEvent<Payload, META>, state: State) => State | Promise<State>;
+}
+
+export interface AggregateEventObserver<Payload = any, State = any>
+  extends Omit<SuccessEventObserver<Payload>, 'apply'> {
+  readonly aggregate: true;
+  readonly apply?: (event: CreatedEvent<Payload>, state: State) => Promise<void> | void;
 }
 
 export type EventTaskAndError = { task: CreatedEvent<any>; error: Error };

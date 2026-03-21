@@ -9,9 +9,16 @@ import { cleanupAndCancelFailedEvent } from '../operators/cleanupAndCancelFailed
 import { racedQueueFailedOrDrained } from '../operators/racedQueueFailedOrDrained';
 import { makeApplyQueue } from './makeApplyQueue';
 import { getPartitionIndex, hashString } from './shardUtils';
+import type { IEventStoreEntity } from '@schemeless/event-store-types';
 
 export interface MainQueueOptions {
   concurrent?: number;
+  getAggregate?: <State>(
+    domain: string,
+    identifier: string,
+    reducer: (state: State, event: IEventStoreEntity) => State,
+    initialState: State
+  ) => Promise<{ state: State; sequence: number }>;
 }
 
 export const makeMainQueue = (eventFlows: EventFlow<any>[], options: MainQueueOptions = {}) => {
@@ -37,12 +44,12 @@ export const makeMainQueue = (eventFlows: EventFlow<any>[], options: MainQueueOp
   // Safety: Each partition queue has concurrent:1, so it won't emit next event
   // until current one calls done(). This guarantees per-partition ordering while
   // allowing different partitions to run in parallel.
-  const processed$ = merge(...partitionQueues.map(pq => pq.process$)).pipe(
+  const processed$ = merge(...partitionQueues.map((pq) => pq.process$)).pipe(
     Rx.mergeMap(({ task, done: mainQueueDone }) => {
       const applyQueue = makeApplyQueue();
       logEvent(task, '✨', 'received');
       const taskProcessed$ = combineLatest([
-        applyRootEventAndCollectSucceed(eventFlowMap, applyQueue),
+        applyRootEventAndCollectSucceed(eventFlowMap, applyQueue, options.getAggregate as any),
         racedQueueFailedOrDrained(applyQueue),
       ]).pipe(
         Rx.take(1),
@@ -70,19 +77,19 @@ export const makeMainQueue = (eventFlows: EventFlow<any>[], options: MainQueueOp
 
   // Lifecycle methods for all partitions
   const pause = (): void => {
-    partitionQueues.forEach(pq => pq.pause());
+    partitionQueues.forEach((pq) => pq.pause());
   };
 
   const resume = (): void => {
-    partitionQueues.forEach(pq => pq.resume());
+    partitionQueues.forEach((pq) => pq.resume());
   };
 
   const drain = async (): Promise<void> => {
-    await Promise.all(partitionQueues.map(pq => pq.drain()));
+    await Promise.all(partitionQueues.map((pq) => pq.drain()));
   };
 
   const destroy = async (): Promise<void> => {
-    await Promise.all(partitionQueues.map(pq => pq.destroy()));
+    await Promise.all(partitionQueues.map((pq) => pq.destroy()));
   };
 
   return {

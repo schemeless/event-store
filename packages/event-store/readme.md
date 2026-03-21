@@ -62,6 +62,48 @@ export const orderPlacedFlow: EventFlow = {
 
 This ensures all derived events share the same `correlationId` (for grouping) while each maintains a `causationId` pointer to its immediate parent (for chain traversal).
 
+## Aggregate Event Flows
+
+If a flow manages aggregate state, declare it with `AggregateEventFlow`. The framework will load the current state automatically before `validate` and `apply`, and it will pass the computed state through replay as well.
+
+```ts
+import type { AggregateEventFlow, AggregateEventObserver } from '@schemeless/event-store';
+
+type StockPayload = { amount: number };
+type StockState = { count: number };
+
+export const stockFlow: AggregateEventFlow<StockPayload, StockState> = {
+  domain: 'stock',
+  type: 'updated',
+  aggregate: {
+    initialState: { count: 0 },
+    reducer: (state, event) => ({ count: state.count + event.payload.amount }),
+  },
+  validate: (event, state) => {
+    if (state.count < 0) {
+      throw new Error('stock cannot go below zero');
+    }
+  },
+  apply: (_event, state) => state,
+};
+
+export const stockObserver: AggregateEventObserver<StockPayload, StockState> = {
+  aggregate: true,
+  filters: [{ domain: 'stock', type: 'updated' }],
+  priority: 0,
+  apply: async (event, state) => {
+    console.log(event.id, state.count);
+  },
+};
+```
+
+- `aggregate.reducer` is the pure fold function used by `getAggregate()` and replay.
+- `validate(event, state)` receives the current aggregate state.
+- `apply(event, state)` returns the next state and must not perform side effects.
+- Aggregate observers opt in with `aggregate: true`; regular observers still receive `(event)` only.
+
+Use the existing `getAggregate()` helper when you need to read aggregate state manually from application code. Inside aggregate flows, the framework does that work for you.
+
 ## Optional Runtime Validation (Recommended)
 
 `@schemeless/event-store` does not require any specific validation library. The framework only calls your `validate` hook, so you can choose the tool that fits your stack.
@@ -294,7 +336,7 @@ const eventStore = await buildStore([userRegisteredFlow], [logObserver]);
 await eventStore.replay();
 ```
 
-`replay` batches historical records, ensures each event is re-applied in chronological order, and pushes them through the observer queue so read models stay consistent after deployments or migrations.
+`replay` batches historical records, ensures each event is re-applied in chronological order, and pushes them through the observer queue so read models stay consistent after deployments or migrations. Aggregate observers marked with `aggregate: true` receive `(event, state)` during replay; regular observers continue to receive only `(event)`.
 
 ## Graceful Shutdown
 

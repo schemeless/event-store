@@ -1,6 +1,6 @@
 import { firstValueFrom } from 'rxjs';
 
-import type { CreatedEvent, SuccessEventObserver } from '@schemeless/event-store-types';
+import type { AggregateEventObserver, CreatedEvent, SuccessEventObserver } from '@schemeless/event-store-types';
 import { EventObserverState } from '@schemeless/event-store-types';
 
 import { makeObserverQueue } from './makeObserverQueue';
@@ -37,6 +37,30 @@ describe('makeObserverQueue', () => {
 
     expect(apply).toHaveBeenCalledWith(event);
     expect(result).toEqual({ event, state: EventObserverState.success });
+  });
+
+  it('passes aggregate state to observers marked as aggregate', async () => {
+    const aggregateApply = jest.fn().mockResolvedValue(undefined);
+    const observers: Array<SuccessEventObserver<any> | AggregateEventObserver<any, { count: number }>> = [
+      {
+        aggregate: true,
+        filters: [{ domain: 'test', type: 'created' }],
+        priority: 10,
+        apply: aggregateApply,
+      },
+    ];
+
+    const observerQueue = makeObserverQueue(observers, {
+      getAggregateState: () => ({ count: 7 }),
+      hasAggregateState: () => true,
+    });
+    const processedPromise = firstValueFrom(observerQueue.processed$);
+
+    const event = makeEvent();
+    observerQueue.push(event);
+    await processedPromise;
+
+    expect(aggregateApply).toHaveBeenCalledWith(event, { count: 7 });
   });
 
   it('respects observer priority when applying multiple observers', async () => {

@@ -203,6 +203,48 @@ main().catch(console.error);
 
 > 注意：`getAggregate` 功能要求 `repo.getStreamEvents(...)` 支持。`adapter-pg` 和 `adapter-expo-sqlite` 已完整实现。
 
+## 聚合事件流 AggregateEventFlow
+
+如果某个事件流负责维护聚合状态，可以直接声明为 `AggregateEventFlow`。框架会在 `validate` 和 `apply` 之前自动加载当前聚合状态，并在 replay 时把同一份状态传给观察者。
+
+```ts
+import type { AggregateEventFlow, AggregateEventObserver } from '@schemeless/event-store';
+
+type StockPayload = { amount: number };
+type StockState = { count: number };
+
+export const stockFlow: AggregateEventFlow<StockPayload, StockState> = {
+  domain: 'stock',
+  type: 'updated',
+  aggregate: {
+    initialState: { count: 0 },
+    reducer: (state, event) => ({ count: state.count + event.payload.amount }),
+  },
+  validate: (_event, state) => {
+    if (state.count < 0) {
+      throw new Error('stock cannot go below zero');
+    }
+  },
+  apply: (_event, state) => state,
+};
+
+export const stockObserver: AggregateEventObserver<StockPayload, StockState> = {
+  aggregate: true,
+  filters: [{ domain: 'stock', type: 'updated' }],
+  priority: 0,
+  apply: async (_event, state) => {
+    console.log(state.count);
+  },
+};
+```
+
+- `aggregate.reducer` 是纯函数，`getAggregate()` 和 replay 都会使用它。
+- `validate(event, state)` 可以直接读取当前聚合状态。
+- `apply(event, state)` 返回下一个状态，不能在这里写副作用。
+- 聚合观察者需要显式写 `aggregate: true`；普通观察者仍然只会收到 `(event)`。
+
+如果你在应用代码里需要手动读取聚合状态，仍然可以继续用 `getAggregate()`；但在 `AggregateEventFlow` 内部，框架会自动完成这一步。
+
 ## 核心工作流 Core workflows
 
 ### 1) 接收事件 (Receive)
@@ -228,6 +270,8 @@ await store.replay();
 await store.replay('last-processed-event-id');
 ```
 
+如果观察者声明了 `aggregate: true`，replay 时它会收到 `(event, state)`；普通观察者仍然只会收到 `(event)`。
+
 ### 3) 观察成功的事件 (Observe)
 
 在构建 store 时注册成功观察者：
@@ -251,6 +295,7 @@ const store = await makeEventStore(repo)([userRegisteredFlow], observers);
 
 - `fireAndForget: true` 表示该观察者不会阻塞主接收流程（`receive`）。
 - 即发即弃（fire-and-forget）观察者的失败是隔离的，不会导致主事件的事务回滚。
+- 如果是聚合观察者，请显式写 `aggregate: true`，框架会额外传入当前聚合状态。
 
 ### 4) 监控生命周期事件
 

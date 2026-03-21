@@ -1,5 +1,6 @@
 import * as Rx from 'rxjs/operators';
 import {
+  AggregateEventObserver,
   CreatedEvent,
   EventFlow,
   EventFlowMap,
@@ -16,14 +17,15 @@ import { makeSideEffectQueue } from './queue/makeSideEffectQueue';
 import { from, merge } from 'rxjs';
 import { AggregateResult, EventStore, EventStoreOptions } from './EventStore.types';
 import { makeRevert } from './revert/makeRevert';
+import { isAggregateEventFlow } from './operators/isAggregateEventFlow';
 
 export const makeEventStore =
   (eventStoreRepo: IEventStoreRepo, options: EventStoreOptions = {}) =>
-  async (eventFlows: EventFlow[], successEventObservers: SuccessEventObserver<any>[] = []): Promise<EventStore> => {
+  async (
+    eventFlows: EventFlow[],
+    successEventObservers: Array<SuccessEventObserver<any> | AggregateEventObserver<any, any>> = []
+  ): Promise<EventStore> => {
     const { mainQueueConcurrent = 1, sideEffectQueueConcurrent = 1, observerQueueConcurrent = 1 } = options;
-
-    const mainQueue = makeMainQueue(eventFlows, { concurrent: mainQueueConcurrent });
-    const sideEffectQueue = makeSideEffectQueue(eventFlows, mainQueue, { concurrent: sideEffectQueueConcurrent });
 
     await eventStoreRepo.init();
 
@@ -38,6 +40,57 @@ export const makeEventStore =
       const key = `${flow.domain}__${flow.type}`;
       eventFlowMap[key] = flow;
     }
+
+    const hasAggregateEventFlow = eventFlows.some((flow) => isAggregateEventFlow(flow));
+    if (hasAggregateEventFlow && !capabilities.aggregate) {
+      const aggregateFlow = eventFlows.find((flow) => isAggregateEventFlow(flow));
+      throw new Error(
+        `AggregateEventFlow "${aggregateFlow?.domain}/${aggregateFlow?.type}" requires adapter with getStreamEvents() support. ` +
+          `Current adapter does not declare aggregate capability.`
+      );
+    }
+
+    const getAggregate: EventStore['getAggregate'] = async <State>(
+      domain: string,
+      identifier: string,
+      reducer: (state: State, event: IEventStoreEntity) => State,
+      initialState: State
+    ): Promise<AggregateResult<State>> => {
+      const getStreamEvents = eventStoreRepo.getStreamEvents?.bind(eventStoreRepo);
+      if (!capabilities.aggregate || !getStreamEvents) {
+        const repoName = eventStoreRepo.constructor?.name || 'IEventStoreRepo';
+        const reason =
+          declaredAggregateCapability === false
+            ? `${repoName} declares capabilities.aggregate=false`
+            : `${repoName} does not implement getStreamEvents(domain, identifier, fromSequence)`;
+        throw new Error(
+          `getAggregate is unavailable for this repository. ${reason}. ` +
+            `Use an adapter that implements getStreamEvents, or avoid getAggregate and validate from projections/OCC.`
+        );
+      }
+
+      let state = initialState;
+      let sequence = 0;
+
+      if (eventStoreRepo.getSnapshot) {
+        const snapshot = await eventStoreRepo.getSnapshot<State>(domain, identifier);
+        if (snapshot) {
+          state = snapshot.state;
+          sequence = snapshot.sequence;
+        }
+      }
+
+      const events = await getStreamEvents(domain, identifier, sequence);
+      for (const event of events) {
+        state = reducer(state, event);
+        sequence = event.sequence || 0;
+      }
+
+      return { state, sequence };
+    };
+
+    const mainQueue = makeMainQueue(eventFlows, { concurrent: mainQueueConcurrent, getAggregate });
+    const sideEffectQueue = makeSideEffectQueue(eventFlows, mainQueue, { concurrent: sideEffectQueueConcurrent });
 
     let pendingMainPipelineTasks = 0;
     let resolveMainPipelineIdle: (() => void) | null = null;
@@ -162,54 +215,12 @@ export const makeEventStore =
       }
     };
 
-    const getAggregate: EventStore['getAggregate'] = async <State>(
-      domain: string,
-      identifier: string,
-      reducer: (state: State, event: IEventStoreEntity) => State,
-      initialState: State
-    ): Promise<AggregateResult<State>> => {
-      const getStreamEvents = eventStoreRepo.getStreamEvents?.bind(eventStoreRepo);
-      if (!capabilities.aggregate || !getStreamEvents) {
-        const repoName = eventStoreRepo.constructor?.name || 'IEventStoreRepo';
-        const reason =
-          declaredAggregateCapability === false
-            ? `${repoName} declares capabilities.aggregate=false`
-            : `${repoName} does not implement getStreamEvents(domain, identifier, fromSequence)`;
-        throw new Error(
-          `getAggregate is unavailable for this repository. ${reason}. ` +
-            `Use an adapter that implements getStreamEvents, or avoid getAggregate and validate from projections/OCC.`
-        );
-      }
-
-      let state = initialState;
-      let sequence = 0;
-
-      // Try snapshot
-      if (eventStoreRepo.getSnapshot) {
-        const snapshot = await eventStoreRepo.getSnapshot<State>(domain, identifier);
-        if (snapshot) {
-          state = snapshot.state;
-          sequence = snapshot.sequence;
-        }
-      }
-
-      // Replay events
-      // Optimization: If possible, we could pass sequence to getStreamEvents to fetch only necessary events.
-      // The implementation plan says use getStreamEvents.
-      const events = await getStreamEvents(domain, identifier, sequence);
-      for (const event of events) {
-        state = reducer(state, event);
-        sequence = event.sequence || 0;
-      }
-
-      return { state, sequence };
-    };
-
     return {
       mainQueue,
       sideEffectQueue,
       receive: makeReceive(mainQueue, successEventObservers, {
         observerQueueConcurrent,
+        eventFlowMap,
       }),
       replay: makeReplay(eventFlows, successEventObservers, eventStoreRepo),
       eventStoreRepo: eventStoreRepo,
