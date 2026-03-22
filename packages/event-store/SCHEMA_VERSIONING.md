@@ -41,7 +41,7 @@ if (typeof event.payload.price === 'number') {
 
 1.  **Define Version**: You tag your `EventFlow` with a `schemaVersion`.
 2.  **Define Upcaster**: You provide an `upcast` hook to migrate older data.
-3.  **Automatic Migration**: When the system reads an event (during correct or replay), it checks `event.meta.schemaVersion`. If it's older than the flow's version, it runs the upcaster.
+3.  **Automatic Migration**: When the system reads an event (during receive or replay), it checks `event.meta.schemaVersion`. If it's older than the flow's version, it runs the upcaster before validation, pre-application, and apply.
 
 ## Implementation
 
@@ -103,8 +103,8 @@ export const OrderPlaced: EventFlow<OrderPlacedPayloadV2> = {
 
 ### When does upcasting happen?
 - **Receive**: When you store a new event, it is automatically stamped with the current `schemaVersion`.
-- **Replay**: When you replay history to rebuild read models, old events are upcasted on-the-fly.
-- **Runtime**: Even during normal processing, if you read an old event from the store (e.g., for validation contexts), it gets upcasted.
+- **Replay**: When you replay history to rebuild read models, old events are upcasted on-the-fly before validation and apply.
+- **Runtime**: Even during normal processing, if you read an old event from the store (e.g., for validation contexts), it gets upcasted before validation and apply.
 
 ### Does it modify the database?
 **No.** The raw event in the database remains immutable (V1). Upcasting happens in memory when the event is loaded. This preserves the "Source of Truth" and allows you to fix/change upcasting logic if you made a mistake.

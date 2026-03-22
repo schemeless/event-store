@@ -28,9 +28,16 @@ describe('makeReplay', () => {
 
   it('replays events using the registered event flows', async () => {
     const apply = jest.fn().mockResolvedValue(undefined);
+    const validate = jest.fn().mockResolvedValue(undefined);
+    const preApply = jest.fn().mockImplementation((event) => ({ ...event, payload: { ...event.payload, replayed: true } }));
+    const upcast = jest.fn().mockImplementation((event) => ({ ...event, payload: { ...event.payload, upcasted: true } }));
     const eventFlow = {
       domain: 'user',
       type: 'created',
+      schemaVersion: 2,
+      upcast,
+      validate,
+      preApply,
       apply,
     };
 
@@ -45,6 +52,7 @@ describe('makeReplay', () => {
       domain: 'user',
       type: 'created',
       payload: { name: 'Ada' },
+      meta: { schemaVersion: 1 },
       created: new Date('2020-01-01T00:00:00.000Z').toISOString(),
     };
 
@@ -60,13 +68,33 @@ describe('makeReplay', () => {
       expect.objectContaining({
         id: 'evt-1',
         created: expect.any(Date),
+        payload: { name: 'Ada', upcasted: true, replayed: true },
+      })
+    );
+    expect(upcast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        meta: { schemaVersion: 1 },
+      }),
+      1
+    );
+    expect(validate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: { name: 'Ada', upcasted: true },
+      })
+    );
+    expect(preApply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: { name: 'Ada', upcasted: true },
       })
     );
     
     expect(runObservers).toHaveBeenCalledWith(
       [
         {
-          event: expect.objectContaining({ id: 'evt-1' }),
+          event: expect.objectContaining({
+            id: 'evt-1',
+            payload: { name: 'Ada', upcasted: true, replayed: true },
+          }),
           aggregateState: undefined,
         }
       ],
@@ -76,13 +104,14 @@ describe('makeReplay', () => {
 
   it('calls aggregate apply during replay and passes per-event state to runObservers', async () => {
     const apply = jest.fn((_event, state) => ({ count: state.count + _event.payload.amount * 10 }));
+    const reducer = jest.fn((_state, _event) => ({ count: 999 }));
     const eventFlow = {
       domain: 'counter',
       type: 'incremented',
       aggregate: {
         getIdentifier: (e: any) => e.identifier,
         initialState: { count: 0 },
-        reducer: (state: any, event: any) => ({ count: state.count + event.payload.amount }),
+        reducer,
       },
       apply,
     };
@@ -117,13 +146,13 @@ describe('makeReplay', () => {
       }),
       { count: 0 }
     );
+    expect(reducer).not.toHaveBeenCalled();
     
-    // the reducer should output { count: 1 } (0 + 1)
     expect(runObservers).toHaveBeenCalledWith(
       [
         {
           event: expect.objectContaining({ id: 'evt-2' }),
-          aggregateState: { count: 1 },
+          aggregateState: { count: 10 },
         }
       ],
       [aggregateObserver]

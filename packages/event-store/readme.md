@@ -20,7 +20,6 @@ import { EventFlow } from '@schemeless/event-store';
 export const userRegisteredFlow: EventFlow = {
   domain: 'user',
   type: 'registered',
-  receive: (eventStore) => async (eventInput) => eventStore.receive(userRegisteredFlow)(eventInput),
   validate: async (event) => {
     if (!event.payload.email) {
       throw new Error('email is required');
@@ -97,7 +96,7 @@ export const stockObserver: AggregateEventObserver<StockPayload, StockState> = {
 };
 ```
 
-- `aggregate.reducer` is the pure fold function used by `getAggregate()` and replay.
+- `aggregate.reducer` is the pure fold function used by `getAggregate()`.
 - `validate(event, state)` receives the current aggregate state.
 - `apply(event, state)` returns the next state and must not perform side effects.
 - Aggregate observers opt in with `aggregate: true`; regular observers still receive `(event)` only.
@@ -125,7 +124,6 @@ type UserRegisteredPayload = z.infer<typeof userRegisteredPayload>;
 export const userRegisteredFlow: EventFlow<UserRegisteredPayload> = {
   domain: 'user',
   type: 'registered',
-  receive: (eventStore) => (eventInput) => eventStore.receive(userRegisteredFlow)(eventInput),
   validate: async (event) => {
     const result = userRegisteredPayload.safeParse(event.payload);
     if (!result.success) {
@@ -151,10 +149,10 @@ Recommendation:
 
 ## Build the store
 
-`makeEventStore` wires your repository and flows together, returning queues, a `receive` helper, and a replay function. Success observers are processed on a dedicated queue so long-running reactions do not block the main command pipeline.
+`makeEventStore` wires your repository and flows together, returning a `submit` helper, a `replay` function, and lifecycle utilities.
 
 ```ts
-import { makeEventStore, sideEffectFinishedPromise } from '@schemeless/event-store';
+import { makeEventStore } from '@schemeless/event-store';
 import { EventStoreRepo as TypeOrmRepo } from '@schemeless/event-store-adapter-typeorm';
 
 const repo = new TypeOrmRepo({ type: 'sqlite', database: ':memory:' });
@@ -162,11 +160,12 @@ const buildStore = makeEventStore(repo);
 
 const eventStore = await buildStore([userRegisteredFlow]);
 
-const [created] = await eventStore.receive(userRegisteredFlow)({
+const [created] = await eventStore.submit(userRegisteredFlow, {
   payload: { id: '123', email: 'user@example.com' },
 });
 
-await sideEffectFinishedPromise(eventStore); // Wait until the side-effect queue drains.
+// `submit` resolves after persistence and observer execution.
+// Side effects run asynchronously; call `shutdown()` for a full flush before teardown.
 ```
 
 ## Performance & Concurrency
@@ -179,13 +178,12 @@ Pass `EventStoreOptions` to `makeEventStore` to enable parallel processing:
 
 ```ts
 const eventStore = await makeEventStore(repo, {
-  mainQueueConcurrent: 5, // Process 5 main events in parallel
-  sideEffectQueueConcurrent: 10, // Process 10 side effects in parallel
-  observerQueueConcurrent: 5, // Process 5 observers in parallel
+  mainQueueConcurrent: 5,        // 5 parallel partition workers
+  sideEffectQueueConcurrent: 10, // 10 parallel side-effect workers
 })([userRegisteredFlow]);
 ```
 
-> **Warning:** increasing `mainQueueConcurrent` > 1 effectively processes events in parallel. While `better-queue` attempts to respect order, high concurrency may affect strict sequential consistency for dependent events if they arrive simultaneously. Use with caution/testing if your event logic depends on strict global ordering.
+> **Note:** `mainQueueConcurrent` controls the number of partition workers. Events routed to the same partition (via `getShardKey`) are always processed sequentially; events on different partitions run in parallel. Set `getShardKey` on your flows to control routing.
 
 ### Key-Based Partitioning (Sharding)
 
@@ -288,9 +286,8 @@ If omitted, support is inferred from the presence of `repo.getStreamEvents`.
 
 | property                    | type     | default | description                                                                                                           |
 | --------------------------- | -------- | ------- | --------------------------------------------------------------------------------------------------------------------- |
-| `mainQueueConcurrent`       | `number` | `1`     | Number of events processed in parallel by the main queue. Set > 1 for high throughput at the cost of strict ordering. |
-| `sideEffectQueueConcurrent` | `number` | `1`     | Number of side effects processed in parallel. Safe to increase as side effects are retryable and asynchronous.        |
-| `observerQueueConcurrent`   | `number` | `1`     | Number of observers processed in parallel. Safe to increase if observers are independent.                             |
+| `mainQueueConcurrent`       | `number` | `1`     | Number of partition workers for main event processing. Events sharing the same shard key are always sequential; events on different partitions run in parallel. |
+| `sideEffectQueueConcurrent` | `number` | `1`     | Number of partition workers for side-effect execution. Safe to increase; side effects are retryable and independent of the main pipeline. |
 
 ### Fire-and-Forget Observers
 
@@ -307,21 +304,19 @@ const analyticsObserver: SuccessEventObserver = {
 };
 ```
 
-- **Non-blocking**: The main `receive()` call returns immediately after persistence, without waiting for this observer.
+- **Non-blocking**: `submit()` resolves without waiting for this observer.
 - **Error Isolation**: If this observer throws an error, it is logged but does **not** fail the main event flow.
 
 The returned object exposes:
 
-- `receive` – enqueues events and persists them once every validation step passes.
-- `mainQueue` and `sideEffectQueue` – observable queues that process lifecycle work and retryable side effects.
-- `output$` – an RxJS stream of every processed event with a success, invalid, canceled, or side-effect state.
+- `submit(flow, input)` – validates, applies, persists, runs side effects, and notifies observers. Resolves with all created events.
+- `on('processed', handler)` – subscribe to processed event notifications without RxJS. Returns an unsubscribe function.
 - `replay` – streams stored events back through the flows and success observers, enabling projection rebuilds.
-
-> **Important:** The queues only drain while `output$` has at least one active subscriber. `makeEventStore` keeps an internal subscription alive so processing starts immediately, but if you ever tear that subscription down (for example, when customising the stream in tests) be sure to attach your own subscriber right away or new commands will hang in the queue.
+- `shutdown(timeout?)` – drains all in-flight work and closes the repository connection.
 
 ## Observers and replay
 
-Register success observers when constructing the store to react to committed events without interfering with the main execution path. During replays the same observer queue is used, so you can reuse the exact logic for live and historical processing.
+Register success observers when constructing the store to react to committed events. Observers run inline after each event is persisted, in priority order. During replay, the same lifecycle is used for `upcast` / `validate` / `preApply` / `apply`, then observers are called with the resulting event and aggregate state.
 
 ```ts
 const logObserver = {
@@ -336,7 +331,7 @@ const eventStore = await buildStore([userRegisteredFlow], [logObserver]);
 await eventStore.replay();
 ```
 
-`replay` batches historical records, ensures each event is re-applied in chronological order, and pushes them through the observer queue so read models stay consistent after deployments or migrations. Aggregate observers marked with `aggregate: true` receive `(event, state)` during replay; regular observers continue to receive only `(event)`.
+`replay` batches historical records and re-applies each event in chronological order. Observers are called inline after each event, so read models stay consistent after deployments or migrations. Replay uses the same lifecycle as live processing: `upcast`, `validate`, `preApply`, `apply`, then observers. Aggregate observers marked with `aggregate: true` receive `(event, state)` during replay; regular observers receive only `(event)`.
 
 ## Graceful Shutdown
 
@@ -412,8 +407,6 @@ Each event flow can define a `compensate` hook that returns one or more compensa
 export const orderPlacedFlow: EventFlow = {
   domain: 'order',
   type: 'placed',
-  receive: (es) => es.receive(orderPlacedFlow),
-
   compensate: (originalEvent) => ({
     domain: 'order',
     type: 'voided',
@@ -478,7 +471,7 @@ To support evolving event schemas over time (e.g., changing a price field from a
 
 1.  **Tagging**: New events are automatically tagged with the flow's current `schemaVersion` in `event.meta.schemaVersion`.
 2.  **Upcasting**: When an older event (lower version) is processed (during `receive` or `replay`), the `upcast` hook is called to migrate it to the current structure.
-3.  **Pipeline**: Upcasting happens **before** validation, so your `validate` and `apply` logic only ever needs to handle the _current_ schema version.
+3.  **Pipeline**: Upcasting happens **before** validation and pre-application, so your `validate` and `apply` logic only ever needs to handle the _current_ schema version.
 
 ### Example
 

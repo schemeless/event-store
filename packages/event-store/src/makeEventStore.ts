@@ -23,7 +23,6 @@ export const makeEventStore =
     const {
       mainQueueConcurrent = 1,
       sideEffectQueueConcurrent = 1,
-      observerQueueConcurrent = 1,
     } = options;
 
     await eventStoreRepo.init();
@@ -87,7 +86,6 @@ export const makeEventStore =
       {
         mainConcurrency: mainQueueConcurrent,
         sideEffectConcurrency: sideEffectQueueConcurrent,
-        observerConcurrency: observerQueueConcurrent,
       }
     );
 

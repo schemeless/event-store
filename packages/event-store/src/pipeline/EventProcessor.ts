@@ -20,9 +20,7 @@ import type { EventOutput } from '../EventStore.types';
 export interface EventProcessorOptions {
   mainConcurrency?: number;
   sideEffectConcurrency?: number;
-  observerConcurrency?: number;
   maxEventDepth?: number;
-  maxSideEffectCascadeDepth?: number;
 }
 
 export class EventProcessor {

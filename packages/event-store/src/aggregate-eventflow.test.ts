@@ -215,8 +215,8 @@ describe('AggregateEventFlow', () => {
 
     expect(replayApply).toHaveBeenCalledTimes(2);
     expect(replayApply).toHaveBeenNthCalledWith(1, expect.objectContaining({ payload: { amount: 1 } }), { count: 0 });
-    expect(replayApply).toHaveBeenNthCalledWith(2, expect.objectContaining({ payload: { amount: 1 } }), { count: 1 });
-    expect(replayStates).toEqual([1, 2]);
+    expect(replayApply).toHaveBeenNthCalledWith(2, expect.objectContaining({ payload: { amount: 1 } }), { count: 10 });
+    expect(replayStates).toEqual([10, 20]);
   });
 
   it('clears aggregate state after a failed consequent event chain', async () => {

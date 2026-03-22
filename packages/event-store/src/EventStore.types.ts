@@ -4,19 +4,24 @@ import type {
   CanRevertResult,
   CreatedEvent,
   EventFlow,
-  EventObserverState,
   EventOutputState,
   IEventStoreEntity,
   IEventStoreRepo,
   PreviewRevertResult,
   RevertResult,
-  SideEffectsState,
 } from '@schemeless/event-store-types';
 
 import { makeReplay } from './makeReplay';
 
+/**
+ * Emitted by `on('processed', handler)` and the deprecated `output$` stream.
+ *
+ * In v5, only `EventOutputState.success` and `EventOutputState.invalid` are emitted.
+ * `SideEffectsState` and `EventObserverState` values are never emitted — they were
+ * part of the v3 observable pipeline which has been removed.
+ */
 export interface EventOutput<Payload = any> {
-  state: SideEffectsState | EventOutputState | EventObserverState;
+  state: EventOutputState;
   error?: Error;
   event: CreatedEvent<Payload>;
 }
@@ -38,12 +43,6 @@ export interface EventStoreOptions {
    * @default 1
    */
   sideEffectQueueConcurrent?: number;
-
-  /**
-   * Concurrency for the observer queue.
-   * @default 1
-   */
-  observerQueueConcurrent?: number;
 }
 
 export interface EventStoreCapabilities {
