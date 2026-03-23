@@ -9,6 +9,14 @@ Expo SQLite adapter for `@schemeless/event-store`. Designed for React Native app
 - **Aggregates and Streams**: Full support for `getStreamEvents`, sequential stream reconstruction and querying.
 - **Snapshots**: Built-in tables and capabilities for snapshot-based rehydration.
 
+## Capability Matrix
+
+- Core event log: yes
+- Stream query: yes
+- Optimistic concurrency: yes
+- Snapshots: yes
+- Suitable for multi-instance aggregate writes: generally no, because SQLite concurrency is process-local
+
 ## Installation
 
 You need both this adapter and `expo-sqlite` installed in your project:

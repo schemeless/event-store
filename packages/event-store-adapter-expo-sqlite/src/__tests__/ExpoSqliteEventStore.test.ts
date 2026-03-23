@@ -214,6 +214,12 @@ describe('ExpoSqliteEventStoreRepo', () => {
 
   // --- storeEvents + OCC ---
   describe('storeEvents', () => {
+    it('appendToStream returns the next version', async () => {
+      const result = await repo.appendToStream([makeEvent(1, 'user-A')], 0);
+      expect(result.nextVersion).toBe(1);
+      expect(await repo.getStreamSequence('test', 'user-A')).toBe(1);
+    });
+
     it('stores events and assigns ascending sequences', async () => {
       await repo.storeEvents([makeEvent(1, 'user-A'), makeEvent(2, 'user-A')]);
 

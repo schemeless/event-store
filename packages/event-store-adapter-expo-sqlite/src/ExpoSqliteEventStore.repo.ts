@@ -45,6 +45,9 @@ export class ExpoSqliteEventStoreRepo<PAYLOAD = any, META = any> implements IEve
 
   capabilities: IEventStoreRepoCapabilities = {
     aggregate: true,
+    streamQuery: true,
+    optimisticConcurrency: true,
+    snapshot: true,
   };
 
   constructor(db: SQLiteDatabase, options?: ExpoSqliteAdapterOptions) {
@@ -180,6 +183,23 @@ export class ExpoSqliteEventStoreRepo<PAYLOAD = any, META = any> implements IEve
         }
       }
     });
+  }
+
+  async append(events: IEventStoreEntity<PAYLOAD, META>[]): Promise<void> {
+    await this.storeEvents(events as CreatedEvent<any>[]);
+  }
+
+  async appendToStream(
+    events: IEventStoreEntity<PAYLOAD, META>[],
+    expectedVersion: number
+  ): Promise<{ nextVersion: number }> {
+    if (!events.length) {
+      return { nextVersion: expectedVersion };
+    }
+    const first = events[0];
+    const currentVersion = await this.getStreamSequence(first.domain, first.identifier ?? '');
+    await this.storeEvents(events as CreatedEvent<any>[], { expectedSequence: expectedVersion });
+    return { nextVersion: currentVersion + events.length };
   }
 
   // --- [P1 FIX] getAllEvents now uses a flat, single-iterator approach. ---

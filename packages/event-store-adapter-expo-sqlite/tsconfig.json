@@ -3,7 +3,11 @@
   "compilerOptions": {
     "outDir": "dist/",
     "rootDir": "src/",
-    "emitDeclarationOnly": false
+    "emitDeclarationOnly": false,
+    "baseUrl": ".",
+    "paths": {
+      "@schemeless/*": ["../*/dist"]
+    }
   },
   "include": ["src"],
   "exclude": ["node_modules", "dist"]

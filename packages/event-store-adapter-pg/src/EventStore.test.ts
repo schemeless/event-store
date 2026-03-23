@@ -93,6 +93,13 @@ describe('PgEventStoreRepo', () => {
     });
 
     describe('OCC - Optimistic Concurrency Control', () => {
+        it('appendToStream returns the next version', async () => {
+            const event = makeEventWithIdentifier(1, 'user-123');
+            const result = await repo.appendToStream([event], 0);
+            expect(result.nextVersion).toBe(1);
+            expect(await repo.getStreamSequence('test', 'user-123')).toBe(1);
+        });
+
         it('should assign sequence numbers to events', async () => {
             const events = [
                 makeEventWithIdentifier(1, 'user-123'),

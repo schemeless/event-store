@@ -1,5 +1,9 @@
 # Migration Guide
 
+> Legacy migration guide for the old `@schemeless/event-store` package.
+>
+> For the V6 architecture, use [`docs/redesign-v6-migration.md`](./redesign-v6-migration.md).
+
 ## v3 → v4
 
 v4 的外部 API 变化。**所有 v3 代码无需修改即可运行**（旧 API 被标记为 deprecated，v5 移除）。

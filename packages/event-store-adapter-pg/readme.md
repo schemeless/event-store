@@ -9,6 +9,14 @@ A dedicated, high-performance PostgreSQL adapter for `@schemeless/event-store`.
 - **Optimistic Concurrency Control (OCC)**: Leverages PostgreSQL transactions and unique indexes to ensure stream integrity.
 - **Lightweight**: Minimal dependencies.
 
+## Capability Matrix
+
+- Core event log: yes
+- Stream query: yes
+- Optimistic concurrency: yes
+- Snapshots: yes
+- Suitable for multi-instance aggregate writes: yes
+
 ## Installation
 
 ```bash

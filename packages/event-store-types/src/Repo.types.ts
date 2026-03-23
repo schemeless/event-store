@@ -42,6 +42,47 @@ export interface IEventStoreRepoCapabilities {
    * Requires getStreamEvents(domain, identifier, fromSequence).
    */
   aggregate?: boolean;
+  /**
+   * Supports direct stream queries for read-side or aggregate hydration use cases.
+   */
+  streamQuery?: boolean;
+  /**
+   * Supports compare-and-append semantics with an expected stream version.
+   */
+  optimisticConcurrency?: boolean;
+  /**
+   * Supports snapshot read/write.
+   */
+  snapshot?: boolean;
+}
+
+export interface PersistedEvent<Payload = any, META = any> extends IEventStoreEntity<Payload, META> {}
+
+export interface Snapshot<State = any> {
+  domain: string;
+  identifier: string;
+  state: State;
+  sequence: number;
+  created: Date;
+}
+
+export interface EventStoreAdapter {
+  init(): Promise<void>;
+  close?(): Promise<void>;
+  append(events: PersistedEvent[]): Promise<void>;
+  getAllEvents(pageSize?: number, startFromId?: string): Promise<AsyncIterableIterator<Array<PersistedEvent>>>;
+}
+
+export interface StreamEventStoreAdapter extends EventStoreAdapter {
+  getStreamEvents(domain: string, identifier: string, fromSequence?: number): Promise<PersistedEvent[]>;
+  appendToStream(events: PersistedEvent[], expectedVersion: number): Promise<{ nextVersion: number }>;
+  getSnapshot?<State>(domain: string, identifier: string): Promise<Snapshot<State> | null>;
+  saveSnapshot?<State>(snapshot: Snapshot<State>): Promise<void>;
+  capabilities: {
+    streamQuery: true;
+    optimisticConcurrency: true;
+    snapshot?: boolean;
+  };
 }
 
 export interface IEventStoreRepo<PAYLOAD = any, META = any> {

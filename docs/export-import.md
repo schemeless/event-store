@@ -1,6 +1,6 @@
 # Export and Import Events
 
-The `@schemeless/event-store` core package ships four built-in utilities for snapshotting and restoring the full event log. They are **adapter-agnostic** — they work with every `IEventStoreRepo` implementation and every environment (Node.js, React Native, browser).
+The V6 architecture exposes export/import through `@schemeless/event-store-core`. These utilities are adapter-agnostic and operate on the event-log layer.
 
 ## When to use this
 
@@ -13,60 +13,29 @@ The `@schemeless/event-store` core package ships four built-in utilities for sna
 
 ## API Reference
 
-### `exportEventsToArray(repo, opts?)`
+### `core.export(opts?)`
 
 Pages through `repo.getAllEvents()` and collects every event into a flat array.
 
 ```ts
-import { exportEventsToArray } from '@schemeless/event-store';
+import { makeEventStoreCore } from '@schemeless/event-store-core';
 
-const events = await exportEventsToArray(store.eventStoreRepo, {
-  pageSize: 200, // optional, default 200
-  onProgress: (n) => {}, // optional progress callback
-});
-// → IEventStoreEntity[]
+const core = makeEventStoreCore(repo);
+const events = await core.export({ pageSize: 200 });
+// -> PersistedEvent[]
 ```
 
-### `createSnapshot(events)`
+### `core.import(events, opts?)`
 
-Wraps the events array in a metadata envelope suitable for `JSON.stringify`.
-
-```ts
-import { createSnapshot } from '@schemeless/event-store';
-
-const snapshot = createSnapshot(events);
-// → { exportedAt: string, count: number, events: IEventStoreEntity[] }
-
-const json = JSON.stringify(snapshot);
-```
-
-### `parseSnapshot(json)`
-
-Parses a JSON string produced by `JSON.stringify(createSnapshot(...))`. Automatically restores `Date` objects on every `event.created` field.
+Writes events back into the event log. When `replace: true` is used, the adapter must provide `reset()`.
 
 ```ts
-import { parseSnapshot } from '@schemeless/event-store';
-
-const snapshot = parseSnapshot(json);
-// → { exportedAt: string, count: number, events: IEventStoreEntity[] }
-// snapshot.events[*].created is a proper Date instance
-```
-
-### `importEventsFromArray(repo, events, opts?)`
-
-Writes events back in batches and coerces date strings to `Date` objects regardless of input.
-
-```ts
-import { importEventsFromArray } from '@schemeless/event-store';
-
-await importEventsFromArray(store.eventStoreRepo, snapshot.events, {
-  replace: true, // call resetStore() first (optional, default false)
-  batchSize: 100, // optional, default 100
-  onProgress: (n) => {},
+await core.import(events, {
+  replace: true,
 });
 ```
 
-> **Note:** `replace: true` calls `repo.resetStore()` before writing. Use this when restoring a full backup to ensure you start from a clean slate.
+> **Note:** `replace: true` requires `repo.reset()` support.
 
 ## Usage patterns
 
@@ -74,16 +43,15 @@ await importEventsFromArray(store.eventStoreRepo, snapshot.events, {
 
 ```ts
 import fs from 'fs/promises';
-import { exportEventsToArray, importEventsFromArray, createSnapshot, parseSnapshot } from '@schemeless/event-store';
+import { makeEventStoreCore } from '@schemeless/event-store-core';
 
-// Backup
-const events = await exportEventsToArray(store.eventStoreRepo);
-await fs.writeFile('backup.json', JSON.stringify(createSnapshot(events), null, 2));
+const core = makeEventStoreCore(repo);
+const events = await core.export();
+await fs.writeFile('backup.json', JSON.stringify(events, null, 2));
 
-// Restore
+// Restore into a reset-capable adapter
 const json = await fs.readFile('backup.json', 'utf-8');
-const { events } = parseSnapshot(json);
-await importEventsFromArray(store.eventStoreRepo, events, { replace: true });
+await core.import(JSON.parse(json), { replace: true });
 ```
 
 ### React Native / Expo — share a backup file
@@ -91,13 +59,11 @@ await importEventsFromArray(store.eventStoreRepo, events, { replace: true });
 ```ts
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import { exportEventsToArray, createSnapshot } from '@schemeless/event-store';
+import { makeEventStoreCore } from '@schemeless/event-store-core';
 
-export async function shareBackup(store) {
-  const events = await exportEventsToArray(store.eventStoreRepo, {
-    onProgress: (n) => setProgress(n),
-  });
-  const json = JSON.stringify(createSnapshot(events));
+export async function shareBackup(repo) {
+  const core = makeEventStoreCore(repo);
+  const json = JSON.stringify(await core.export());
   const path = FileSystem.documentDirectory + 'event-store-backup.json';
   await FileSystem.writeAsStringAsync(path, json);
   await Sharing.shareAsync(path, { mimeType: 'application/json' });
@@ -109,40 +75,31 @@ export async function shareBackup(store) {
 ```ts
 import * as FileSystem from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
-import { importEventsFromArray, parseSnapshot } from '@schemeless/event-store';
+import { makeEventStoreCore } from '@schemeless/event-store-core';
 
-export async function restoreBackup(store) {
+export async function restoreBackup(repo) {
+  const core = makeEventStoreCore(repo);
   const result = await DocumentPicker.getDocumentAsync({ type: 'application/json' });
   if (result.canceled) return;
 
   const json = await FileSystem.readAsStringAsync(result.assets[0].uri);
-  const { events, count } = parseSnapshot(json);
-
-  await importEventsFromArray(store.eventStoreRepo, events, {
-    replace: true,
-    onProgress: (n) => setProgress(`${n} / ${count}`),
-  });
+  await core.import(JSON.parse(json), { replace: true });
 }
 ```
 
 ### Adapter migration (e.g. SQLite → PostgreSQL)
 
 ```ts
-// 1. Export from old adapter
-const oldStore = await makeEventStore(sqliteRepo)(flows);
-const events = await exportEventsToArray(oldStore.eventStoreRepo);
-const json = JSON.stringify(createSnapshot(events));
+const oldCore = makeEventStoreCore(sqliteRepo);
+const events = await oldCore.export();
 
-// 2. Import into new adapter
-const newStore = await makeEventStore(pgRepo)(flows);
-await importEventsFromArray(newStore.eventStoreRepo, parseSnapshot(json).events, {
-  replace: true,
-});
+const newCore = makeEventStoreCore(pgRepo);
+await newCore.import(events, { replace: true });
 ```
 
 ## Considerations
 
-- **Order is preserved.** Events are exported in the order returned by `getAllEvents` (chronological), and imported in the same order. This ensures correct replay semantics.
-- **Date serialisation.** Standard `JSON.stringify` converts `Date` to ISO-8601 strings. `parseSnapshot` automatically converts them back. If you call `importEventsFromArray` with a manually constructed array, date strings are also coerced.
+- **Order is preserved.** Events are exported in the order returned by `getAllEvents`, and imported in the same order.
+- **Date serialisation.** If exported events are serialized to JSON, callers should restore `created` fields as `Date` before import or rely on the core import normalization.
 - **Memory.** `exportEventsToArray` loads all events into memory at once. For extremely large stores, consider streaming the async iterator from `repo.getAllEvents` directly and writing pages to disk.
-- **Concurrency.** Neither export nor import acquires a lock. For production imports, pause the event store first (`shutdown()`) and restart it after import is complete.
+- **Concurrency.** Neither export nor import acquires a lock. Production imports should be run in a controlled maintenance window.

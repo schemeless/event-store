@@ -4,6 +4,7 @@ import {
   IEventStoreEntity,
   IEventStoreRepo,
   IEventStoreRepoCapabilities,
+  ISnapshotEntity,
   StoreEventsOptions,
 } from '@schemeless/event-store-types';
 import { createHash } from 'crypto';
@@ -41,9 +42,13 @@ export class PgEventStoreRepo implements IEventStoreRepo {
   private tableName: string;
   private idxStreamSequence: string;
   private idxCausationId: string;
+  private idxSnapshotKey: string;
 
   capabilities: IEventStoreRepoCapabilities = {
     aggregate: true,
+    streamQuery: true,
+    optimisticConcurrency: true,
+    snapshot: true,
   };
 
   constructor(options: PgAdapterOptions) {
@@ -55,6 +60,7 @@ export class PgEventStoreRepo implements IEventStoreRepo {
     // PostgreSQL identifiers are limited to 63 characters, so names must be length-safe.
     this.idxStreamSequence = buildIndexName(tableName, 'stream_sequence_idx');
     this.idxCausationId = buildIndexName(tableName, 'causation_id_idx');
+    this.idxSnapshotKey = buildIndexName(tableName, 'snapshot_key_idx');
   }
 
   async init() {
@@ -74,6 +80,16 @@ export class PgEventStoreRepo implements IEventStoreRepo {
           created TIMESTAMP(6) NOT NULL
         );
       `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS ${this.tableName}_snapshots (
+          domain VARCHAR(15) NOT NULL,
+          identifier VARCHAR(64) NOT NULL DEFAULT '',
+          state JSONB NOT NULL,
+          sequence INT NOT NULL,
+          created TIMESTAMP(6) NOT NULL,
+          PRIMARY KEY (domain, identifier)
+        );
+      `);
 
       await client.query(`
         CREATE UNIQUE INDEX IF NOT EXISTS "${this.idxStreamSequence}" 
@@ -82,6 +98,10 @@ export class PgEventStoreRepo implements IEventStoreRepo {
       await client.query(`
         CREATE INDEX IF NOT EXISTS "${this.idxCausationId}" 
         ON ${this.tableName} ("causationId");
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS "${this.idxSnapshotKey}"
+        ON ${this.tableName}_snapshots (domain, identifier);
       `);
 
       // Migration safety check:
@@ -187,6 +207,38 @@ export class PgEventStoreRepo implements IEventStoreRepo {
     return res.rows.map((row) => this.mapRowToEntity(row));
   }
 
+  async getSnapshot<State>(domain: string, identifier: string): Promise<ISnapshotEntity<State> | null> {
+    const res = await this.pool.query(
+      `SELECT domain, identifier, state, sequence, created
+       FROM ${this.tableName}_snapshots
+       WHERE domain = $1 AND identifier = $2`,
+      [domain, identifier || '']
+    );
+    if (!res.rows.length) {
+      return null;
+    }
+    const row = res.rows[0];
+    return {
+      domain: row.domain,
+      identifier: row.identifier === '' ? '' : row.identifier,
+      state: row.state,
+      sequence: Number(row.sequence),
+      created: row.created,
+    } as ISnapshotEntity<State>;
+  }
+
+  async saveSnapshot<State>(snapshot: ISnapshotEntity<State>): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO ${this.tableName}_snapshots (domain, identifier, state, sequence, created)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (domain, identifier) DO UPDATE
+       SET state = EXCLUDED.state,
+           sequence = EXCLUDED.sequence,
+           created = EXCLUDED.created`,
+      [snapshot.domain, snapshot.identifier || '', snapshot.state, snapshot.sequence, snapshot.created]
+    );
+  }
+
   /**
    * Helper to get the current max sequence for a stream within a transaction.
    * Uses SELECT ... FOR UPDATE on the actual rows to acquire row-level locks,
@@ -280,6 +332,20 @@ export class PgEventStoreRepo implements IEventStoreRepo {
         client.release();
       }
     }
+  }
+
+  async append(events: IEventStoreEntity[]): Promise<void> {
+    await this.storeEvents(events as CreatedEvent<any>[]);
+  }
+
+  async appendToStream(events: IEventStoreEntity[], expectedVersion: number): Promise<{ nextVersion: number }> {
+    if (!events.length) {
+      return { nextVersion: expectedVersion };
+    }
+    const first = events[0];
+    const currentVersion = await this.getStreamSequence(first.domain, first.identifier ?? '');
+    await this.storeEvents(events as CreatedEvent<any>[], { expectedSequence: expectedVersion });
+    return { nextVersion: currentVersion + events.length };
   }
 
   async getAllEvents(

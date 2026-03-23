@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "declaration": true,
+    "target": "es6",
+    "lib": ["es7"],
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "skipLibCheck": true,
+    "strictPropertyInitialization": false,
+    "baseUrl": ".",
+    "paths": {
+      "@schemeless/event-store-types": ["../event-store-types/dist/index.d.ts"],
+      "@schemeless/event-store-core": ["../event-store-core/dist/index.d.ts"],
+      "@schemeless/event-store-aggregate": ["../event-store-aggregate/dist/index.d.ts"]
+    }
+  },
+  "exclude": ["node_modules", "**/*.test.ts"],
+  "include": ["src/**/*.ts"]
+}
