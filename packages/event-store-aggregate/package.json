@@ -22,5 +22,8 @@
     "ts-jest": "^29.4.6",
     "typescript": "^4.1.2"
   },
-  "gitHead": "0d1e175bf8294c9f33be8c875aad9ae8249ca1d6"
+  "gitHead": "f5135068fbd20d3944f762a6af46b143123d89e0",
+  "publishConfig": {
+    "access": "public"
+  }
 }
