@@ -1,3 +1,4 @@
+import { StreamConcurrencyError } from '@schemeless/event-store-types';
 import type { PersistedEvent, Snapshot } from '@schemeless/event-store-types';
 import type { AggregateRuntimeAdapter } from '@schemeless/event-store-aggregate';
 import type { EventStoreCoreRepo } from '@schemeless/event-store-core';
@@ -56,7 +57,9 @@ export class MemoryEventStore implements AggregateRuntimeAdapter, EventStoreCore
 
   async getStreamEvents(domain: string, identifier: string, fromSequence = 0): Promise<PersistedEvent[]> {
     return this.events
-      .filter((event) => event.domain === domain && event.identifier === identifier && (event.sequence ?? 0) > fromSequence)
+      .filter(
+        (event) => event.domain === domain && event.identifier === identifier && (event.sequence ?? 0) > fromSequence
+      )
       .sort(compareEvents);
   }
 
@@ -68,7 +71,7 @@ export class MemoryEventStore implements AggregateRuntimeAdapter, EventStoreCore
       const { domain, identifier } = events[0];
       const current = await this.getCurrentVersion(domain, identifier ?? '');
       if (current !== expectedVersion) {
-        throw new Error(`OCC conflict: expected ${expectedVersion}, found ${current}`);
+        throw new StreamConcurrencyError(domain, identifier ?? '', expectedVersion, current);
       }
 
       let next = current;
@@ -89,6 +92,9 @@ export class MemoryEventStore implements AggregateRuntimeAdapter, EventStoreCore
   }
 
   async getCurrentVersion(domain: string, identifier: string): Promise<number> {
-    return Math.max(0, ...this.events.filter((e) => e.domain === domain && e.identifier === identifier).map((e) => e.sequence ?? 0));
+    return Math.max(
+      0,
+      ...this.events.filter((e) => e.domain === domain && e.identifier === identifier).map((e) => e.sequence ?? 0)
+    );
   }
 }

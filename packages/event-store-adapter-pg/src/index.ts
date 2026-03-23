@@ -1,1 +1,1 @@
-export * from './PgEventStore.repo';
+export * from './PgEventStoreAdapter';

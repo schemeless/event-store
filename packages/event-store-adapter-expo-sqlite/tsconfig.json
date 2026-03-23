@@ -4,9 +4,10 @@
     "outDir": "dist/",
     "rootDir": "src/",
     "emitDeclarationOnly": false,
+    "moduleResolution": "node",
     "baseUrl": ".",
     "paths": {
-      "@schemeless/*": ["../*/dist"]
+      "@schemeless/event-store-types": ["../event-store-types/dist/index.d.ts"]
     }
   },
   "include": ["src"],

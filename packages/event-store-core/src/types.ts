@@ -7,23 +7,20 @@ export interface Observer {
   filters: Array<{ domain: string; type: string }>;
   priority?: number;
   fireAndForget?: boolean;
+  onError?: (error: unknown, event: PersistedEvent) => void;
   apply(event: PersistedEvent): Promise<void> | void;
 }
 
 export interface EventStoreCore {
   append(events: PersistedEvent[]): Promise<void>;
-  stream(
-    domain: string,
-    identifier: string,
-    options?: { fromSequence?: number }
-  ): Promise<PersistedEvent[]>;
-  scan(options?: { pageSize?: number; startFromId?: string }): Promise<AsyncIterable<PersistedEvent[]>>;
+  stream(domain: string, identifier: string, options?: { fromSequence?: number }): Promise<PersistedEvent[]>;
+  scan(options?: { pageSize?: number; startFromId?: string }): AsyncIterable<PersistedEvent[]>;
   rebuildReadModels(options?: {
     startFromId?: string;
     observers?: Observer[];
     reset?: () => Promise<void>;
   }): Promise<void>;
-  export(options?: { pageSize?: number }): Promise<PersistedEvent[]>;
+  export(options?: { pageSize?: number }): AsyncIterable<PersistedEvent[]>;
   import(
     events: PersistedEvent[],
     options?: {
@@ -32,7 +29,4 @@ export interface EventStoreCore {
   ): Promise<void>;
 }
 
-export type EventStoreCoreRepo = EventStoreAdapter &
-  Partial<Pick<StreamEventStoreAdapter, 'getStreamEvents'>> & {
-    reset?: () => Promise<void>;
-  };
+export type EventStoreCoreRepo = EventStoreAdapter & Partial<Pick<StreamEventStoreAdapter, 'getStreamEvents'>>;

@@ -23,7 +23,13 @@ export async function runObservers(events: PersistedEvent[], observers: Observer
     for (const observer of sorted) {
       const run = () => observer.apply(event);
       if (observer.fireAndForget) {
-        Promise.resolve(run()).catch(() => {});
+        Promise.resolve(run()).catch((err) => {
+          if (observer.onError) {
+            observer.onError(err, event);
+          } else {
+            console.error(`[ObserverRunner] Observer "${observer.name}" failed on event "${event.id}":`, err);
+          }
+        });
       } else {
         await run();
       }

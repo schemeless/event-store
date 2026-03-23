@@ -39,4 +39,4 @@ See the reference walkthrough in:
 
 ## Legacy package
 
-The old `@schemeless/event-store` package is now legacy documentation surface. New projects should not start there.
+The old `@schemeless/event-store` package has been removed from the repository. Migration should target the V6 packages directly.

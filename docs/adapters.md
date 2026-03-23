@@ -1,30 +1,44 @@
-# Adapter Selection and Configuration
+# Adapters
 
-Legacy adapter selection guide for the old `IEventStoreRepo` surface.
+V6 keeps two first-class event-log adapters in this repository:
 
-For the V6 architecture, adapters should be evaluated against the capability matrix:
+- `@schemeless/event-store-adapter-pg`
+- `@schemeless/event-store-adapter-expo-sqlite`
 
-- core event log
-- stream query
-- optimistic concurrency
-- snapshot
+Both implement `StreamEventStoreAdapter` from `@schemeless/event-store-types`.
 
-See:
+## Required Capabilities
 
-- [`docs/architecture.md`](./architecture.md)
-- [`docs/redesign-v6-migration.md`](./redesign-v6-migration.md)
+For `core`:
 
-## Adapter matrix
+- `append(events)`
+- `getAllEvents(pageSize?, startFromId?)`
 
-| Adapter | Core event log | Stream query | Optimistic concurrency | Snapshot | Multi-instance aggregate writes |
-| --- | --- | --- | --- | --- | --- |
-| `@schemeless/event-store-adapter-pg` | Yes | Yes | Yes | Yes | Yes |
-| `@schemeless/event-store-adapter-expo-sqlite` | Yes | Yes | Yes | Yes | Limited to local/device scope |
-| `@schemeless/event-store-adapter-dynamodb` | Yes | Yes | Yes | Partial | Yes |
-| `@schemeless/event-store-adapter-typeorm` | Legacy | Legacy | Legacy | Legacy | Legacy |
-| `@schemeless/event-store-adapter-prisma` | Legacy | Legacy | Legacy | Legacy | Legacy |
-| `@schemeless/event-store-adapter-mikroorm` | Legacy | Legacy | Legacy | Legacy | Legacy |
+For `aggregate`:
 
-## Legacy note
+- `getStreamEvents(domain, identifier, fromSequence?)`
+- `appendToStream(events, expectedVersion)`
 
-The old `IEventStoreRepo`-centric configuration examples remain in the repository for migration purposes only. New code should be written against the V6 packages and their capability contracts.
+Optional:
+
+- `getSnapshot(domain, identifier)`
+- `saveSnapshot(snapshot)`
+- `reset()` for tests and import replacement flows
+
+## Adapter Selection
+
+### PostgreSQL
+
+Use `@schemeless/event-store-adapter-pg` when you want:
+
+- multi-instance deployments
+- durable event logs
+- strong stream-level optimistic concurrency
+
+### Expo SQLite
+
+Use `@schemeless/event-store-adapter-expo-sqlite` when you want:
+
+- on-device event logs
+- offline-first mobile workflows
+- local aggregate hydration and replay

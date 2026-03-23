@@ -4,7 +4,7 @@ import type { CashAccountCommand, CashAccountEvent, CashAccountState } from './t
 export const CashAccountAggregate: AggregateDefinition<CashAccountCommand, CashAccountEvent, CashAccountState> = {
   name: 'CashAccount',
   domain: 'cashAccount',
-  getIdentifier: (input: any) => input.accountId,
+  getIdentifier: (command: CashAccountCommand) => command.accountId,
   initialState: { opened: false, balance: 0 },
   evolve: (state, event) => {
     switch (event.type) {
@@ -29,36 +29,42 @@ export const CashAccountAggregate: AggregateDefinition<CashAccountCommand, CashA
   decide: (command) => {
     switch (command.kind) {
       case 'OpenCashAccount':
-        return [{
-          id: `open-${command.accountId}`,
-          domain: 'cashAccount',
-          type: 'CashAccountOpened',
-          identifier: command.accountId,
-          payload: {
-            accountId: command.accountId,
-            ownerName: command.ownerName,
-            openingBalance: command.openingBalance,
+        return [
+          {
+            id: `open-${command.accountId}`,
+            domain: 'cashAccount',
+            type: 'CashAccountOpened',
+            identifier: command.accountId,
+            payload: {
+              accountId: command.accountId,
+              ownerName: command.ownerName,
+              openingBalance: command.openingBalance,
+            },
+            created: new Date(),
           },
-          created: new Date(),
-        }];
+        ];
       case 'DepositCash':
-        return [{
-          id: `dep-${command.accountId}-${command.amount}-${Date.now()}`,
-          domain: 'cashAccount',
-          type: 'CashDeposited',
-          identifier: command.accountId,
-          payload: { accountId: command.accountId, amount: command.amount },
-          created: new Date(),
-        }];
+        return [
+          {
+            id: `dep-${command.accountId}-${command.amount}-${Date.now()}`,
+            domain: 'cashAccount',
+            type: 'CashDeposited',
+            identifier: command.accountId,
+            payload: { accountId: command.accountId, amount: command.amount },
+            created: new Date(),
+          },
+        ];
       case 'WithdrawCash':
-        return [{
-          id: `wd-${command.accountId}-${command.amount}-${Date.now()}`,
-          domain: 'cashAccount',
-          type: 'CashWithdrawn',
-          identifier: command.accountId,
-          payload: { accountId: command.accountId, amount: command.amount },
-          created: new Date(),
-        }];
+        return [
+          {
+            id: `wd-${command.accountId}-${command.amount}-${Date.now()}`,
+            domain: 'cashAccount',
+            type: 'CashWithdrawn',
+            identifier: command.accountId,
+            payload: { accountId: command.accountId, amount: command.amount },
+            created: new Date(),
+          },
+        ];
     }
   },
 };

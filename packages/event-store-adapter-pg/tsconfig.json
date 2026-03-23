@@ -1,12 +1,11 @@
 {
-    "compilerOptions": {
-        "declaration": true,
-        "target": "es6",
-        "lib": [
-            "es7"
-        ],
-        "module": "commonjs",
-        "noUnusedLocals": false,
+  "compilerOptions": {
+    "declaration": true,
+    "target": "es6",
+    "lib": ["es7"],
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "noUnusedLocals": false,
     "noUnusedParameters": false,
     "outDir": "./dist",
     "rootDir": "./src",
@@ -15,14 +14,9 @@
     "esModuleInterop": true,
     "baseUrl": ".",
     "paths": {
-      "@schemeless/*": ["../*/dist"]
+      "@schemeless/event-store-types": ["../event-store-types/dist/index.d.ts"]
     }
   },
-    "exclude": [
-        "node_modules",
-        "**/*.test.ts"
-    ],
-    "include": [
-        "src/**/*.ts"
-    ]
+  "exclude": ["node_modules", "**/*.test.ts"],
+  "include": ["src/**/*.ts"]
 }

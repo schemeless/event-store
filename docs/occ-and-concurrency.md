@@ -1,30 +1,31 @@
 # OCC and Concurrency
 
-Legacy guide for the old `@schemeless/event-store` package.
+V6 uses stream-level optimistic concurrency control.
 
-For V6, prefer:
+## Rule
 
-- `appendToStream(expectedVersion)` on stream-capable adapters
-- `hydrate()` / `handle()` in `@schemeless/event-store-aggregate`
-- `rebuildReadModels()` in `@schemeless/event-store-core`
+For a given aggregate stream:
 
-## OCC basics
+1. hydrate current state from snapshot + stream
+2. decide next events
+3. append with `expectedVersion`
+4. fail if another writer committed first
 
-Optimistic concurrency now belongs to the aggregate runtime boundary.
+## Why
 
-- `expectedVersion` is the correctness boundary for multi-instance aggregate writes.
-- `event.identifier` is the canonical stream key.
-- Projection freshness must never be required for write correctness.
+This keeps correctness in the event log, not in process-local locks.
 
-## Error handling
+That means:
 
-Use `StreamConcurrencyError` for V6 aggregate writes. Legacy repo-level `ConcurrencyError` still exists for older adapters.
+- different instances can safely race on the same aggregate
+- only one append succeeds for a given expected version
+- the loser gets a `StreamConcurrencyError`
 
-## Legacy package note
+## Error
 
-The old `eventStore.receive(...)` path is no longer the recommended write-side API.
+Adapters should throw `StreamConcurrencyError` with:
 
-For new work, use the V6 split architecture documented in:
-
-- [`docs/redesign-v6-migration.md`](./redesign-v6-migration.md)
-- [`docs/architecture.md`](./architecture.md)
+- `domain`
+- `identifier`
+- `expectedVersion`
+- `actualVersion`

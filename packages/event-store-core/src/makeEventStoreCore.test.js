@@ -9,14 +9,13 @@ const event = (overrides = {}) => ({
   ...overrides,
 });
 
-const makeRepo = (overrides = {}) =>
-  ({
-    getAllEvents: jest.fn(),
-    append: jest.fn().mockResolvedValue(undefined),
-    reset: jest.fn().mockResolvedValue(undefined),
-    getStreamEvents: jest.fn(),
-    ...overrides,
-  });
+const makeRepo = (overrides = {}) => ({
+  getAllEvents: jest.fn(),
+  append: jest.fn().mockResolvedValue(undefined),
+  reset: jest.fn().mockResolvedValue(undefined),
+  getStreamEvents: jest.fn(),
+  ...overrides,
+});
 
 const buildIterator = (pages) =>
   (async function* () {
@@ -49,19 +48,28 @@ describe('event-store-core', () => {
   it('scan returns paginated iterator', async () => {
     const repo = makeRepo({ getAllEvents: jest.fn(async () => buildIterator([[event()], []])) });
     const core = makeEventStoreCore(repo);
-    const iterator = await core.scan({ pageSize: 25, startFromId: 'cursor-1' });
     const pages = [];
-    for await (const page of iterator) pages.push(page);
+    for await (const page of core.scan({ pageSize: 25, startFromId: 'cursor-1' })) pages.push(page);
 
     expect(repo.getAllEvents).toHaveBeenCalledWith(25, 'cursor-1');
-    expect(pages).toHaveLength(2);
+    expect(pages).toHaveLength(1);
   });
 
   it('rebuildReadModels runs observers in priority order', async () => {
     const calls = [];
     const observers = [
-      { name: 'late', filters: [{ domain: 'test', type: 'created' }], priority: 10, apply: async () => calls.push('late') },
-      { name: 'early', filters: [{ domain: 'test', type: 'created' }], priority: 1, apply: async () => calls.push('early') },
+      {
+        name: 'late',
+        filters: [{ domain: 'test', type: 'created' }],
+        priority: 10,
+        apply: async () => calls.push('late'),
+      },
+      {
+        name: 'early',
+        filters: [{ domain: 'test', type: 'created' }],
+        priority: 1,
+        apply: async () => calls.push('early'),
+      },
     ];
     const repo = makeRepo({ getAllEvents: jest.fn(async () => buildIterator([[event()], []])) });
     const core = makeEventStoreCore(repo);
@@ -97,8 +105,9 @@ describe('event-store-core', () => {
     });
     const core = makeEventStoreCore(repo);
 
-    const exported = await core.export();
-    await core.import(exported, { replace: true });
+    const events = [];
+    for await (const page of core.export()) events.push(...page);
+    await core.import(events, { replace: true });
 
     expect(repo.reset).toHaveBeenCalledTimes(1);
     expect(repo.append).toHaveBeenCalledTimes(1);

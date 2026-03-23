@@ -1,2 +1,2 @@
-export { ExpoSqliteEventStoreRepo } from './ExpoSqliteEventStore.repo';
-export type { ExpoSqliteAdapterOptions } from './ExpoSqliteEventStore.repo';
+export { ExpoSqliteEventStoreAdapter } from './ExpoSqliteEventStoreAdapter';
+export type { ExpoSqliteAdapterOptions } from './ExpoSqliteEventStoreAdapter';

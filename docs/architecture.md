@@ -1,82 +1,49 @@
 # Architecture
 
-This repository now has one primary architecture:
-
-- `@schemeless/event-store-core`
-- `@schemeless/event-store-aggregate`
-- adapter capability contracts in `@schemeless/event-store-types`
-
-The legacy `@schemeless/event-store` package remains in the tree for historical compatibility, but new work should target the V6 packages.
-
-## Layers
-
-### Core
-
-`event-store-core` is the persisted event log and read-model rebuild engine.
-
-It owns:
-
-- append
-- stream reads
-- paginated scans
-- `rebuildReadModels()`
-- projection observers
-- import/export
-
-It does not own:
-
-- aggregate hydration
-- command decisions
-- aggregate state transitions
-- replay-as-recovery semantics
-
-### Aggregate runtime
-
-`event-store-aggregate` owns command handling and aggregate hydration.
-
-It owns:
-
-- `hydrate()`
-- `handle()`
-- `precondition`
-- `decide`
-- `validateEvent`
-- `evolve`
-- `appendToStream(expectedVersion)`
-
-It does not own:
-
-- read-model rebuild
-- observer execution
-- projection recovery
-
-## Event flow
+V6 splits the repository into four layers:
 
 ```mermaid
 flowchart LR
-  Command["Command"] --> Runtime["Aggregate Runtime"]
-  Runtime --> Core["Event Store Core"]
-  Core --> Adapter["Storage Adapter"]
-  Core --> Rebuild["rebuildReadModels()"]
-  Rebuild --> Observer["Projection Observer"]
-  Observer --> Query["Read Model / Query"]
+  A["App / Command"] --> B["Aggregate Runtime"]
+  B --> C["Event Store Core"]
+  C --> D["Event Store Adapter"]
+  C --> E["Observers"]
+  E --> F["Projection Store"]
 ```
 
-## Key rules
+## Layers
 
-- Replay is for read-model rebuild, not aggregate recovery.
-- Aggregate writes depend on stream version, not projection freshness.
-- Observers receive persisted events only.
-- `event.identifier` is the canonical stream key.
-- `evolve(state, event)` is the only aggregate state transition.
+- `@schemeless/event-store-core`
 
-## Capabilities
+  - append events
+  - scan the log
+  - read streams
+  - rebuild read models
 
-Adapters now advertise capability support explicitly:
+- `@schemeless/event-store-aggregate`
 
-- core event log
-- stream query
-- optimistic concurrency
-- snapshot
+  - hydrate aggregate state
+  - run `precondition`
+  - `decide` domain events
+  - `evolve` state
+  - append with optimistic concurrency
 
-Use these flags to decide whether an adapter can support a particular runtime.
+- `@schemeless/event-store-types`
+
+  - `PersistedEvent`
+  - `Snapshot`
+  - `EventStoreAdapter`
+  - `StreamEventStoreAdapter`
+
+- adapters
+  - implement storage concerns
+  - do not define business logic
+
+## Design Rules
+
+- event stream is the source of truth
+- snapshots are persisted acceleration only
+- memory cache is disposable acceleration only
+- `identifier` is the canonical aggregate key
+- `evolve` is the only state transition function
+- read-model rebuild is separate from aggregate hydrate

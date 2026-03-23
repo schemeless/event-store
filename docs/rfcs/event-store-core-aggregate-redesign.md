@@ -126,16 +126,9 @@ It is not responsible for:
 export interface EventStoreCore {
   append(events: PersistedEvent[]): Promise<void>;
 
-  stream(
-    domain: string,
-    identifier: string,
-    options?: { fromSequence?: number }
-  ): Promise<PersistedEvent[]>;
+  stream(domain: string, identifier: string, options?: { fromSequence?: number }): Promise<PersistedEvent[]>;
 
-  scan(options?: {
-    pageSize?: number;
-    startFromId?: string;
-  }): Promise<AsyncIterable<PersistedEvent[]>>;
+  scan(options?: { pageSize?: number; startFromId?: string }): Promise<AsyncIterable<PersistedEvent[]>>;
 
   rebuildReadModels(options?: {
     startFromId?: string;
@@ -143,9 +136,7 @@ export interface EventStoreCore {
     reset?: () => Promise<void>;
   }): Promise<void>;
 
-  export(options?: {
-    pageSize?: number;
-  }): Promise<PersistedEvent[]>;
+  export(options?: { pageSize?: number }): Promise<PersistedEvent[]>;
 
   import(
     events: PersistedEvent[],
@@ -195,10 +186,7 @@ It is not responsible for:
 
 ```ts
 export interface AggregateRuntime {
-  handle<C, E extends DomainEvent, S>(
-    aggregate: AggregateDefinition<C, E, S>,
-    command: C
-  ): Promise<HandleResult<E, S>>;
+  handle<C, E extends DomainEvent, S>(aggregate: AggregateDefinition<C, E, S>, command: C): Promise<HandleResult<E, S>>;
 
   hydrate<E extends DomainEvent, S>(
     aggregate: AggregateDefinition<any, E, S>,
@@ -218,23 +206,11 @@ export interface AggregateDefinition<Command, Event extends DomainEvent, State> 
 
   evolve(state: State, event: Event): State;
 
-  precondition?(
-    command: Command,
-    state: State,
-    ctx: AggregateContext
-  ): Promise<void> | void;
+  precondition?(command: Command, state: State, ctx: AggregateContext): Promise<void> | void;
 
-  decide(
-    command: Command,
-    state: State,
-    ctx: AggregateContext
-  ): Promise<Event[]> | Event[];
+  decide(command: Command, state: State, ctx: AggregateContext): Promise<Event[]> | Event[];
 
-  validateEvent?(
-    event: Event,
-    state: State,
-    ctx: PhaseContext
-  ): Promise<void> | void;
+  validateEvent?(event: Event, state: State, ctx: PhaseContext): Promise<void> | void;
 }
 ```
 
@@ -312,12 +288,24 @@ Validation is split into two separate responsibilities.
 - may read projections or external services
 - is not replay-safe by default
 
+**Consistency boundary:** projections and external services read inside `precondition` are
+potentially stale. They may not reflect events that were just committed by another instance.
+This is intentional: `precondition` is a guard for obvious conflicts and business rules, not
+a strong consistency gate. True aggregate invariants must be enforced through `evolve` state
+and optimistic concurrency, not through projection reads.
+
 ### `validateEvent`
 
 - optional
-- must be replay-safe
+- runs only during `handle(command)`, after `decide` and before `appendToStream`
+- must be replay-safe: may only depend on `event`, `aggregateState`, and stable reference data
 - answers: "is this event self-consistent for this aggregate state?"
-- may depend on `event + aggregateState + stable reference data`
+- if it throws, `handle` aborts immediately and no events are written
+
+**Failure behavior:** a `validateEvent` error means the events produced by `decide` are
+internally inconsistent. The `appendToStream` call is never reached. The error propagates
+to the caller of `handle`. This is different from an OCC conflict, which happens after
+`appendToStream` is attempted.
 
 This split prevents current read-model checks from accidentally leaking into replay semantics.
 
@@ -332,10 +320,7 @@ export interface EventStoreAdapter {
 
   append(events: PersistedEvent[]): Promise<void>;
 
-  getAllEvents(
-    pageSize?: number,
-    startFromId?: string
-  ): Promise<AsyncIterable<PersistedEvent[]>>;
+  getAllEvents(pageSize?: number, startFromId?: string): Promise<AsyncIterable<PersistedEvent[]>>;
 }
 ```
 
@@ -343,25 +328,13 @@ export interface EventStoreAdapter {
 
 ```ts
 export interface StreamEventStoreAdapter extends EventStoreAdapter {
-  getStreamEvents(
-    domain: string,
-    identifier: string,
-    fromSequence?: number
-  ): Promise<PersistedEvent[]>;
+  getStreamEvents(domain: string, identifier: string, fromSequence?: number): Promise<PersistedEvent[]>;
 
-  appendToStream(
-    events: PersistedEvent[],
-    expectedVersion: number
-  ): Promise<{ nextVersion: number }>;
+  appendToStream(events: PersistedEvent[], expectedVersion: number): Promise<{ nextVersion: number }>;
 
-  getSnapshot?<State>(
-    domain: string,
-    identifier: string
-  ): Promise<Snapshot<State> | null>;
+  getSnapshot?<State>(domain: string, identifier: string): Promise<Snapshot<State> | null>;
 
-  saveSnapshot?<State>(
-    snapshot: Snapshot<State>
-  ): Promise<void>;
+  saveSnapshot?<State>(snapshot: Snapshot<State>): Promise<void>;
 
   capabilities: {
     streamQuery: true;

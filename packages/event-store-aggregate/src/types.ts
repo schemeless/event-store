@@ -1,19 +1,6 @@
 import type { PersistedEvent, StreamEventStoreAdapter } from '@schemeless/event-store-types';
+export { StreamConcurrencyError } from '@schemeless/event-store-types';
 export type { PersistedEvent, Snapshot } from '@schemeless/event-store-types';
-
-export class StreamConcurrencyError extends Error {
-  constructor(
-    public readonly domain: string,
-    public readonly identifier: string,
-    public readonly expectedVersion: number,
-    public readonly actualVersion: number
-  ) {
-    super(
-      `Concurrency conflict on stream "${domain}/${identifier}": expected version ${expectedVersion}, but found ${actualVersion}`
-    );
-    this.name = 'StreamConcurrencyError';
-  }
-}
 
 export type DomainEvent = PersistedEvent;
 
@@ -27,7 +14,7 @@ export interface PhaseContext extends AggregateContext {}
 export interface AggregateDefinition<Command, Event extends DomainEvent, State> {
   name: string;
   domain: string;
-  getIdentifier(input: Command | Event): string;
+  getIdentifier(command: Command): string;
   initialState: State;
   evolve(state: State, event: Event): State;
   precondition?(command: Command, state: State, ctx: AggregateContext): Promise<void> | void;

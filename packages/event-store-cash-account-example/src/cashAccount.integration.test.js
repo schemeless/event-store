@@ -1,5 +1,6 @@
 const { makeAggregateRuntime } = require('../../event-store-aggregate/dist/index.js');
 const { makeEventStoreCore } = require('../../event-store-core/dist/index.js');
+const { StreamConcurrencyError } = require('../../event-store-types/dist/index.js');
 const {
   MemoryEventStore,
   CashAccountAggregate,
@@ -102,5 +103,39 @@ describe('cash account reference aggregate', () => {
 
     expect([first.status, second.status]).toContain('fulfilled');
     expect([first.status, second.status]).toContain('rejected');
+  });
+
+  it('throws a StreamConcurrencyError for OCC conflicts', async () => {
+    const adapter = new MemoryEventStore();
+
+    await adapter.appendToStream(
+      [
+        {
+          id: 'seed',
+          domain: 'cashAccount',
+          type: 'CashDeposited',
+          identifier: 'acct-1',
+          payload: { accountId: 'acct-1', amount: 10 },
+          created: new Date(),
+        },
+      ],
+      0
+    );
+
+    await expect(
+      adapter.appendToStream(
+        [
+          {
+            id: 'conflict',
+            domain: 'cashAccount',
+            type: 'CashDeposited',
+            identifier: 'acct-1',
+            payload: { accountId: 'acct-1', amount: 5 },
+            created: new Date(),
+          },
+        ],
+        0
+      )
+    ).rejects.toBeInstanceOf(StreamConcurrencyError);
   });
 });

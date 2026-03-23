@@ -1,18 +1,13 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import {
-  ConcurrencyError,
-  CreatedEvent,
-  IEventStoreEntity,
-  IEventStoreRepo,
-  IEventStoreRepoCapabilities,
-  ISnapshotEntity,
-  StoreEventsOptions,
+  PersistedEvent,
+  Snapshot,
+  StreamConcurrencyError,
+  StreamEventStoreAdapter,
 } from '@schemeless/event-store-types';
 
 export interface ExpoSqliteAdapterOptions {
-  /** Event table name, defaults to 'event_store_entity' */
   tableName?: string;
-  /** Snapshot table name, defaults to 'event_store_entity_snapshots' */
   snapshotTableName?: string;
 }
 
@@ -29,7 +24,6 @@ interface RawEventRow {
   created: number;
 }
 
-// --- [P2 FIX] Table name validation to prevent SQL injection ---
 const VALID_TABLE_NAME = /^[a-zA-Z_][a-zA-Z0-9_.]*$/;
 
 function assertValidTableName(name: string): void {
@@ -38,23 +32,21 @@ function assertValidTableName(name: string): void {
   }
 }
 
-export class ExpoSqliteEventStoreRepo<PAYLOAD = any, META = any> implements IEventStoreRepo<PAYLOAD, META> {
+export class ExpoSqliteEventStoreAdapter implements StreamEventStoreAdapter {
+  readonly capabilities = {
+    streamQuery: true as const,
+    optimisticConcurrency: true as const,
+    snapshot: true as const,
+  };
+
   private readonly db: SQLiteDatabase;
   private readonly tableName: string;
   private readonly snapshotTableName: string;
-
-  capabilities: IEventStoreRepoCapabilities = {
-    aggregate: true,
-    streamQuery: true,
-    optimisticConcurrency: true,
-    snapshot: true,
-  };
 
   constructor(db: SQLiteDatabase, options?: ExpoSqliteAdapterOptions) {
     this.db = db;
     const tableName = options?.tableName ?? 'event_store_entity';
     const snapshotTableName = options?.snapshotTableName ?? `${tableName}_snapshots`;
-    // Validate both names at construction time so failures are early and explicit
     assertValidTableName(tableName);
     assertValidTableName(snapshotTableName);
     this.tableName = tableName;
@@ -81,9 +73,6 @@ export class ExpoSqliteEventStoreRepo<PAYLOAD = any, META = any> implements IEve
       CREATE UNIQUE INDEX IF NOT EXISTS ${this.tableName}_stream_seq_idx
         ON ${this.tableName} (domain, identifier, sequence);
 
-      CREATE INDEX IF NOT EXISTS ${this.tableName}_causation_id_idx
-        ON ${this.tableName} (causationId);
-
       CREATE INDEX IF NOT EXISTS ${this.tableName}_created_id_idx
         ON ${this.tableName} (created, id);
 
@@ -102,7 +91,14 @@ export class ExpoSqliteEventStoreRepo<PAYLOAD = any, META = any> implements IEve
     await this.db.closeAsync();
   }
 
-  private mapRowToEntity(row: RawEventRow): IEventStoreEntity<PAYLOAD, META> {
+  async reset(): Promise<void> {
+    await this.db.execAsync(`
+      DELETE FROM ${this.tableName};
+      DELETE FROM ${this.snapshotTableName};
+    `);
+  }
+
+  private mapRowToEvent(row: RawEventRow): PersistedEvent {
     return {
       id: row.id,
       domain: row.domain,
@@ -117,35 +113,31 @@ export class ExpoSqliteEventStoreRepo<PAYLOAD = any, META = any> implements IEve
     };
   }
 
-  createEventEntity(event: CreatedEvent<any>): IEventStoreEntity<PAYLOAD, META> {
-    return {
-      id: event.id,
-      domain: event.domain,
-      type: event.type,
-      payload: event.payload as unknown as PAYLOAD,
-      meta: event.meta as unknown as META,
-      identifier: event.identifier,
-      correlationId: event.correlationId,
-      causationId: event.causationId,
-      created: event.created instanceof Date ? event.created : new Date(event.created),
-      sequence: undefined,
-    };
+  private groupEventsByStream(events: PersistedEvent[]): Map<string, PersistedEvent[]> {
+    const grouped = new Map<string, PersistedEvent[]>();
+    for (const event of events) {
+      const key = `${event.domain}::${event.identifier ?? ''}`;
+      if (!grouped.has(key)) {
+        grouped.set(key, []);
+      }
+      grouped.get(key)!.push(event);
+    }
+    return grouped;
   }
 
-  async storeEvents(events: CreatedEvent<any>[], options?: StoreEventsOptions): Promise<void> {
-    if (!events.length) return;
+  private async appendGroupedEvents(
+    events: PersistedEvent[],
+    options?: { expectedVersion?: number }
+  ): Promise<Map<string, number>> {
+    if (!events.length) {
+      return new Map();
+    }
 
+    const versions = new Map<string, number>();
     await this.db.withExclusiveTransactionAsync(async (txn) => {
-      const streamGroups = new Map<string, CreatedEvent<any>[]>();
-      for (const event of events) {
-        const key = `${event.domain}::${event.identifier ?? ''}`;
-        if (!streamGroups.has(key)) streamGroups.set(key, []);
-        streamGroups.get(key)!.push(event);
-      }
-
-      for (const [streamKey, streamEvents] of streamGroups.entries()) {
+      for (const [streamKey, streamEvents] of this.groupEventsByStream(events).entries()) {
         const [domain, ...rest] = streamKey.split('::');
-        const identifier = rest.join('::') || '';
+        const identifier = rest.join('::');
 
         const row = (await txn.getFirstAsync(
           `SELECT COALESCE(MAX(sequence), 0) as maxseq
@@ -153,16 +145,14 @@ export class ExpoSqliteEventStoreRepo<PAYLOAD = any, META = any> implements IEve
            WHERE domain = ? AND identifier = ?`,
           [domain, identifier]
         )) as { maxseq: number } | null;
-        const currentSequence = row?.maxseq ?? 0;
+        const currentVersion = row?.maxseq ?? 0;
 
-        if (options?.expectedSequence !== undefined && currentSequence !== options.expectedSequence) {
-          throw new ConcurrencyError(streamKey, options.expectedSequence, currentSequence);
+        if (options?.expectedVersion !== undefined && currentVersion !== options.expectedVersion) {
+          throw new StreamConcurrencyError(domain, identifier, options.expectedVersion, currentVersion);
         }
 
-        let nextSequence = currentSequence + 1;
+        let nextSequence = currentVersion + 1;
         for (const event of streamEvents) {
-          const created = event.created instanceof Date ? event.created : new Date(event.created);
-
           await txn.runAsync(
             `INSERT INTO ${this.tableName}
              (id, domain, type, payload, meta, identifier, correlationId, causationId, sequence, created)
@@ -177,40 +167,37 @@ export class ExpoSqliteEventStoreRepo<PAYLOAD = any, META = any> implements IEve
               event.correlationId ?? null,
               event.causationId ?? null,
               nextSequence++,
-              created.getTime(),
+              (event.created instanceof Date ? event.created : new Date(event.created)).getTime(),
             ]
           );
         }
+
+        versions.set(streamKey, currentVersion + streamEvents.length);
       }
     });
+
+    return versions;
   }
 
-  async append(events: IEventStoreEntity<PAYLOAD, META>[]): Promise<void> {
-    await this.storeEvents(events as CreatedEvent<any>[]);
+  async append(events: PersistedEvent[]): Promise<void> {
+    await this.appendGroupedEvents(events);
   }
 
-  async appendToStream(
-    events: IEventStoreEntity<PAYLOAD, META>[],
-    expectedVersion: number
-  ): Promise<{ nextVersion: number }> {
+  async appendToStream(events: PersistedEvent[], expectedVersion: number): Promise<{ nextVersion: number }> {
     if (!events.length) {
       return { nextVersion: expectedVersion };
     }
+
+    const versions = await this.appendGroupedEvents(events, { expectedVersion });
     const first = events[0];
-    const currentVersion = await this.getStreamSequence(first.domain, first.identifier ?? '');
-    await this.storeEvents(events as CreatedEvent<any>[], { expectedSequence: expectedVersion });
-    return { nextVersion: currentVersion + events.length };
+    const key = `${first.domain}::${first.identifier ?? ''}`;
+    return { nextVersion: versions.get(key) ?? expectedVersion };
   }
 
-  // --- [P1 FIX] getAllEvents now uses a flat, single-iterator approach. ---
-  // The old code returned a temporary "inline" iterator object for the fallback
-  // path that never set `done: true` after the first batch. This rewrite
-  // eliminates that separate code path: cursor state is set up eagerly before
-  // the iterator is returned, and the single iterator loop handles all cases.
   async getAllEvents(
     pageSize: number = 100,
     startFromId?: string
-  ): Promise<AsyncIterableIterator<Array<IEventStoreEntity<PAYLOAD, META>>>> {
+  ): Promise<AsyncIterableIterator<Array<PersistedEvent>>> {
     const self = this;
     let cursorCreated: number | null = null;
     let cursorId: string | null = null;
@@ -222,16 +209,11 @@ export class ExpoSqliteEventStoreRepo<PAYLOAD = any, META = any> implements IEve
       ])) as { created: number; id: string } | null;
 
       if (startRow) {
-        // Cursor found: standard path, start after this row
         cursorCreated = startRow.created;
         cursorId = startRow.id;
       } else {
-        // Cursor ID not found — fall back to lexicographic id > startFromId,
-        // matching TypeORM/Prisma MoreThan(id) semantics (same as PG adapter).
-        // We set a sentinel so the iterator loop below uses this fallback SQL
-        // for only the first batch, then promotes to normal cursor pagination.
         cursorCreated = null;
-        cursorId = startFromId; // used as a lexicographic lower-bound in fallback
+        cursorId = startFromId;
       }
     }
 
@@ -239,12 +221,12 @@ export class ExpoSqliteEventStoreRepo<PAYLOAD = any, META = any> implements IEve
 
     return {
       async next() {
-        if (!hasMore) return { value: undefined as any, done: true };
+        if (!hasMore) {
+          return { value: undefined as any, done: true };
+        }
 
         let rows: RawEventRow[];
-
         if (useFallback && cursorCreated === null) {
-          // Fallback: id > startFromId (lexicographic), runs only when cursor not found
           rows = (await self.db.getAllAsync(
             `SELECT * FROM ${self.tableName}
              WHERE id > ?
@@ -252,7 +234,6 @@ export class ExpoSqliteEventStoreRepo<PAYLOAD = any, META = any> implements IEve
             [cursorId!, pageSize]
           )) as RawEventRow[];
         } else if (cursorCreated !== null && cursorId !== null) {
-          // Standard cursor-based pagination
           rows = (await self.db.getAllAsync(
             `SELECT * FROM ${self.tableName}
              WHERE (created > ?) OR (created = ? AND id > ?)
@@ -260,7 +241,6 @@ export class ExpoSqliteEventStoreRepo<PAYLOAD = any, META = any> implements IEve
             [cursorCreated, cursorCreated, cursorId, pageSize]
           )) as RawEventRow[];
         } else {
-          // No cursor at all: fetch from the very beginning
           rows = (await self.db.getAllAsync(
             `SELECT * FROM ${self.tableName}
              ORDER BY created ASC, id ASC LIMIT ?`,
@@ -273,17 +253,15 @@ export class ExpoSqliteEventStoreRepo<PAYLOAD = any, META = any> implements IEve
           return { value: undefined as any, done: true };
         }
 
-        // Advance cursor to the last row, so subsequent next() calls continue from here
         const lastRow = rows[rows.length - 1];
         cursorCreated = lastRow.created;
         cursorId = lastRow.id;
-
         if (rows.length < pageSize) {
           hasMore = false;
         }
 
         return {
-          value: rows.map((r) => self.mapRowToEntity(r)),
+          value: rows.map((row) => self.mapRowToEvent(row)),
           done: false,
         };
       },
@@ -293,60 +271,26 @@ export class ExpoSqliteEventStoreRepo<PAYLOAD = any, META = any> implements IEve
     };
   }
 
-  async getStreamEvents(
-    domain: string,
-    identifier: string,
-    fromSequence: number = 0
-  ): Promise<IEventStoreEntity<PAYLOAD, META>[]> {
+  async getStreamEvents(domain: string, identifier: string, fromSequence: number = 0): Promise<PersistedEvent[]> {
     const rows = (await this.db.getAllAsync(
       `SELECT * FROM ${this.tableName}
        WHERE domain = ? AND identifier = ? AND sequence > ?
        ORDER BY sequence ASC`,
       [domain, identifier || '', fromSequence]
     )) as RawEventRow[];
-    return rows.map((row) => this.mapRowToEntity(row));
+    return rows.map((row) => this.mapRowToEvent(row));
   }
 
-  async getStreamSequence(domain: string, identifier: string): Promise<number> {
-    const row = (await this.db.getFirstAsync(
-      `SELECT COALESCE(MAX(sequence), 0) as maxseq FROM ${this.tableName}
-       WHERE domain = ? AND identifier = ?`,
-      [domain, identifier || '']
-    )) as { maxseq: number } | null;
-    return row?.maxseq ?? 0;
-  }
-
-  async getEventById(id: string): Promise<IEventStoreEntity<PAYLOAD, META> | null> {
-    const row = (await this.db.getFirstAsync(`SELECT * FROM ${this.tableName} WHERE id = ?`, [
-      id,
-    ])) as RawEventRow | null;
-    return row ? this.mapRowToEntity(row) : null;
-  }
-
-  async findByCausationId(causationId: string): Promise<IEventStoreEntity<PAYLOAD, META>[]> {
-    const rows = (await this.db.getAllAsync(
-      `SELECT * FROM ${this.tableName}
-       WHERE causationId = ?
-       ORDER BY created ASC, id ASC`,
-      [causationId]
-    )) as RawEventRow[];
-    return rows.map((row) => this.mapRowToEntity(row));
-  }
-
-  async getSnapshot<STATE>(domain: string, identifier: string): Promise<ISnapshotEntity<STATE> | null> {
+  async getSnapshot<State>(domain: string, identifier: string): Promise<Snapshot<State> | null> {
     const row = (await this.db.getFirstAsync(
       `SELECT * FROM ${this.snapshotTableName}
        WHERE domain = ? AND identifier = ?`,
       [domain, identifier]
-    )) as {
-      domain: string;
-      identifier: string;
-      state: string;
-      sequence: number;
-      created: number;
-    } | null;
+    )) as { domain: string; identifier: string; state: string; sequence: number; created: number } | null;
 
-    if (!row) return null;
+    if (!row) {
+      return null;
+    }
 
     return {
       domain: row.domain,
@@ -357,7 +301,7 @@ export class ExpoSqliteEventStoreRepo<PAYLOAD = any, META = any> implements IEve
     };
   }
 
-  async saveSnapshot<STATE>(snapshot: ISnapshotEntity<STATE>): Promise<void> {
+  async saveSnapshot<State>(snapshot: Snapshot<State>): Promise<void> {
     await this.db.runAsync(
       `INSERT OR REPLACE INTO ${this.snapshotTableName}
        (domain, identifier, state, sequence, created)
@@ -370,12 +314,5 @@ export class ExpoSqliteEventStoreRepo<PAYLOAD = any, META = any> implements IEve
         (snapshot.created instanceof Date ? snapshot.created : new Date(snapshot.created)).getTime(),
       ]
     );
-  }
-
-  async resetStore(): Promise<void> {
-    await this.db.execAsync(`
-      DELETE FROM ${this.tableName};
-      DELETE FROM ${this.snapshotTableName};
-    `);
   }
 }

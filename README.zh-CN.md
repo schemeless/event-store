@@ -1,434 +1,89 @@
 # Schemeless Event Store
 
-[![npm version](https://img.shields.io/npm/v/@schemeless/event-store?label=npm%20%40schemeless%2Fevent-store)](https://www.npmjs.com/package/@schemeless/event-store)
-[![Publish Workflow](https://github.com/schemeless/event-store/actions/workflows/publish.yml/badge.svg)](https://github.com/schemeless/event-store/actions/workflows/publish.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
+[English](/Users/akino/Projects/event-store/readme.md)
 
-[English](./readme.md)
+这是 V6 的拆层式 Event Sourcing 工具箱，核心由四部分组成：
 
-> **记录发生了什么，而不仅仅是现在的样子。** > **Store what happened, not just what is.**
+- `@schemeless/event-store-core`
+- `@schemeless/event-store-aggregate`
+- `@schemeless/event-store-types`
+- 事件存储适配器，例如 `@schemeless/event-store-adapter-pg` 与 `@schemeless/event-store-adapter-expo-sqlite`
 
-这是一个专为 Node.js 此打造的 Event Sourcing（事件溯源）工具箱，功能完备（batteries-included）。它采用 Monorepo 结构，提供了核心运行时 (`@schemeless/event-store`)、共享类型库 (`@schemeless/event-store-types`)，以及一系列开箱即用的持久化适配器（支持 SQL、DynamoDB 以及移动端/离线场景）。
+## 包职责
 
-## 项目状态 Status
+- `core`
 
-✅ **生产环境就绪**。本库已在生产系统中稳定运行。核心 API 已定型，未来仅会有微小的功能迭代。
+  - 追加事件
+  - 读取 stream
+  - 扫描全量事件
+  - 重建读模型
+  - 导出 / 导入事件日志
 
-## 核心特性 Features
+- `aggregate`
 
-- **声明式定义** — 在一处集中定义事件的校验逻辑、状态变更和副作用，不再散落在各处。
-- **严格有序** — 默认保证事件处理的严格顺序，也支持针对性能需求调整并发度。
-- **历史回放 (Replay)** — 通过重放不可变的事件日志，随时重建或修复你的读模型（Projections）。
-- **观察者模式** — 支持异步的观察者流水线（Pipeline），无论是从旁路触发通知（fire-and-forget）还是阻塞式处理。
-- **内置回滚 (Revert)** — 即使是事件溯源也能“后悔”。通过补偿事件机制，支持撤销整个因果相关的事件树。
-- **存储无关** — 业务逻辑与存储解耦。想从 SQL 迁移到 DynamoDB？业务代码一行都不用改。
-- **导出 / 导入** — 将完整事件日志快照为 JSON，可用于用户备份、跨设备迁移或给开发者分析。
+  - hydrate 聚合状态
+  - 执行 `precondition`
+  - `decide` 领域事件
+  - 用 `evolve` 推进状态
+  - 带 OCC 写入 stream
 
-## 核心概念：像“事件”一样思考
+- `types`
+  - 共享事件、快照与 adapter contract
 
-绝大多数应用还在用 **CRUD**（增删改查）的方式，只保存数据的**最终状态**。
-而 **Event Sourcing** 选择保存**导致状态变更的一系列事实（事件）**。
-
-### 举个通俗的例子
-
-想象一下你的**钱包余额**。
-
-**在传统（CRUD）系统中：**
-数据库里只存一个数字。如果用户先存了 100 块，又取了 40 块，数据库里就变成 `60`。
-至于这 `60` 块是怎么来的？是一笔存还是十笔存？除非你去查另一张流水表，否则这张表里**只有结果，没有过程**。
-
-```json
-// 数据库里的当前状态
-{ "userId": "u-1", "balance": 60 }
-```
-
-**在 Event Sourcing 系统中：**
-我们不直接存“余额”，而是存“交易流水”。所谓的“当前余额”，无非是把所有流水加减一遍算出来的结果。
-
-```text
-1. AccountOpened { date: "2023-01-01" } // 账户开通
-2. FundsDeposited { amount: 100 }       // 存入 100
-3. FundsWithdrawn { amount: 40 }        // 取出 40
-```
-
-这样做的好处是，你不仅知道现在有 60 块，还能回答：“上周二下午 3 点的时候余额是多少？”——只需要把事件回放到那个时间点即可。
-
-在这个库中：
-
-- `receive(...)`: 接收用户的操作指令。
-- `apply`: 定义事件如何改变状态（比如余额 +100）。
-- `replay()`: 当你需要重建数据时，系统自动把事件重跑一遍。
-
-### 为什么要这么做？
-
-| 特性                           | 传统 CRUD                             | Event Sourcing                                           |
-| :----------------------------- | :------------------------------------ | :------------------------------------------------------- |
-| **真相来源 (Source of Truth)** | 表里当前的那行数据                    | 不可篡改的事件日志                                       |
-| **审计 (Audit Trail)**         | 需要额外写代码记录日志，容易漏        | **天生自带**完整历史，强可追溯                           |
-| **调试 (Debugging)**           | 很难复现复杂的中间状态                | **时间旅行**：随意回放到过去任意时刻                     |
-| **业务意图**                   | 意图丢失（比如状态只变成了 `closed`） | 意图明确（是 `AccountClosed` 还是 `AccountSuspended`？） |
-
-本库就是为了让这种模式落地变得简单：它帮你处理接收事件、校验规则，并把它们安全地存到数据库里（SQL, DynamoDB 等）。
-
-## 适合我吗？
-
-**如果你需要：**
-
-- 带有明确生命周期（校验 -> 变更 -> 副作用）的事件流
-- 确定性的重放机制，以及完整的可追溯性（自带 `correlationId` 和 `causationId`）
-- TypeScript 优先，且希望存储层可以灵活插拔
-
-**那么它非常适合你。**
-
-**如果你：**
-
-- 只需要一个简单的 CRUD 增删改查
-- 完全不需要回放历史、审计日志或因果追踪
-
-**那可能不太适合，杀鸡焉用牛刀。**
-
-## 前置要求 Prerequisites
-
-- **Node.js** 14+ (推荐 TypeScript 4.1+)
-- **数据库**: 任选其一：
-  - SQL 系: TypeORM, Prisma, 或 MikroORM；原生 PostgreSQL 请使用 `adapter-pg`
-  - NoSQL: DynamoDB
-  - 移动端/离线: **Expo SQLite**（原生 `expo-sqlite`，推荐）+ WatermelonDB (React Native)
-  - 测试用: Null adapter
-
-## 安装 Install
-
-## 安装 Install
-
-首先安装核心运行时和类型定义：
+## 安装
 
 ```bash
-yarn add @schemeless/event-store @schemeless/event-store-types
-# or: npm i @schemeless/event-store @schemeless/event-store-types
+yarn add @schemeless/event-store-core @schemeless/event-store-aggregate @schemeless/event-store-types
 ```
 
-然后选择在这个 Monorepo 中提供的一个适配器（例如 TypeORM）：
+选择一个事件日志适配器：
 
 ```bash
-yarn add @schemeless/event-store-adapter-typeorm typeorm reflect-metadata sqlite3
-# or: npm i @schemeless/event-store-adapter-typeorm typeorm reflect-metadata sqlite3
+yarn add @schemeless/event-store-adapter-pg pg
 ```
 
-**可用适配器列表：**
+或：
 
-- `@schemeless/event-store-adapter-pg` ⭐ **PostgreSQL 推荐** — 原生 `pg` 驱动，零 ORM 开销，JSONB 存储
-- `@schemeless/event-store-adapter-expo-sqlite` ⭐ **Expo / React Native 推荐** — 原生 `expo-sqlite`，零 ORM 开销，完整 OCC + Snapshot 支持
-- `@schemeless/event-store-adapter-typeorm`
-- `@schemeless/event-store-adapter-typeorm-v3`
-- `@schemeless/event-store-adapter-prisma`
-- `@schemeless/event-store-adapter-mikroorm`
-- `@schemeless/event-store-adapter-dynamodb`
-- `@schemeless/event-store-adapter-watermelondb`
-- `@schemeless/event-store-adapter-null`
-
-## 快速上手 Quick start (5 分钟)
-
-```ts
-import 'reflect-metadata';
-import { EventFlow, makeEventStore } from '@schemeless/event-store';
-import { EventStoreRepo as TypeOrmRepo } from '@schemeless/event-store-adapter-typeorm';
-
-// 1. 定义事件载荷
-type UserRegisteredPayload = {
-  userId: string;
-  email: string;
-};
-
-// 2. 定义事件流
-const userRegisteredFlow: EventFlow<UserRegisteredPayload> = {
-  domain: 'user',
-  type: 'registered',
-
-  // 接收逻辑
-  receive: (eventStore) => (eventInput) => eventStore.receive(userRegisteredFlow)(eventInput),
-
-  // 校验逻辑
-  validate: (event) => {
-    if (!event.payload.email.includes('@')) {
-      throw new Error('invalid email');
-    }
-  },
-
-  // 状态变更 / 投影更新
-  apply: async (event) => {
-    console.log('应用事件:', event.id, event.payload.userId);
-  },
-};
-
-async function main() {
-  // 3. 初始化存储适配器
-  const repo = new TypeOrmRepo({
-    name: 'quick-start',
-    type: 'sqlite',
-    database: ':memory:', // 使用内存数据库演示
-    dropSchema: true,
-    synchronize: true,
-    logging: false,
-  });
-
-  // 4. 创建 EventStore 实例
-  const store = await makeEventStore(repo)([userRegisteredFlow]);
-
-  // 5. 触发事件
-  const [created] = await store.receive(userRegisteredFlow)({
-    payload: { userId: 'u-1', email: 'user@example.com' },
-    identifier: 'u-1',
-  });
-
-  console.log('事件创建成功 ID:', created.id);
-  await store.shutdown();
-}
-
-main().catch(console.error);
+```bash
+yarn add @schemeless/event-store-adapter-expo-sqlite expo-sqlite
 ```
 
-## 适配器能力矩阵 Capability Matrix
-
-| 适配器                 | 后端                     | 支持重放 | 支持乐观锁 (OCC) | 支持回滚辅助 | 支持聚合根 |
-| ---------------------- | ------------------------ | -------- | ---------------- | ------------ | ---------- |
-| `adapter-pg`           | PostgreSQL (原生)        | ✅       | ✅               | ✅           | ✅         |
-| `adapter-expo-sqlite`  | Expo SQLite (原生)       | ✅       | ✅               | ✅           | ✅         |
-| `adapter-typeorm`      | SQL (TypeORM)            | ✅       | ✅               | ✅           | ❌         |
-| `adapter-typeorm-v3`   | SQL (TypeORM v3)         | ✅       | ❌               | ✅           | ❌         |
-| `adapter-prisma`       | SQL (Prisma)             | ✅       | ❌               | ✅           | ❌         |
-| `adapter-mikroorm`     | SQL (MikroORM)           | ✅       | ❌               | ✅           | ❌         |
-| `adapter-dynamodb`     | DynamoDB                 | ✅       | ✅               | ✅           | ✅         |
-| `adapter-watermelondb` | WatermelonDB / RN SQLite | ✅       | ❌               | ✅           | ❌         |
-| `adapter-null`         | No-op (测试桩)           | ❌       | ❌               | 部分         | ❌         |
-
-> 注意：`getAggregate` 功能要求 `repo.getStreamEvents(...)` 支持。`adapter-pg` 和 `adapter-expo-sqlite` 已完整实现。
-嗯。 
-## 聚合事件流 AggregateEventFlow
-
-如果某个事件流负责维护聚合状态，可以直接声明为 `AggregateEventFlow`。框架会在 `validate` 和 `apply` 之前自动加载当前聚合状态，并在 replay 时把同一份状态传给观察者。
+## 快速开始
 
 ```ts
-import type { AggregateEventFlow, AggregateEventObserver } from '@schemeless/event-store';
+import { makeEventStoreCore } from '@schemeless/event-store-core';
+import { makeAggregateRuntime } from '@schemeless/event-store-aggregate';
+import { PgEventStoreAdapter } from '@schemeless/event-store-adapter-pg';
 
-type StockPayload = { amount: number };
-type StockState = { count: number };
-
-export const stockFlow: AggregateEventFlow<StockPayload, StockState> = {
-  domain: 'stock',
-  type: 'updated',
-  aggregate: {
-    initialState: { count: 0 },
-    reducer: (state, event) => ({ count: state.count + event.payload.amount }),
-  },
-  validate: (_event, state) => {
-    if (state.count < 0) {
-      throw new Error('stock cannot go below zero');
-    }
-  },
-  apply: (_event, state) => state,
-};
-
-export const stockObserver: AggregateEventObserver<StockPayload, StockState> = {
-  aggregate: true,
-  filters: [{ domain: 'stock', type: 'updated' }],
-  priority: 0,
-  apply: async (_event, state) => {
-    console.log(state.count);
-  },
-};
-```
-
-- `aggregate.reducer` 是纯函数，`getAggregate()` 和 replay 都会使用它。
-- `validate(event, state)` 可以直接读取当前聚合状态。
-- `apply(event, state)` 返回下一个状态，不能在这里写副作用。
-- 聚合观察者需要显式写 `aggregate: true`；普通观察者仍然只会收到 `(event)`。
-
-如果你在应用代码里需要手动读取聚合状态，仍然可以继续用 `getAggregate()`；但在 `AggregateEventFlow` 内部，框架会自动完成这一步。
-
-## 核心工作流 Core workflows
-
-### 1) 接收事件 (Receive)
-
-`store.receive(flow)(input)` 是官方推荐的数据摄入路径。它替你处理了所有脏活累活：
-
-1. 自动生成全局唯一的事件 ID 和时间戳
-2. 执行生命周期钩子（validate 等）
-3. 持久化创建的事件
-4. 并发分发副作用（Side Effects）
-
-### 2) 重放历史 (Replay)
-
-使用重放来重建投影（projections）：
-
-```ts
-await store.replay();
-```
-
-也可以从某个事件 ID 检查点继续重放（适用于断点续传）：
-
-```ts
-await store.replay('last-processed-event-id');
-```
-
-如果观察者声明了 `aggregate: true`，replay 时它会收到 `(event, state)`；普通观察者仍然只会收到 `(event)`。
-
-### 3) 观察成功的事件 (Observe)
-
-在构建 store 时注册成功观察者：
-
-```ts
-const observers = [
-  {
-    filters: [{ domain: 'user', type: 'registered' }],
-    priority: 1,
-    fireAndForget: true,
-    apply: async (event) => {
-      // 异步执行通知、数据分析等，不阻塞主流程
-    },
-  },
-];
-
-const store = await makeEventStore(repo)([userRegisteredFlow], observers);
-```
-
-**行为说明：**
-
-- `fireAndForget: true` 表示该观察者不会阻塞主接收流程（`receive`）。
-- 即发即弃（fire-and-forget）观察者的失败是隔离的，不会导致主事件的事务回滚。
-- 如果是聚合观察者，请显式写 `aggregate: true`，框架会额外传入当前聚合状态。
-
-### 4) 监控生命周期事件
-
-使用 `output$` 可观察流（RxJS Observable）来监控内部发生的一切：
-
-```ts
-const sub = store.output$.subscribe((eventOutput) => {
-  console.log(eventOutput.state, eventOutput.event.id);
+const adapter = new PgEventStoreAdapter({
+  host: 'localhost',
+  port: 5432,
+  user: 'postgres',
+  password: 'postgres',
+  database: 'event_store',
 });
 
-// 后面记得取消订阅
-sub.unsubscribe();
+await adapter.init();
+
+const core = makeEventStoreCore(adapter, []);
+const aggregate = makeAggregateRuntime(adapter);
 ```
 
-### 5) 撤销/回滚 (Revert)
+## 当前支持的适配器
 
-```ts
-const check = await store.canRevert(rootEventId);
-if (check.canRevert) {
-  const preview = await store.previewRevert(rootEventId);
-  const result = await store.revert(rootEventId);
-}
-```
+- `@schemeless/event-store-adapter-pg`
+- `@schemeless/event-store-adapter-expo-sqlite`
 
-注意：只有根事件（Root Event）可以被回滚。因果树中的每个事件都必须定义 `compensate` 逻辑才能支持回滚。
+它们实现的是 V6 contract：
 
-框架会自动处理补偿事件的元数据生成（包括自动补全 `id`、`created`、`causationId`、`correlationId`、`identifier` 以及 `schemaVersion`），确保回滚链路的可追溯性与一致性。
+- `EventStoreAdapter`
+- `StreamEventStoreAdapter`
 
-### 6) 乐观并发控制 (OCC)
+## 文档
 
-如果你绕过 `store.receive` 直接使用 repository 层的写入操作，请务必传入 `expectedSequence` 以防止并发冲突：
-
-```ts
-import { ConcurrencyError, type CreatedEvent } from '@schemeless/event-store-types';
-
-const expectedSequence = await repo.getStreamSequence('account', 'user-123');
-
-const nextEvent: CreatedEvent<{ amount: number }> = {
-  id: 'evt-account-user-123-0002',
-  domain: 'account',
-  type: 'debited',
-  identifier: 'user-123',
-  payload: { amount: 100 },
-  created: new Date(),
-};
-
-try {
-  await repo.storeEvents([nextEvent], { expectedSequence });
-} catch (error) {
-  if (error instanceof ConcurrencyError) {
-    console.log(`预期版本 ${error.expectedSequence}, 但实际版本是 ${error.actualSequence}`);
-  }
-}
-```
-
-**重要：** 直接调用 `repo.storeEvents(...)` 需要你手动构造完整的 `CreatedEvent` 对象（包含 `id` 和 `created`）。大多数业务场景下，应该**优先使用** `store.receive(...)`，它会帮你自动处理这些字段。
-
-### 7) 导出与导入事件
-
-内置工具函数，可将整个事件仓库快照成一个普通的 JSON 可序列化数组——适用于用户数据备份、共享给开发者分析、或在不同存储适配器之间迁移数据。
-
-```ts
-import { exportEventsToArray, importEventsFromArray, createSnapshot, parseSnapshot } from '@schemeless/event-store';
-
-// ── 导出 ──────────────────────────────────────────────────────────────────────
-const events = await exportEventsToArray(store.eventStoreRepo, {
-  pageSize: 200, // 可选，默认 200
-  onProgress: (n) => console.log(`已导出 ${n} 条事件`),
-});
-const snapshot = createSnapshot(events); // 附加 exportedAt + count 元数据
-const json = JSON.stringify(snapshot); // 可直接写入文件或传输
-
-// ── 导入（还原）───────────────────────────────────────────────────────────────
-const snapshot = parseSnapshot(json); // 解析 JSON 并自动还原 Date 对象
-await importEventsFromArray(store.eventStoreRepo, snapshot.events, {
-  replace: true, // 可选：先清空仓库再导入
-  batchSize: 100, // 可选，默认 100
-  onProgress: (n) => console.log(`已导入 ${n} 条事件`),
-});
-```
-
-**React Native / Expo 示例：**
-
-```ts
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
-
-// 保存备份到设备并分享
-const events = await exportEventsToArray(store.eventStoreRepo);
-const json = JSON.stringify(createSnapshot(events));
-const path = FileSystem.documentDirectory + 'backup.json';
-await FileSystem.writeAsStringAsync(path, json);
-await Sharing.shareAsync(path, { mimeType: 'application/json' });
-
-// 从备份文件还原
-const json = await FileSystem.readAsStringAsync(backupPath);
-await importEventsFromArray(store.eventStoreRepo, parseSnapshot(json).events, { replace: true });
-```
-
-这几个工具函数只负责 repo 层的 I/O，文件读写、分享弹窗和进度 UI 完全由你的应用层控制。
-
-| 函数                                         | 说明                                            |
-| -------------------------------------------- | ----------------------------------------------- |
-| `exportEventsToArray(repo, opts?)`           | 分页抓取所有事件 → `IEventStoreEntity[]`        |
-| `importEventsFromArray(repo, events, opts?)` | 按批写回事件；自动将日期字符串转为 `Date`       |
-| `createSnapshot(events)`                     | 包装为 `{ exportedAt, count, events }` 快照对象 |
-| `parseSnapshot(json)`                        | 解析 JSON 字符串，还原 `created` 为 `Date` 实例 |
-
-## 文档索引
-
-**指南**
-
-- [架构设计](docs/architecture.md)
-- [EventFlow 参考手册](docs/event-flow-reference.md)
-- [OCC 与并发控制](docs/occ-and-concurrency.md)
-- [回滚指南](docs/revert.md)
-- [适配器选择](docs/adapters.md)
-- [导出 / 导入指南](docs/export-import.md)
-
-**适配器文档**
-
-- [PostgreSQL (native)](packages/event-store-adapter-pg/readme.md) | [Expo SQLite](packages/event-store-adapter-expo-sqlite/readme.md) | [TypeORM](packages/event-store-adapter-typeorm/readme.md) | [Prisma](packages/event-store-adapter-prisma/readme.md) | [MikroORM](packages/event-store-adapter-mikroorm/README.md) | [DynamoDB](packages/event-store-adapter-dynamodb/readme.md) | [WatermelonDB](packages/event-store-adapter-watermelondb/readme.md)
-
-## 贡献 Contributing
-
-欢迎提交 PR！
-
-1. **先开 Issue** 讨论你的想法
-2. **本地测试**: `yarn test` 和 `yarn lerna-test`
-3. **保持文档同步**: 改了 API 记得改文档
-4. **统一风格**: 主要使用 Prettier
-5. **使用 Yarn**: 请用 `yarn@1.22.22`
-
-## License
-
-MIT. See [`LICENSE`](./LICENSE).
+- [架构说明](/Users/akino/Projects/event-store/docs/architecture.md)
+- [适配器说明](/Users/akino/Projects/event-store/docs/adapters.md)
+- [OCC 与并发](/Users/akino/Projects/event-store/docs/occ-and-concurrency.md)
+- [导出 / 导入](/Users/akino/Projects/event-store/docs/export-import.md)
+- [V6 迁移指南](/Users/akino/Projects/event-store/docs/redesign-v6-migration.md)
+- [RFC：Core + Aggregate 重构](/Users/akino/Projects/event-store/docs/rfcs/event-store-core-aggregate-redesign.md)

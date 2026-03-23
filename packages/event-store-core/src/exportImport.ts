@@ -8,17 +8,15 @@ export interface ImportOptions {
   replace?: boolean;
 }
 
-export async function exportEvents(repo: EventStoreCoreRepo, options: ExportOptions = {}): Promise<PersistedEvent[]> {
+export function exportEvents(repo: EventStoreCoreRepo, options: ExportOptions = {}): AsyncIterable<PersistedEvent[]> {
   const { pageSize = 200 } = options;
-  const allEvents: PersistedEvent[] = [];
-  const iterator = await repo.getAllEvents(pageSize);
-
-  for await (const page of iterator) {
-    if (page.length === 0) break;
-    allEvents.push(...page);
-  }
-
-  return allEvents;
+  return (async function* () {
+    const iterator = await repo.getAllEvents(pageSize);
+    for await (const page of iterator) {
+      if (page.length === 0) break;
+      yield page;
+    }
+  })();
 }
 
 export async function importEvents(

@@ -1,5 +1,4 @@
 import type { AggregateDefinition, AggregateRuntime, AggregateRuntimeAdapter } from './types';
-import { StreamConcurrencyError } from './types';
 
 export const makeAggregateRuntime = (adapter: AggregateRuntimeAdapter): AggregateRuntime => {
   const hydrate: AggregateRuntime['hydrate'] = async (aggregate, identifier) => {
@@ -22,7 +21,7 @@ export const makeAggregateRuntime = (adapter: AggregateRuntimeAdapter): Aggregat
   };
 
   const handle: AggregateRuntime['handle'] = async (aggregate, command) => {
-    const identifier = aggregate.getIdentifier(command as any);
+    const identifier = aggregate.getIdentifier(command);
     const hydrated = await hydrate(aggregate, identifier);
     const ctx = { identifier, sequence: hydrated.sequence };
 
@@ -40,15 +39,19 @@ export const makeAggregateRuntime = (adapter: AggregateRuntimeAdapter): Aggregat
       nextState = aggregate.evolve(nextState, event as any);
     }
 
-    let nextVersion: number;
+    const appendResult = await adapter.appendToStream(canonicalEvents, hydrated.sequence);
+    const nextVersion = appendResult.nextVersion;
+
     try {
-      const appendResult = await adapter.appendToStream(canonicalEvents, hydrated.sequence);
-      nextVersion = appendResult.nextVersion;
-    } catch (error) {
-      if (error instanceof StreamConcurrencyError) {
-        throw error;
-      }
-      throw error;
+      await adapter.saveSnapshot?.({
+        domain: aggregate.domain,
+        identifier,
+        state: nextState,
+        sequence: nextVersion,
+        created: new Date(),
+      });
+    } catch {
+      // Snapshotting is an optimization; append success must still win.
     }
 
     return {
