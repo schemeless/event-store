@@ -34,4 +34,4 @@ import type {
 
 ## Design note
 
-New code should target the V6 split architecture. This package should not be treated as a place to define new `EventFlow`-style runtime models.
+New code should target the V6 split architecture. This package only carries shared contracts and storage-facing types.
