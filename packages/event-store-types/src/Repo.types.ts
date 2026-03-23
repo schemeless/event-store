@@ -31,3 +31,9 @@ export interface StreamEventStoreAdapter extends EventStoreAdapter {
     snapshot?: boolean;
   };
 }
+
+export interface RevertableEventStoreAdapter {
+  getEventById(id: string): Promise<PersistedEvent | null>;
+  findByCausationId(causationId: string): Promise<PersistedEvent[]>;
+  append(events: PersistedEvent[]): Promise<void>;
+}

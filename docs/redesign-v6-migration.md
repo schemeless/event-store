@@ -235,6 +235,95 @@ await adapter.init(); // run once on startup
 
 ---
 
+---
+
+## Revert (compensating events)
+
+V6 moves revert out of the core runtime and into a dedicated package.
+
+### Install
+
+```bash
+yarn add @schemeless/event-store-revert@next
+```
+
+Your adapter (`PgEventStoreAdapter` or `ExpoSqliteEventStoreAdapter`) already implements the required `getEventById` / `findByCausationId` methods — no extra setup needed.
+
+### Concept
+
+Revert is non-destructive. Executing a revert appends _compensating events_ to the store — the original events are never deleted. The compensating events carry:
+
+- `meta.isCompensating: true`
+- `meta.compensatesEventId` — id of the original event being compensated
+- `causationId` — id of the original event
+- `correlationId` — inherited from the original event (or its id if none)
+
+After a revert you should call `core.rebuildReadModels()` to refresh projections.
+
+### Register compensations
+
+```ts
+import { makeCompensationRegistry } from '@schemeless/event-store-revert';
+
+const registry = makeCompensationRegistry();
+
+registry.register('cash', 'fundsDeposited', (event) => ({
+  domain: 'cash',
+  type: 'fundsDepositedVoided',
+  identifier: event.identifier,
+  payload: {
+    cashHoldingId: event.payload.cashHoldingId,
+    amount: event.payload.amount,
+    originalEventId: event.id,
+  },
+}));
+```
+
+Register one entry per `(domain, type)` pair that should be revertible. Events without a registered compensation will block revert.
+
+### Create the revert handle
+
+```ts
+import { makeEventStoreRevert } from '@schemeless/event-store-revert';
+
+// adapter must be PgEventStoreAdapter or ExpoSqliteEventStoreAdapter (v6.0.0-rc.0+)
+const revert = makeEventStoreRevert(adapter, registry);
+```
+
+### API
+
+**`canRevert(eventId)`** — dry-run check. Returns whether the event and all its causal descendants have compensations registered.
+
+```ts
+const result = await revert.canRevert(eventId);
+if (!result.canRevert) {
+  console.log('Blocked by:', result.blockedBy);
+}
+```
+
+**`previewRevert(eventId)`** — returns the root event and all descendant events that would be compensated, without writing anything.
+
+```ts
+const { rootEvent, descendantEvents } = await revert.previewRevert(eventId);
+```
+
+**`revert(eventId)`** — validates, generates compensating events for the root and all causal descendants (leaves first), and appends them in one `adapter.append()` call.
+
+```ts
+const { compensatingEvents } = await revert.revert(eventId);
+await core.rebuildReadModels({ observers });
+```
+
+### Cascading revert
+
+Descendants are discovered via `causationId`. If event A caused events B and C, reverting A will automatically compensate B and C first (depth-first, post-order), then A.
+
+### OCC note
+
+Compensating events are appended via `adapter.append()` (bulk, no OCC). This is intentional — compensations should always succeed regardless of the current stream version.
+
+---
+
 ## Example
 
 A complete reference aggregate (cash account with deposits, withdrawals, OCC, and snapshot) is available at:

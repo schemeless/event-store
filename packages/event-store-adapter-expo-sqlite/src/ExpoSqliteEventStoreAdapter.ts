@@ -271,6 +271,22 @@ export class ExpoSqliteEventStoreAdapter implements StreamEventStoreAdapter {
     };
   }
 
+  async getEventById(id: string): Promise<PersistedEvent | null> {
+    const row = (await this.db.getFirstAsync(`SELECT * FROM ${this.tableName} WHERE id = ?`, [
+      id,
+    ])) as RawEventRow | null;
+    if (!row) return null;
+    return this.mapRowToEvent(row);
+  }
+
+  async findByCausationId(causationId: string): Promise<PersistedEvent[]> {
+    const rows = (await this.db.getAllAsync(
+      `SELECT * FROM ${this.tableName} WHERE causationId = ? ORDER BY created ASC, id ASC`,
+      [causationId]
+    )) as RawEventRow[];
+    return rows.map((row) => this.mapRowToEvent(row));
+  }
+
   async getStreamEvents(domain: string, identifier: string, fromSequence: number = 0): Promise<PersistedEvent[]> {
     const rows = (await this.db.getAllAsync(
       `SELECT * FROM ${this.tableName}

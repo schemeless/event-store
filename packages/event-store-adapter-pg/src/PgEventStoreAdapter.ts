@@ -312,6 +312,20 @@ export class PgEventStoreAdapter implements StreamEventStoreAdapter {
     };
   }
 
+  async getEventById(id: string): Promise<PersistedEvent | null> {
+    const res = await this.pool.query(`SELECT * FROM ${this.tableName} WHERE id = $1`, [id]);
+    if (!res.rows.length) return null;
+    return this.mapRowToEvent(res.rows[0]);
+  }
+
+  async findByCausationId(causationId: string): Promise<PersistedEvent[]> {
+    const res = await this.pool.query(
+      `SELECT * FROM ${this.tableName} WHERE "causationId" = $1 ORDER BY created ASC, id ASC`,
+      [causationId]
+    );
+    return res.rows.map((row) => this.mapRowToEvent(row));
+  }
+
   async getStreamEvents(domain: string, identifier: string, fromSequence: number = 0): Promise<PersistedEvent[]> {
     const res = await this.pool.query(
       `SELECT * FROM ${this.tableName}

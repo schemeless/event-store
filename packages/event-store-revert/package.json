@@ -1,5 +1,5 @@
 {
-  "name": "@schemeless/event-store-cash-account-example",
+  "name": "@schemeless/event-store-revert",
   "version": "6.0.0-rc.1",
   "typescript:main": "src/index.ts",
   "main": "dist/index.js",
@@ -11,9 +11,16 @@
     "compile": "yarn run clean && ../../node_modules/.bin/tsc",
     "prepublish": "yarn run clean && yarn run compile"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/schemeless/event-store.git"
+  },
+  "keywords": [],
+  "author": "akinoniku",
+  "bugs": {
+    "url": "https://github.com/schemeless/event-store/issues"
+  },
   "dependencies": {
-    "@schemeless/event-store-aggregate": "^6.0.0-rc.1",
-    "@schemeless/event-store-core": "^6.0.0-rc.1",
     "@schemeless/event-store-types": "^6.0.0-rc.1"
   },
   "devDependencies": {
@@ -24,7 +31,6 @@
     "ts-jest": "^29.4.6",
     "typescript": "^4.1.2"
   },
-  "gitHead": "f5135068fbd20d3944f762a6af46b143123d89e0",
   "publishConfig": {
     "access": "public"
   }
