@@ -1,6 +1,6 @@
 {
   "name": "@schemeless/event-store-cash-account-example",
-  "version": "0.1.0",
+  "version": "6.0.0-rc.0",
   "typescript:main": "src/index.ts",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -12,9 +12,9 @@
     "prepublish": "yarn run clean && yarn run compile"
   },
   "dependencies": {
-    "@schemeless/event-store-core": "^0.1.0",
-    "@schemeless/event-store-aggregate": "^0.1.0",
-    "@schemeless/event-store-types": "^6.0.0"
+    "@schemeless/event-store-aggregate": "^6.0.0-rc.0",
+    "@schemeless/event-store-core": "^6.0.0-rc.0",
+    "@schemeless/event-store-types": "^6.0.0-rc.0"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
