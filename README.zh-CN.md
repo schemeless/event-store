@@ -65,7 +65,7 @@ const adapter = new PgEventStoreAdapter({
 
 await adapter.init();
 
-const core = makeEventStoreCore(adapter, []);
+const core = makeEventStoreCore(adapter);
 const aggregate = makeAggregateRuntime(adapter);
 ```
 
@@ -81,9 +81,9 @@ const aggregate = makeAggregateRuntime(adapter);
 
 ## 文档
 
-- [架构说明](/Users/akino/Projects/event-store/docs/architecture.md)
-- [适配器说明](/Users/akino/Projects/event-store/docs/adapters.md)
-- [OCC 与并发](/Users/akino/Projects/event-store/docs/occ-and-concurrency.md)
-- [导出 / 导入](/Users/akino/Projects/event-store/docs/export-import.md)
-- [V6 迁移指南](/Users/akino/Projects/event-store/docs/redesign-v6-migration.md)
-- [RFC：Core + Aggregate 重构](/Users/akino/Projects/event-store/docs/rfcs/event-store-core-aggregate-redesign.md)
+- [架构说明](docs/architecture.md)
+- [适配器说明](docs/adapters.md)
+- [OCC 与并发](docs/occ-and-concurrency.md)
+- [导出 / 导入](docs/export-import.md)
+- [V6 迁移指南](docs/redesign-v6-migration.md)
+- [RFC：Core + Aggregate 重构](docs/rfcs/event-store-core-aggregate-redesign.md)

@@ -65,7 +65,7 @@ const adapter = new PgEventStoreAdapter({
 
 await adapter.init();
 
-const core = makeEventStoreCore(adapter, []);
+const core = makeEventStoreCore(adapter);
 const aggregate = makeAggregateRuntime(adapter);
 ```
 
@@ -81,12 +81,12 @@ These adapters implement the V6 contracts in `@schemeless/event-store-types`:
 
 ## Documentation
 
-- [Architecture](/Users/akino/Projects/event-store/docs/architecture.md)
-- [Adapters](/Users/akino/Projects/event-store/docs/adapters.md)
-- [OCC and Concurrency](/Users/akino/Projects/event-store/docs/occ-and-concurrency.md)
-- [Export / Import](/Users/akino/Projects/event-store/docs/export-import.md)
-- [V6 Migration](/Users/akino/Projects/event-store/docs/redesign-v6-migration.md)
-- [RFC: Core + Aggregate Redesign](/Users/akino/Projects/event-store/docs/rfcs/event-store-core-aggregate-redesign.md)
+- [Architecture](docs/architecture.md)
+- [Adapters](docs/adapters.md)
+- [OCC and Concurrency](docs/occ-and-concurrency.md)
+- [Export / Import](docs/export-import.md)
+- [V6 Migration](docs/redesign-v6-migration.md)
+- [RFC: Core + Aggregate Redesign](docs/rfcs/event-store-core-aggregate-redesign.md)
 
 ## Local Development
 
