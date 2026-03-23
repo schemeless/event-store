@@ -4,6 +4,13 @@ export interface PersistedEvent<Payload = any, META extends EventMeta = EventMet
   sequence?: number;
 }
 
+export type AppendableEvent<Payload = any, META extends EventMeta = EventMeta> = Omit<
+  PersistedEvent<Payload, META>,
+  'id'
+> & {
+  id?: string;
+};
+
 export interface Snapshot<State = any> {
   domain: string;
   identifier: string;
@@ -15,14 +22,14 @@ export interface Snapshot<State = any> {
 export interface EventStoreAdapter {
   init(): Promise<void>;
   close?(): Promise<void>;
-  append(events: PersistedEvent[]): Promise<void>;
+  append(events: AppendableEvent[]): Promise<void>;
   getAllEvents(pageSize?: number, startFromId?: string): Promise<AsyncIterableIterator<Array<PersistedEvent>>>;
   reset?(): Promise<void>;
 }
 
 export interface StreamEventStoreAdapter extends EventStoreAdapter {
   getStreamEvents(domain: string, identifier: string, fromSequence?: number): Promise<PersistedEvent[]>;
-  appendToStream(events: PersistedEvent[], expectedVersion: number): Promise<{ nextVersion: number }>;
+  appendToStream(events: AppendableEvent[], expectedVersion: number): Promise<{ nextVersion: number }>;
   getSnapshot?<State>(domain: string, identifier: string): Promise<Snapshot<State> | null>;
   saveSnapshot?<State>(snapshot: Snapshot<State>): Promise<void>;
   capabilities: {
@@ -35,5 +42,5 @@ export interface StreamEventStoreAdapter extends EventStoreAdapter {
 export interface RevertableEventStoreAdapter {
   getEventById(id: string): Promise<PersistedEvent | null>;
   findByCausationId(causationId: string): Promise<PersistedEvent[]>;
-  append(events: PersistedEvent[]): Promise<void>;
+  append(events: AppendableEvent[]): Promise<void>;
 }

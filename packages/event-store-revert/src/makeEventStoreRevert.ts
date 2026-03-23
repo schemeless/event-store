@@ -1,5 +1,4 @@
-import { randomUUID } from 'crypto';
-import type { PersistedEvent } from '@schemeless/event-store-types';
+import type { AppendableEvent, PersistedEvent } from '@schemeless/event-store-types';
 import type {
   CanRevertResult,
   CompensationRegistry,
@@ -27,10 +26,9 @@ async function collectDescendantsPostOrder(
   return result;
 }
 
-function buildCompensatingEvent(original: PersistedEvent, compensated: PersistedEvent): PersistedEvent {
+function buildCompensatingEvent(original: PersistedEvent, compensated: AppendableEvent): AppendableEvent {
   return {
     ...compensated,
-    id: randomUUID(),
     correlationId: original.correlationId ?? original.id,
     causationId: original.id,
     meta: {
@@ -101,18 +99,18 @@ export function makeEventStoreRevert(
       }
 
       // Generate compensating events in post-order (leaves first, root last).
-      const compensatingEvents: PersistedEvent[] = [];
+      const compensatingEvents: AppendableEvent[] = [];
       for (const event of allEvents) {
         const compensateFn = registry.get(event.domain, event.type)!;
         const compensated = compensateFn(event);
         const raw = Array.isArray(compensated) ? compensated : [compensated];
         for (const c of raw) {
-          compensatingEvents.push(buildCompensatingEvent(event, c as PersistedEvent));
+          compensatingEvents.push(buildCompensatingEvent(event, c as AppendableEvent));
         }
       }
 
       await adapter.append(compensatingEvents);
-      return { compensatingEvents };
+      return { compensatingEvents: compensatingEvents as PersistedEvent[] };
     },
   };
 }

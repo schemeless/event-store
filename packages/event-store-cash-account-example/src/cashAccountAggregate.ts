@@ -31,7 +31,6 @@ export const CashAccountAggregate: AggregateDefinition<CashAccountCommand, CashA
       case 'OpenCashAccount':
         return [
           {
-            id: `open-${command.accountId}`,
             domain: 'cashAccount',
             type: 'CashAccountOpened',
             identifier: command.accountId,
@@ -46,7 +45,6 @@ export const CashAccountAggregate: AggregateDefinition<CashAccountCommand, CashA
       case 'DepositCash':
         return [
           {
-            id: `dep-${command.accountId}-${command.amount}-${Date.now()}`,
             domain: 'cashAccount',
             type: 'CashDeposited',
             identifier: command.accountId,
@@ -57,7 +55,6 @@ export const CashAccountAggregate: AggregateDefinition<CashAccountCommand, CashA
       case 'WithdrawCash':
         return [
           {
-            id: `wd-${command.accountId}-${command.amount}-${Date.now()}`,
             domain: 'cashAccount',
             type: 'CashWithdrawn',
             identifier: command.accountId,

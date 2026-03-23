@@ -1,4 +1,4 @@
-import type { BaseEvent, PersistedEvent } from '@schemeless/event-store-types';
+import type { AppendableEvent, BaseEvent, PersistedEvent } from '@schemeless/event-store-types';
 
 export type { RevertableEventStoreAdapter } from '@schemeless/event-store-types';
 
@@ -20,7 +20,7 @@ export interface PreviewRevertResult {
 }
 
 export interface RevertResult {
-  compensatingEvents: PersistedEvent[];
+  compensatingEvents: AppendableEvent[];
 }
 
 export interface EventStoreRevert {

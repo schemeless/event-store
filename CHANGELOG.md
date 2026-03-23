@@ -1,17 +1,25 @@
 # Changelog
 
+## [6.0.0-rc.2] - 2026-03-24
+
+### Changed
+
+- **ID generation moved to adapters**: `append()` / `appendToStream()` now generate ULIDs for events that arrive without an `id`, while preserving explicit IDs for import and migration scenarios.
+- **React Native compatibility**: Removed Node-only `crypto.randomUUID()` usage from revert handling and consolidated ID generation onto ULID-based adapter paths.
+- **Migration guidance**: New and updated docs recommend letting the event store generate IDs instead of assigning them in `decide()` or compensating-event code.
+
 ## [5.0.0] - 2026-03-21
 
 ### Breaking Changes
 
-- **RxJS Removed**: Entirely removed `rxjs` and `ramda` from the core `@schemeless/event-store` package dependencies. 
+- **RxJS Removed**: Entirely removed `rxjs` and `ramda` from the core `@schemeless/event-store` package dependencies.
 - **Core Pipeline Refactored**: Removed the internal observable queues (`mainQueue`, `receive`, `sideEffectQueue`, `observerQueue`).
 - **Global State Removed**: `aggregateStateCache` singleton is completely deleted. Aggregate state during processing is passed down the causal tree safely and transparently via pure functions (`processEventTree`).
 
 ### Performance & Stability
+
 - Rollbacks of deep event chains are now fully synchronous and deterministic upon validation failures.
 - Native `Promise`-based async processing allows for superior debugging and stack traces.
-
 
 ## [4.0.0] - 2026-03-21
 

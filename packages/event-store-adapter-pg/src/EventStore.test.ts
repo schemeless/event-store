@@ -10,14 +10,24 @@ const connectionOptions = {
   database: process.env.PGDATABASE || 'event_store_test',
 };
 
-const makeEvent = (num: number, identifier?: string): PersistedEvent<any> => ({
-  id: `event-${identifier ?? 'global'}-${num.toString().padStart(6, '0')}`,
-  domain: 'test',
-  type: 'Tested',
-  payload: { id: num },
-  identifier,
-  created: new Date(Date.now() + num * 1000),
-});
+const makeEvent = (num: number, identifier?: string): PersistedEvent<any> =>
+  ({
+    id: `event-${identifier ?? 'global'}-${num.toString().padStart(6, '0')}`,
+    domain: 'test',
+    type: 'Tested',
+    payload: { id: num },
+    identifier,
+    created: new Date(Date.now() + num * 1000),
+  } as PersistedEvent<any>);
+
+const makeEventWithoutId = (num: number, identifier?: string): PersistedEvent<any> =>
+  ({
+    domain: 'test',
+    type: 'Tested',
+    payload: { id: num },
+    identifier,
+    created: new Date(Date.now() + num * 1000),
+  } as PersistedEvent<any>);
 
 describe('PgEventStoreAdapter', () => {
   let adapter: PgEventStoreAdapter;
@@ -50,6 +60,23 @@ describe('PgEventStoreAdapter', () => {
       'event-global-000002',
       'event-global-000003',
     ]);
+  });
+
+  it('generates ids for events without ids', async () => {
+    const events = [makeEventWithoutId(1), makeEventWithoutId(2)];
+
+    await adapter.append(events);
+
+    expect(events[0].id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(events[1].id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+
+    const pages = await adapter.getAllEvents(10);
+    const allEvents: PersistedEvent[] = [];
+    for await (const batch of pages) {
+      allEvents.push(...batch);
+    }
+
+    expect(allEvents.map((event) => event.id)).toEqual(events.map((event) => event.id));
   });
 
   it('loads a stream in sequence order', async () => {

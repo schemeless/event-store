@@ -1,8 +1,9 @@
-import type { PersistedEvent, StreamEventStoreAdapter } from '@schemeless/event-store-types';
+import type { AppendableEvent, PersistedEvent, StreamEventStoreAdapter } from '@schemeless/event-store-types';
 export { StreamConcurrencyError } from '@schemeless/event-store-types';
 export type { PersistedEvent, Snapshot } from '@schemeless/event-store-types';
 
 export type DomainEvent = PersistedEvent;
+export type DecidedEvent = AppendableEvent;
 
 export interface AggregateContext {
   identifier: string;
@@ -11,7 +12,7 @@ export interface AggregateContext {
 
 export interface PhaseContext extends AggregateContext {}
 
-export interface AggregateDefinition<Command, Event extends DomainEvent, State> {
+export interface AggregateDefinition<Command, Event extends DecidedEvent, State> {
   name: string;
   domain: string;
   getIdentifier(command: Command): string;
@@ -28,13 +29,16 @@ export interface HydratedAggregate<State> {
   sequence: number;
 }
 
-export interface HandleResult<Event extends DomainEvent, State> extends HydratedAggregate<State> {
+export interface HandleResult<Event extends DecidedEvent, State> extends HydratedAggregate<State> {
   events: Event[];
 }
 
 export interface AggregateRuntime {
-  handle<C, E extends DomainEvent, S>(aggregate: AggregateDefinition<C, E, S>, command: C): Promise<HandleResult<E, S>>;
-  hydrate<E extends DomainEvent, S>(
+  handle<C, E extends DecidedEvent, S>(
+    aggregate: AggregateDefinition<C, E, S>,
+    command: C
+  ): Promise<HandleResult<E, S>>;
+  hydrate<E extends DecidedEvent, S>(
     aggregate: AggregateDefinition<any, E, S>,
     identifier: string
   ): Promise<HydratedAggregate<S>>;

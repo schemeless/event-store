@@ -1,10 +1,12 @@
+import { monotonicFactory } from 'ulid';
 import { StreamConcurrencyError } from '@schemeless/event-store-types';
-import type { PersistedEvent, Snapshot } from '@schemeless/event-store-types';
+import type { AppendableEvent, PersistedEvent, Snapshot } from '@schemeless/event-store-types';
 import type { AggregateRuntimeAdapter } from '@schemeless/event-store-aggregate';
 import type { EventStoreCoreRepo } from '@schemeless/event-store-core';
 
 const compareEvents = (a: PersistedEvent, b: PersistedEvent) =>
   (a.sequence ?? 0) - (b.sequence ?? 0) || a.created.getTime() - b.created.getTime() || a.id.localeCompare(b.id);
+const monotonicUlid = monotonicFactory();
 
 export class MemoryEventStore implements AggregateRuntimeAdapter, EventStoreCoreRepo {
   private events: PersistedEvent[] = [];
@@ -31,11 +33,18 @@ export class MemoryEventStore implements AggregateRuntimeAdapter, EventStoreCore
     this.snapshots.clear();
   }
 
-  async append(events: PersistedEvent[]): Promise<void> {
+  async append(events: AppendableEvent[]): Promise<void> {
     await this.withWriteLock(async () => {
       for (const event of events) {
+        const id = event.id ?? monotonicUlid();
+        event.id = id;
         const current = await this.getCurrentVersion(event.domain, event.identifier ?? '');
-        this.events.push({ ...event, sequence: event.sequence ?? current + 1, created: event.created ?? new Date() });
+        this.events.push({
+          ...event,
+          id,
+          sequence: event.sequence ?? current + 1,
+          created: event.created ?? new Date(),
+        });
       }
     });
   }
@@ -63,7 +72,7 @@ export class MemoryEventStore implements AggregateRuntimeAdapter, EventStoreCore
       .sort(compareEvents);
   }
 
-  async appendToStream(events: PersistedEvent[], expectedVersion: number): Promise<{ nextVersion: number }> {
+  async appendToStream(events: AppendableEvent[], expectedVersion: number): Promise<{ nextVersion: number }> {
     return this.withWriteLock(async () => {
       if (!events.length) {
         return { nextVersion: expectedVersion };
@@ -76,8 +85,10 @@ export class MemoryEventStore implements AggregateRuntimeAdapter, EventStoreCore
 
       let next = current;
       for (const event of events) {
+        const id = event.id ?? monotonicUlid();
+        event.id = id;
         next += 1;
-        this.events.push({ ...event, sequence: next, created: event.created ?? new Date() });
+        this.events.push({ ...event, id, sequence: next, created: event.created ?? new Date() });
       }
       return { nextVersion: next };
     });

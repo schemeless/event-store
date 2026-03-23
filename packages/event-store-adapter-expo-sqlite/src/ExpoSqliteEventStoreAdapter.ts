@@ -1,5 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
+import { monotonicFactory } from 'ulid';
 import {
+  AppendableEvent,
   PersistedEvent,
   Snapshot,
   StreamConcurrencyError,
@@ -25,6 +27,7 @@ interface RawEventRow {
 }
 
 const VALID_TABLE_NAME = /^[a-zA-Z_][a-zA-Z0-9_.]*$/;
+const monotonicUlid = monotonicFactory();
 
 function assertValidTableName(name: string): void {
   if (!VALID_TABLE_NAME.test(name)) {
@@ -113,6 +116,15 @@ export class ExpoSqliteEventStoreAdapter implements StreamEventStoreAdapter {
     };
   }
 
+  private ensureEventIds(events: AppendableEvent[]): PersistedEvent[] {
+    return events.map((event) => {
+      if (!event.id) {
+        event.id = monotonicUlid();
+      }
+      return event as PersistedEvent;
+    });
+  }
+
   private groupEventsByStream(events: PersistedEvent[]): Map<string, PersistedEvent[]> {
     const grouped = new Map<string, PersistedEvent[]>();
     for (const event of events) {
@@ -126,16 +138,17 @@ export class ExpoSqliteEventStoreAdapter implements StreamEventStoreAdapter {
   }
 
   private async appendGroupedEvents(
-    events: PersistedEvent[],
+    events: AppendableEvent[],
     options?: { expectedVersion?: number }
   ): Promise<Map<string, number>> {
     if (!events.length) {
       return new Map();
     }
 
+    const eventsWithIds = this.ensureEventIds(events);
     const versions = new Map<string, number>();
     await this.db.withExclusiveTransactionAsync(async (txn) => {
-      for (const [streamKey, streamEvents] of this.groupEventsByStream(events).entries()) {
+      for (const [streamKey, streamEvents] of this.groupEventsByStream(eventsWithIds).entries()) {
         const [domain, ...rest] = streamKey.split('::');
         const identifier = rest.join('::');
 
@@ -179,11 +192,11 @@ export class ExpoSqliteEventStoreAdapter implements StreamEventStoreAdapter {
     return versions;
   }
 
-  async append(events: PersistedEvent[]): Promise<void> {
+  async append(events: AppendableEvent[]): Promise<void> {
     await this.appendGroupedEvents(events);
   }
 
-  async appendToStream(events: PersistedEvent[], expectedVersion: number): Promise<{ nextVersion: number }> {
+  async appendToStream(events: AppendableEvent[], expectedVersion: number): Promise<{ nextVersion: number }> {
     if (!events.length) {
       return { nextVersion: expectedVersion };
     }

@@ -1,4 +1,9 @@
-import type { EventStoreAdapter, PersistedEvent, StreamEventStoreAdapter } from '@schemeless/event-store-types';
+import type {
+  AppendableEvent,
+  EventStoreAdapter,
+  PersistedEvent,
+  StreamEventStoreAdapter,
+} from '@schemeless/event-store-types';
 
 export type { PersistedEvent } from '@schemeless/event-store-types';
 
@@ -12,7 +17,7 @@ export interface Observer {
 }
 
 export interface EventStoreCore {
-  append(events: PersistedEvent[]): Promise<void>;
+  append(events: AppendableEvent[]): Promise<void>;
   stream(domain: string, identifier: string, options?: { fromSequence?: number }): Promise<PersistedEvent[]>;
   scan(options?: { pageSize?: number; startFromId?: string }): AsyncIterable<PersistedEvent[]>;
   rebuildReadModels(options?: {

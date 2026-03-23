@@ -1,6 +1,8 @@
 import { createHash } from 'crypto';
 import { Pool, PoolClient, PoolConfig } from 'pg';
+import { monotonicFactory } from 'ulid';
 import {
+  AppendableEvent,
   PersistedEvent,
   Snapshot,
   StreamConcurrencyError,
@@ -12,6 +14,7 @@ export interface PgAdapterOptions extends PoolConfig {
 }
 
 const VALID_TABLE_NAME = /^[a-zA-Z_][a-zA-Z0-9_.]*$/;
+const monotonicUlid = monotonicFactory();
 
 function assertValidTableName(name: string): void {
   if (!VALID_TABLE_NAME.test(name)) {
@@ -157,6 +160,15 @@ export class PgEventStoreAdapter implements StreamEventStoreAdapter {
     return Number(res.rows[0].maxseq);
   }
 
+  private ensureEventIds(events: AppendableEvent[]): PersistedEvent[] {
+    return events.map((event) => {
+      if (!event.id) {
+        event.id = monotonicUlid();
+      }
+      return event as PersistedEvent;
+    });
+  }
+
   private groupEventsByStream(events: PersistedEvent[]): Map<string, PersistedEvent[]> {
     const grouped = new Map<string, PersistedEvent[]>();
     for (const event of events) {
@@ -170,19 +182,21 @@ export class PgEventStoreAdapter implements StreamEventStoreAdapter {
   }
 
   private async appendGroupedEvents(
-    events: PersistedEvent[],
+    events: AppendableEvent[],
     options?: { expectedVersion?: number }
   ): Promise<Map<string, number>> {
     if (!events.length) {
       return new Map();
     }
 
+    const eventsWithIds = this.ensureEventIds(events);
+
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
 
       const versions = new Map<string, number>();
-      for (const [streamKey, streamEvents] of this.groupEventsByStream(events).entries()) {
+      for (const [streamKey, streamEvents] of this.groupEventsByStream(eventsWithIds).entries()) {
         const [domain, ...rest] = streamKey.split('::');
         const identifier = rest.join('::');
         const currentVersion = await this.getStreamVersion(client, domain, identifier, true);
@@ -224,10 +238,15 @@ export class PgEventStoreAdapter implements StreamEventStoreAdapter {
         // Ignore rollback failures after transaction abort.
       }
 
-      if (error?.code === '23505' && error?.constraint === this.idxStreamSequence && events[0]) {
-        const identifier = events[0].identifier ?? '';
-        const actualVersion = await this.getStreamVersion(client, events[0].domain, identifier, false);
-        throw new StreamConcurrencyError(events[0].domain, identifier, options?.expectedVersion ?? 0, actualVersion);
+      if (error?.code === '23505' && error?.constraint === this.idxStreamSequence && eventsWithIds[0]) {
+        const identifier = eventsWithIds[0].identifier ?? '';
+        const actualVersion = await this.getStreamVersion(client, eventsWithIds[0].domain, identifier, false);
+        throw new StreamConcurrencyError(
+          eventsWithIds[0].domain,
+          identifier,
+          options?.expectedVersion ?? 0,
+          actualVersion
+        );
       }
 
       throw error;
@@ -236,11 +255,11 @@ export class PgEventStoreAdapter implements StreamEventStoreAdapter {
     }
   }
 
-  async append(events: PersistedEvent[]): Promise<void> {
+  async append(events: AppendableEvent[]): Promise<void> {
     await this.appendGroupedEvents(events);
   }
 
-  async appendToStream(events: PersistedEvent[], expectedVersion: number): Promise<{ nextVersion: number }> {
+  async appendToStream(events: AppendableEvent[], expectedVersion: number): Promise<{ nextVersion: number }> {
     if (!events.length) {
       return { nextVersion: expectedVersion };
     }
