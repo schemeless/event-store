@@ -19,6 +19,7 @@ export const makeEventStoreCore = (repo: EventStoreCoreRepo): EventStoreCore => 
         }
       }
     }
+    events.sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
     return events;
   },
   scan: (options = {}) => {

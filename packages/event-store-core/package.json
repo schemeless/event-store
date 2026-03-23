@@ -21,7 +21,7 @@
     "url": "https://github.com/schemeless/event-store/issues"
   },
   "dependencies": {
-    "@schemeless/event-store-types": "^5.0.0"
+    "@schemeless/event-store-types": "^6.0.0"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",

@@ -14,7 +14,7 @@
   "dependencies": {
     "@schemeless/event-store-core": "^0.1.0",
     "@schemeless/event-store-aggregate": "^0.1.0",
-    "@schemeless/event-store-types": "^5.0.0"
+    "@schemeless/event-store-types": "^6.0.0"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",

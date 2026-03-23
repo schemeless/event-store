@@ -83,16 +83,10 @@ export class PgEventStoreAdapter implements StreamEventStoreAdapter {
         );
       `);
 
-      await client.query(`
-        CREATE UNIQUE INDEX IF NOT EXISTS "${this.idxStreamSequence}"
-        ON ${this.tableName} (domain, identifier, sequence);
-      `);
-
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS "${this.idxSnapshotKey}"
-        ON ${this.tableName}_snapshots (domain, identifier);
-      `);
-
+      // Normalise legacy NULL identifiers before creating the unique index.
+      // On older tables NULL values are distinct in Postgres, so two rows can
+      // share (domain, sequence) with identifier IS NULL. Converting them to ''
+      // first avoids a 23505 collision when the unique index is created below.
       await client.query(`
         UPDATE ${this.tableName}
         SET identifier = ''
@@ -105,6 +99,16 @@ export class PgEventStoreAdapter implements StreamEventStoreAdapter {
       await client.query(`
         ALTER TABLE ${this.tableName}
         ALTER COLUMN identifier SET NOT NULL;
+      `);
+
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS "${this.idxStreamSequence}"
+        ON ${this.tableName} (domain, identifier, sequence);
+      `);
+
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS "${this.idxSnapshotKey}"
+        ON ${this.tableName}_snapshots (domain, identifier);
       `);
     } finally {
       client.release();
