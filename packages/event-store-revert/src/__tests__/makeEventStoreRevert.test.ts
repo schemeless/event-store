@@ -299,28 +299,29 @@ describe('makeEventStoreRevert', () => {
 
     it('compensating event has created: new Date()', async () => {
       jest.useFakeTimers().setSystemTime(new Date('2026-04-01T00:00:00.000Z'));
+      try {
+        const adapter = mockAdapter();
+        const event = mockEvent({ id: 'e1', domain: 'test', type: 'Created' });
 
-      const adapter = mockAdapter();
-      const event = mockEvent({ id: 'e1', domain: 'test', type: 'Created' });
+        (adapter.getEventById as jest.Mock).mockResolvedValue(event);
+        (adapter.findByCausationId as jest.Mock).mockResolvedValue([]);
+        (adapter.append as jest.Mock).mockResolvedValue(undefined);
 
-      (adapter.getEventById as jest.Mock).mockResolvedValue(event);
-      (adapter.findByCausationId as jest.Mock).mockResolvedValue([]);
-      (adapter.append as jest.Mock).mockResolvedValue(undefined);
+        const registry = makeCompensationRegistry();
+        registry.register(
+          'test',
+          'Created',
+          jest.fn().mockReturnValue({ id: 'c1', domain: 'test', type: 'Reversed', payload: {} })
+        );
 
-      const registry = makeCompensationRegistry();
-      registry.register(
-        'test',
-        'Created',
-        jest.fn().mockReturnValue({ id: 'c1', domain: 'test', type: 'Reversed', payload: {} })
-      );
+        const revert = makeEventStoreRevert(adapter, registry);
+        await revert.revert('e1');
 
-      const revert = makeEventStoreRevert(adapter, registry);
-      await revert.revert('e1');
-
-      const appendedEvents = (adapter.append as jest.Mock).mock.calls[0][0];
-      expect(appendedEvents[0].created).toEqual(new Date('2026-04-01T00:00:00.000Z'));
-
-      jest.useRealTimers();
+        const appendedEvents = (adapter.append as jest.Mock).mock.calls[0][0];
+        expect(appendedEvents[0].created).toEqual(new Date('2026-04-01T00:00:00.000Z'));
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 });
