@@ -129,4 +129,50 @@ describe('makeEventStoreRevert', () => {
       ]);
     });
   });
+
+  describe('previewRevert', () => {
+    it('returns rootEvent and descendantEvents', async () => {
+      const adapter = mockAdapter();
+      const rootEvent = mockEvent({ id: 'e1', domain: 'test', type: 'Created' });
+      const child = mockEvent({ id: 'e2', domain: 'test', type: 'ChildAdded', causationId: 'e1' });
+
+      (adapter.getEventById as jest.Mock).mockResolvedValue(rootEvent);
+      (adapter.findByCausationId as jest.Mock).mockImplementation(async (eventId: string) => {
+        if (eventId === 'e1') return [child];
+        return [];
+      });
+
+      const registry = makeCompensationRegistry();
+      const revert = makeEventStoreRevert(adapter, registry);
+      const result = await revert.previewRevert('e1');
+
+      expect(result.rootEvent).toEqual(rootEvent);
+      expect(result.descendantEvents).toEqual([child]);
+    });
+
+    it('throws when event not found', async () => {
+      const adapter = mockAdapter();
+      (adapter.getEventById as jest.Mock).mockResolvedValue(null);
+
+      const registry = makeCompensationRegistry();
+      const revert = makeEventStoreRevert(adapter, registry);
+
+      await expect(revert.previewRevert('non-existent')).rejects.toThrow('Event not found: non-existent');
+    });
+
+    it('returns empty descendantEvents when no children', async () => {
+      const adapter = mockAdapter();
+      const event = mockEvent({ id: 'e1', domain: 'test', type: 'Created' });
+
+      (adapter.getEventById as jest.Mock).mockResolvedValue(event);
+      (adapter.findByCausationId as jest.Mock).mockResolvedValue([]);
+
+      const registry = makeCompensationRegistry();
+      const revert = makeEventStoreRevert(adapter, registry);
+      const result = await revert.previewRevert('e1');
+
+      expect(result.rootEvent).toEqual(event);
+      expect(result.descendantEvents).toEqual([]);
+    });
+  });
 });
