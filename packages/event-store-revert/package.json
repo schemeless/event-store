@@ -1,6 +1,6 @@
 {
   "name": "@schemeless/event-store-revert",
-  "version": "6.0.0-rc.3",
+  "version": "6.0.0-rc.4",
   "typescript:main": "src/index.ts",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -21,7 +21,7 @@
     "url": "https://github.com/schemeless/event-store/issues"
   },
   "dependencies": {
-    "@schemeless/event-store-types": "^6.0.0-rc.3"
+    "@schemeless/event-store-types": "^6.0.0-rc.4"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
