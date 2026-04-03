@@ -134,8 +134,8 @@ export class PgEventStoreAdapter implements StreamEventStoreAdapter {
       meta: row.meta ?? undefined,
       payload: row.payload,
       identifier: row.identifier === '' ? undefined : row.identifier,
-      correlationId: row.correlationid ?? undefined,
-      causationId: row.causationid ?? undefined,
+      correlationId: row.correlationId ?? undefined,
+      causationId: row.causationId ?? undefined,
       sequence: row.sequence != null ? Number(row.sequence) : undefined,
       created: row.created instanceof Date ? row.created : new Date(row.created),
     };
