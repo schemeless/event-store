@@ -6,4 +6,5 @@ module.exports = {
   moduleNameMapper: {
     '^@schemeless/(.*)$': '<rootDir>/../$1/src',
   },
+  maxWorkers: 1,
 };

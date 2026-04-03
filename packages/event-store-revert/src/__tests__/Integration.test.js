@@ -11,7 +11,7 @@ const connectionOptions = {
 
 let eventCounter = 0;
 const makeEvent = (domain, type, payload, identifier) => ({
-  id: `e-${Date.now()}-${++eventCounter}`,
+  id: `e-${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${++eventCounter}`,
   domain,
   type,
   payload,
