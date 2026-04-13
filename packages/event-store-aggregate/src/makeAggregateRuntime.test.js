@@ -1,5 +1,5 @@
-const { makeAggregateRuntime } = require('../dist/index.js');
-const { StreamConcurrencyError } = require('../dist/types.js');
+const { InvalidIdentifierError, StreamConcurrencyError } = require('@schemeless/event-store-types');
+const { makeAggregateRuntime } = require('../src');
 
 const adapter = (overrides = {}) => ({
   getStreamEvents: jest.fn().mockResolvedValue([]),
@@ -177,6 +177,7 @@ describe('aggregate runtime', () => {
   });
 
   it('ignores snapshot save failures after append succeeds', async () => {
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     const saveSnapshot = jest.fn().mockRejectedValue(new Error('snapshot failed'));
     const appendToStream = jest.fn().mockResolvedValue({ nextVersion: 1 });
     const rt = makeAggregateRuntime(
@@ -200,6 +201,52 @@ describe('aggregate runtime', () => {
     expect(result.state).toEqual({ count: 3 });
     expect(appendToStream).toHaveBeenCalledTimes(1);
     expect(saveSnapshot).toHaveBeenCalledTimes(1);
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('reports snapshot save failures through onSnapshotError when provided', async () => {
+    const saveSnapshot = jest.fn().mockRejectedValue(new Error('snapshot failed'));
+    const onSnapshotError = jest.fn();
+    const rt = makeAggregateRuntime(
+      adapter({
+        saveSnapshot,
+      }),
+      {
+        onSnapshotError,
+      }
+    );
+    const aggregate = {
+      name: 'counter',
+      domain: 'counter',
+      getIdentifier: (x) => x.id,
+      initialState: { count: 0 },
+      evolve: (state, event) => ({ count: state.count + event.payload.amount }),
+      decide: () => [{ id: 'e1', domain: 'other', type: 'added', payload: { amount: 3 }, created: new Date() }],
+    };
+
+    await rt.handle(aggregate, { id: 'c1' });
+
+    expect(onSnapshotError).toHaveBeenCalledTimes(1);
+    expect(onSnapshotError.mock.calls[0][1]).toMatchObject({
+      aggregateName: 'counter',
+      domain: 'counter',
+      identifier: 'c1',
+    });
+  });
+
+  it('rejects empty aggregate identifiers', async () => {
+    const rt = makeAggregateRuntime(adapter());
+    const aggregate = {
+      name: 'counter',
+      domain: 'counter',
+      getIdentifier: () => '   ',
+      initialState: { count: 0 },
+      evolve: (state) => state,
+      decide: () => [],
+    };
+
+    await expect(rt.handle(aggregate, { id: 'c1' })).rejects.toBeInstanceOf(InvalidIdentifierError);
   });
 
   it('hydrates from a saved snapshot on the next handle call', async () => {

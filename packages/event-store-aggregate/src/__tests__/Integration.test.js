@@ -1,4 +1,4 @@
-const { makeAggregateRuntime } = require('../../dist/index.js');
+const { makeAggregateRuntime } = require('../../src');
 const { PgEventStoreAdapter } = require('@schemeless/event-store-adapter-pg');
 
 const connectionOptions = {

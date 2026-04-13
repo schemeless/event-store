@@ -30,6 +30,12 @@
 - `types`
   - 共享事件、快照与 adapter contract
 
+## 运行时说明
+
+- `core.stream()` 需要支持 stream query 的 adapter；不再退化成全量扫描。
+- `rebuildReadModels()` 会等待 observer 全部执行完成后再返回。
+- scan / export 顺序以存储提交顺序为准，不再依赖调用方传入的 `created` 时间戳。
+
 ## 安装
 
 ```bash

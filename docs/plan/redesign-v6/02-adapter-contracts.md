@@ -24,36 +24,21 @@ export interface EventStoreAdapter {
   init(): Promise<void>;
   close?(): Promise<void>;
 
-  append(events: PersistedEvent[]): Promise<void>;
+  append(events: AppendableEvent[]): Promise<void>;
 
-  getAllEvents(
-    pageSize?: number,
-    startFromId?: string
-  ): Promise<AsyncIterable<PersistedEvent[]>>;
+  getAllEvents(pageSize?: number, startFromId?: string): Promise<AsyncIterable<PersistedEvent[]>>;
 }
 ```
 
 ```ts
 export interface StreamEventStoreAdapter extends EventStoreAdapter {
-  getStreamEvents(
-    domain: string,
-    identifier: string,
-    fromSequence?: number
-  ): Promise<PersistedEvent[]>;
+  getStreamEvents(domain: string, identifier: string, fromSequence?: number): Promise<PersistedEvent[]>;
 
-  appendToStream(
-    events: PersistedEvent[],
-    expectedVersion: number
-  ): Promise<{ nextVersion: number }>;
+  appendToStream(events: StreamAppendableEvent[], expectedVersion: number): Promise<{ nextVersion: number }>;
 
-  getSnapshot?<State>(
-    domain: string,
-    identifier: string
-  ): Promise<Snapshot<State> | null>;
+  getSnapshot?<State>(domain: string, identifier: string): Promise<Snapshot<State> | null>;
 
-  saveSnapshot?<State>(
-    snapshot: Snapshot<State>
-  ): Promise<void>;
+  saveSnapshot?<State>(snapshot: Snapshot<State>): Promise<void>;
 
   capabilities: {
     streamQuery: true;
@@ -77,6 +62,9 @@ export interface StreamEventStoreAdapter extends EventStoreAdapter {
 - `appendToStream(expectedVersion)` is the correctness boundary for multi-instance writes
 - snapshots are optional and never the source of truth
 - `identifier` is the canonical stream key
+- `appendToStream()` must accept only one `(domain, identifier)` stream per call
+- `getAllEvents()` order must follow storage commit order, not caller-provided timestamps
+- `startFromId` must be a strict cursor, not a best-effort hint
 
 ## Tests
 

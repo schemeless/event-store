@@ -1,5 +1,5 @@
 import { Client } from 'pg';
-import type { PersistedEvent } from '@schemeless/event-store-types';
+import type { PersistedEvent, StreamAppendableEvent } from '@schemeless/event-store-types';
 import { PgEventStoreAdapter } from './PgEventStoreAdapter';
 
 const connectionOptions = {
@@ -10,15 +10,18 @@ const connectionOptions = {
   database: process.env.PGDATABASE || 'event_store_test',
 };
 
-const makeEvent = (num: number, identifier?: string): PersistedEvent<any> =>
-  ({
+function makeEvent(num: number, identifier: string): StreamAppendableEvent<any>;
+function makeEvent(num: number, identifier?: undefined): PersistedEvent<any>;
+function makeEvent(num: number, identifier?: string): PersistedEvent<any> | StreamAppendableEvent<any> {
+  return {
     id: `event-${identifier ?? 'global'}-${num.toString().padStart(6, '0')}`,
     domain: 'test',
     type: 'Tested',
     payload: { id: num },
     identifier,
     created: new Date(Date.now() + num * 1000),
-  } as PersistedEvent<any>);
+  } as PersistedEvent<any> | StreamAppendableEvent<any>;
+}
 
 const makeEventWithoutId = (num: number, identifier?: string): PersistedEvent<any> =>
   ({
@@ -67,8 +70,8 @@ describe('PgEventStoreAdapter', () => {
 
     await adapter.append(events);
 
-    expect(events[0].id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
-    expect(events[1].id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(events[0].id).toBeUndefined();
+    expect(events[1].id).toBeUndefined();
 
     const pages = await adapter.getAllEvents(10);
     const allEvents: PersistedEvent[] = [];
@@ -76,7 +79,9 @@ describe('PgEventStoreAdapter', () => {
       allEvents.push(...batch);
     }
 
-    expect(allEvents.map((event) => event.id)).toEqual(events.map((event) => event.id));
+    expect(allEvents[0].id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(allEvents[1].id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(allEvents[0].id).not.toBe(allEvents[1].id);
   });
 
   it('loads a stream in sequence order', async () => {

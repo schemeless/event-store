@@ -18,7 +18,7 @@ Other adapters can follow later once the pattern is stable.
 ## Required Work
 
 1. Update key adapters to implement new capability interfaces
-2. Add `appendToStream(expectedVersion)` support where correctness is required
+2. Add single-stream `appendToStream(expectedVersion)` support where correctness is required
 3. Add snapshot read/write support where practical
 4. Ensure projection rebuild works independently from aggregate hydration
 5. Document capability differences per adapter
@@ -48,6 +48,7 @@ Add tests for:
 
 - stream query semantics on upgraded adapters
 - OCC correctness on adapters that claim support
+- commit-order scan/export semantics on adapters that claim support
 - snapshot read/write on adapters that claim support
 - projection rebuild after projection data deletion
 - aggregate writes continuing to work even when projection state is empty or stale

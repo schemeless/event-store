@@ -25,6 +25,13 @@ Optional:
 - `saveSnapshot(snapshot)`
 - `reset()` for tests and import replacement flows
 
+## Behaviour Rules
+
+- `appendToStream(events, expectedVersion)` accepts exactly one `(domain, identifier)` stream per call.
+- stream operations require a non-empty `identifier`.
+- `getAllEvents()` must return storage commit order, not caller-provided `created` timestamps.
+- `startFromId` must reference an existing event id; adapters should fail fast on invalid cursors.
+
 ## Adapter Selection
 
 ### PostgreSQL

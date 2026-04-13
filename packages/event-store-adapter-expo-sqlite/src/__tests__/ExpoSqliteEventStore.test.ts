@@ -1,5 +1,5 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
-import type { PersistedEvent } from '@schemeless/event-store-types';
+import type { PersistedEvent, StreamAppendableEvent } from '@schemeless/event-store-types';
 import { ExpoSqliteEventStoreAdapter } from '../ExpoSqliteEventStoreAdapter';
 
 interface MockRow {
@@ -26,6 +26,7 @@ interface MockSnapshotRow {
 function createMockDb() {
   const events: MockRow[] = [];
   const snapshots = new Map<string, MockSnapshotRow>();
+  const withRowIds = () => events.map((event, index) => ({ ...event, rowid: index + 1 }));
 
   const runAsync = jest.fn(async (sql: string, params: any[] = []) => {
     const s = sql.replace(/\s+/g, ' ').trim();
@@ -61,9 +62,10 @@ function createMockDb() {
       return { maxseq: streamEvents.reduce((max, event) => Math.max(max, event.sequence ?? 0), 0) };
     }
 
-    if (s.startsWith('SELECT created, id FROM')) {
+    if (s.startsWith('SELECT rowid AS rowid FROM')) {
       const [id] = params;
-      return events.find((event) => event.id === id) ?? null;
+      const row = withRowIds().find((event) => event.id === id);
+      return row ? { rowid: row.rowid } : null;
     }
 
     if (s.includes('_snapshots') && s.includes('WHERE domain')) {
@@ -87,25 +89,29 @@ function createMockDb() {
         .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
     }
 
-    if (s.includes('(created >') || s.includes('(created>')) {
-      const [createdGt, createdEq, idGt, limit] = params;
-      return events
-        .filter((event) => event.created > createdGt || (event.created === createdEq && event.id > idGt))
-        .sort((a, b) => a.created - b.created || a.id.localeCompare(b.id))
-        .slice(0, limit);
+    if (s.includes('WHERE rowid > ?')) {
+      const [startRowId, limit] = params;
+      return withRowIds()
+        .filter((event) => event.rowid > startRowId)
+        .sort((a, b) => a.rowid - b.rowid)
+        .slice(0, limit)
+        .map(({ rowid, ...event }) => event);
     }
 
-    if (s.includes('id >')) {
-      const [startId, limit] = params;
-      return events
-        .filter((event) => event.id > startId)
-        .sort((a, b) => a.created - b.created || a.id.localeCompare(b.id))
-        .slice(0, limit);
+    if (s.includes('WHERE causationId = ? ORDER BY rowid ASC')) {
+      const [causationId] = params;
+      return withRowIds()
+        .filter((event) => event.causationId === causationId)
+        .sort((a, b) => a.rowid - b.rowid)
+        .map(({ rowid, ...event }) => event);
     }
 
-    if (s.includes('ORDER BY created ASC, id ASC LIMIT')) {
+    if (s.includes('ORDER BY rowid ASC LIMIT')) {
       const [limit] = params;
-      return [...events].sort((a, b) => a.created - b.created || a.id.localeCompare(b.id)).slice(0, limit);
+      return withRowIds()
+        .sort((a, b) => a.rowid - b.rowid)
+        .slice(0, limit)
+        .map(({ rowid, ...event }) => event);
     }
 
     return [];
@@ -143,6 +149,10 @@ function makeEvent(num: number, identifier?: string): PersistedEvent<any> {
     identifier,
     created: new Date(1_700_000_000_000 + num * 1000),
   };
+}
+
+function makeStreamEvent(num: number, identifier: string): StreamAppendableEvent<any> {
+  return makeEvent(num, identifier) as StreamAppendableEvent<any>;
 }
 
 function makeEventWithoutId(num: number, identifier?: string): PersistedEvent<any> {
@@ -192,8 +202,8 @@ describe('ExpoSqliteEventStoreAdapter', () => {
 
     await adapter.append(events);
 
-    expect(events[0].id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
-    expect(events[1].id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(events[0].id).toBeUndefined();
+    expect(events[1].id).toBeUndefined();
 
     const pages = await adapter.getAllEvents(10);
     const allEvents: PersistedEvent[] = [];
@@ -201,23 +211,57 @@ describe('ExpoSqliteEventStoreAdapter', () => {
       allEvents.push(...batch);
     }
 
-    expect(allEvents.map((event) => event.id)).toEqual(events.map((event) => event.id));
+    expect(allEvents[0].id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(allEvents[1].id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(allEvents[0].id).not.toBe(allEvents[1].id);
   });
 
   it('loads a stream in sequence order', async () => {
-    await adapter.appendToStream([makeEvent(1, 'user-A'), makeEvent(2, 'user-A')], 0);
+    await adapter.appendToStream([makeStreamEvent(1, 'user-A'), makeStreamEvent(2, 'user-A')], 0);
 
     const stream = await adapter.getStreamEvents('test', 'user-A');
     expect(stream.map((event) => event.sequence)).toEqual([1, 2]);
   });
 
   it('throws a stream concurrency error on mismatched expected version', async () => {
-    await adapter.appendToStream([makeEvent(1, 'user-A')], 0);
+    await adapter.appendToStream([makeStreamEvent(1, 'user-A')], 0);
 
-    await expect(adapter.appendToStream([makeEvent(2, 'user-A')], 0)).rejects.toMatchObject({
+    await expect(adapter.appendToStream([makeStreamEvent(2, 'user-A')], 0)).rejects.toMatchObject({
       name: 'StreamConcurrencyError',
       expectedVersion: 0,
       actualVersion: 1,
+    });
+  });
+
+  it('rejects appendToStream batches that span multiple streams', async () => {
+    await expect(
+      adapter.appendToStream([makeStreamEvent(1, 'user-A'), makeStreamEvent(2, 'user-B')], 0)
+    ).rejects.toMatchObject({
+      name: 'InvalidStreamBatchError',
+    });
+  });
+
+  it('uses append order instead of created time when scanning', async () => {
+    const lateFirst = makeEvent(10, 'user-B');
+    const earlySecond = makeEvent(11, 'user-B');
+    lateFirst.created = new Date('2026-01-03T00:00:00.000Z');
+    earlySecond.created = new Date('2026-01-01T00:00:00.000Z');
+    await adapter.append([lateFirst, earlySecond]);
+
+    const pages = await adapter.getAllEvents(10);
+    const allEvents: PersistedEvent[] = [];
+    for await (const batch of pages) {
+      allEvents.push(...batch);
+    }
+
+    expect(allEvents.map((event) => event.id)).toEqual(['event-user-B-000010', 'event-user-B-000011']);
+  });
+
+  it('throws when startFromId does not exist', async () => {
+    await adapter.append([makeEvent(1), makeEvent(2)]);
+
+    await expect(adapter.getAllEvents(10, 'missing-id')).rejects.toMatchObject({
+      name: 'EventCursorNotFoundError',
     });
   });
 

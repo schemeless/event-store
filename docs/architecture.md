@@ -42,8 +42,9 @@ flowchart LR
 ## Design Rules
 
 - event stream is the source of truth
+- log scans/export/rebuild run in storage commit order, not `event.created` order
 - snapshots are persisted acceleration only
 - memory cache is disposable acceleration only
-- `identifier` is the canonical aggregate key
+- `identifier` is the canonical aggregate key and must be non-empty for stream operations
 - `evolve` is the only state transition function
 - read-model rebuild is separate from aggregate hydrate

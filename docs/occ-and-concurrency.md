@@ -8,7 +8,7 @@ For a given aggregate stream:
 
 1. hydrate current state from snapshot + stream
 2. decide next events
-3. append with `expectedVersion`
+3. append a single-stream event batch with `expectedVersion`
 4. fail if another writer committed first
 
 ## Why
@@ -20,6 +20,8 @@ That means:
 - different instances can safely race on the same aggregate
 - only one append succeeds for a given expected version
 - the loser gets a `StreamConcurrencyError`
+- `appendToStream()` is the correctness boundary and must not span multiple streams
+- stream OCC requires a non-empty canonical `identifier`
 
 ## Error
 

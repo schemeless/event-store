@@ -32,18 +32,11 @@ Out of scope:
 
 ```ts
 export interface EventStoreCore {
-  append(events: PersistedEvent[]): Promise<void>;
+  append(events: AppendableEvent[]): Promise<void>;
 
-  stream(
-    domain: string,
-    identifier: string,
-    options?: { fromSequence?: number }
-  ): Promise<PersistedEvent[]>;
+  stream(domain: string, identifier: string, options?: { fromSequence?: number }): Promise<PersistedEvent[]>;
 
-  scan(options?: {
-    pageSize?: number;
-    startFromId?: string;
-  }): Promise<AsyncIterable<PersistedEvent[]>>;
+  scan(options?: { pageSize?: number; startFromId?: string }): AsyncIterable<PersistedEvent[]>;
 
   rebuildReadModels(options?: {
     startFromId?: string;
@@ -51,9 +44,7 @@ export interface EventStoreCore {
     reset?: () => Promise<void>;
   }): Promise<void>;
 
-  export(options?: {
-    pageSize?: number;
-  }): Promise<PersistedEvent[]>;
+  export(options?: { pageSize?: number }): AsyncIterable<PersistedEvent[]>;
 
   import(
     events: PersistedEvent[],
@@ -80,6 +71,8 @@ export interface EventStoreCore {
 - observers receive only persisted events
 - replay must be documented as read-model rebuild only
 - no hidden dependency on in-memory aggregate state
+- `core.stream()` must fail fast when the adapter is not stream-capable
+- rebuild must wait for observer work to finish before returning
 
 ## Suggested File Layout
 

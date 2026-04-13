@@ -1,3 +1,4 @@
+import { AdapterCapabilityError } from '@schemeless/event-store-types';
 import type { EventStoreCore, EventStoreCoreRepo } from './types';
 import { exportEvents, importEvents } from './exportImport';
 import { rebuildReadModels } from './rebuildReadModels';
@@ -7,20 +8,12 @@ export const makeEventStoreCore = (repo: EventStoreCoreRepo): EventStoreCore => 
     await repo.append(events);
   },
   stream: async (domain, identifier, options = {}) => {
-    if (repo.getStreamEvents) {
-      return repo.getStreamEvents(domain, identifier, options.fromSequence ?? 0);
+    if (!repo.getStreamEvents) {
+      throw new AdapterCapabilityError(
+        'This adapter does not support stream queries. Pass a StreamEventStoreAdapter to use core.stream().'
+      );
     }
-    const pages = await repo.getAllEvents(200);
-    const events: any[] = [];
-    for await (const page of pages) {
-      for (const event of page) {
-        if (event.domain === domain && event.identifier === identifier) {
-          if ((event.sequence ?? 0) > (options.fromSequence ?? 0)) events.push(event);
-        }
-      }
-    }
-    events.sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
-    return events;
+    return repo.getStreamEvents(domain, identifier, options.fromSequence ?? 0);
   },
   scan: (options = {}) => {
     return (async function* () {

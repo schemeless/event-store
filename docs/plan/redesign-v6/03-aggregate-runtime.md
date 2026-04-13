@@ -18,10 +18,7 @@ Do not reuse old `EventFlow` / `AggregateEventFlow` semantics.
 
 ```ts
 export interface AggregateRuntime {
-  handle<C, E extends DomainEvent, S>(
-    aggregate: AggregateDefinition<C, E, S>,
-    command: C
-  ): Promise<HandleResult<E, S>>;
+  handle<C, E extends DomainEvent, S>(aggregate: AggregateDefinition<C, E, S>, command: C): Promise<HandleResult<E, S>>;
 
   hydrate<E extends DomainEvent, S>(
     aggregate: AggregateDefinition<any, E, S>,
@@ -35,27 +32,15 @@ export interface AggregateDefinition<Command, Event extends DomainEvent, State> 
   name: string;
   domain: string;
 
-  getIdentifier(input: Command | Event): string;
+  getIdentifier(command: Command): string;
   initialState: State;
   evolve(state: State, event: Event): State;
 
-  precondition?(
-    command: Command,
-    state: State,
-    ctx: AggregateContext
-  ): Promise<void> | void;
+  precondition?(command: Command, state: State, ctx: AggregateContext): Promise<void> | void;
 
-  decide(
-    command: Command,
-    state: State,
-    ctx: AggregateContext
-  ): Promise<Event[]> | Event[];
+  decide(command: Command, state: State, ctx: AggregateContext): Promise<Event[]> | Event[];
 
-  validateEvent?(
-    event: Event,
-    state: State,
-    ctx: PhaseContext
-  ): Promise<void> | void;
+  validateEvent?(event: Event, state: State, ctx: PhaseContext): Promise<void> | void;
 }
 ```
 
@@ -75,6 +60,8 @@ export interface AggregateDefinition<Command, Event extends DomainEvent, State> 
 - `validateEvent`, if present, must be replay-safe
 - `evolve` is the only state transition source
 - command handlers return `Event[]`, not one event plus a consequent-event mechanism
+- aggregate identifiers must be non-empty
+- snapshot save failures must be observable via logging or hooks
 
 ## Execution Flow
 

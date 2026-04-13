@@ -184,4 +184,22 @@ describe('rebuildReadModels', () => {
     expect(apply).toHaveBeenCalledTimes(1);
     expect(apply).toHaveBeenCalledWith(page1[0]);
   });
+
+  it('awaits fireAndForget observers during rebuild', async () => {
+    let finished = false;
+    const apply = jest.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      finished = true;
+    });
+    const observer = {
+      ...mockObserver(apply),
+      fireAndForget: true,
+    };
+    const repo = mockRepo();
+    (repo.getAllEvents as jest.Mock).mockResolvedValue(makeIterator([[makeEvent()], []]));
+
+    await rebuildReadModels(repo, { observers: [observer] });
+
+    expect(finished).toBe(true);
+  });
 });

@@ -1,4 +1,5 @@
-const { makeAggregateRuntime } = require('../../dist/index.js');
+const { InvalidIdentifierError } = require('@schemeless/event-store-types');
+const { makeAggregateRuntime } = require('../../src');
 
 const adapter = (overrides = {}) => ({
   getStreamEvents: jest.fn().mockResolvedValue([]),
@@ -28,6 +29,20 @@ describe('makeAggregateRuntime edge cases', () => {
     expect(result.events).toEqual([]);
     expect(result.state).toEqual({ count: 10 });
     expect(result.sequence).toBe(1);
+  });
+
+  it('hydrate rejects empty identifiers', async () => {
+    const rt = makeAggregateRuntime(adapter());
+    const aggregate = {
+      name: 'counter',
+      domain: 'counter',
+      getIdentifier: (x) => x.id,
+      initialState: { count: 0 },
+      evolve: (state) => state,
+      decide: () => [],
+    };
+
+    await expect(rt.hydrate(aggregate, '')).rejects.toBeInstanceOf(InvalidIdentifierError);
   });
 
   it('precondition is called with correct context', async () => {

@@ -30,6 +30,12 @@ Schemeless Event Store is a V6 split architecture for event-sourced systems:
 - `types`
   - shared event, snapshot, and adapter contracts
 
+## Runtime Notes
+
+- `core.stream()` requires a stream-capable adapter and fails fast otherwise.
+- `rebuildReadModels()` runs observers to completion before it resolves.
+- scan/export order follows storage commit order, not caller-provided `created` timestamps.
+
 ## Install
 
 ```bash

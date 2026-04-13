@@ -34,6 +34,7 @@ for await (const page of core.export({ pageSize: 200 })) {
 
 Same streaming interface as `export`, but intended for general log scanning
 (e.g. building projections manually, debugging). Returns `AsyncIterable<PersistedEvent[]>`.
+`startFromId`, when provided, must point at an existing event id.
 
 ```ts
 for await (const page of core.scan({ pageSize: 100, startFromId: 'cursor' })) {
@@ -128,7 +129,8 @@ for await (const page of oldCore.export()) {
 
 ## Considerations
 
-- **Order is preserved.** Events are exported in the order returned by `getAllEvents`, and imported in the same order.
+- **Order is preserved.** Events are exported in storage commit order, and imported in the same order.
 - **Date serialisation.** If exported events are serialized to JSON, callers should restore `created` fields as `Date` before import or rely on the core import normalization.
 - **Memory.** `core.export()` is a streaming `AsyncIterable`. To avoid loading everything into memory at once, process pages as they arrive instead of collecting them all upfront.
 - **Concurrency.** Neither export nor import acquires a lock. Production imports should be run in a controlled maintenance window.
+- **Cursor validity.** `startFromId` is a strict cursor, not a best-effort hint. Passing a missing event id should be treated as an error.

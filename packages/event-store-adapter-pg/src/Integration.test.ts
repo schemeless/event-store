@@ -1,5 +1,5 @@
 import { PgEventStoreAdapter } from './PgEventStoreAdapter';
-import type { PersistedEvent } from '@schemeless/event-store-types';
+import type { PersistedEvent, StreamAppendableEvent } from '@schemeless/event-store-types';
 
 const connectionOptions = {
   host: process.env.PGHOST || 'localhost',
@@ -9,15 +9,18 @@ const connectionOptions = {
   database: process.env.PGDATABASE || 'event_store_test',
 };
 
-const makeEvent = (num: number, identifier?: string): PersistedEvent<any> =>
-  ({
+function makeEvent(num: number, identifier: string): StreamAppendableEvent<any>;
+function makeEvent(num: number, identifier?: undefined): PersistedEvent<any>;
+function makeEvent(num: number, identifier?: string): PersistedEvent<any> | StreamAppendableEvent<any> {
+  return {
     id: `integ-${Date.now()}-${identifier ?? 'global'}-${num.toString().padStart(6, '0')}`,
     domain: 'test',
     type: 'Tested',
     payload: { id: num },
     identifier: identifier ? `integ-${identifier}` : undefined,
     created: new Date(Date.now() + num * 1000),
-  } as PersistedEvent<any>);
+  } as PersistedEvent<any> | StreamAppendableEvent<any>;
+}
 
 const makeEventWithoutId = (num: number, identifier?: string): PersistedEvent<any> =>
   ({
@@ -68,8 +71,8 @@ describe('PgEventStoreAdapter Integration', () => {
 
     await adapter.append(events);
 
-    expect(events[0].id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
-    expect(events[1].id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(events[0].id).toBeUndefined();
+    expect(events[1].id).toBeUndefined();
 
     const pages = await adapter.getAllEvents(10);
     const allEvents: PersistedEvent[] = [];
@@ -77,7 +80,9 @@ describe('PgEventStoreAdapter Integration', () => {
       allEvents.push(...batch);
     }
 
-    expect(allEvents.map((event) => event.id)).toEqual(events.map((event) => event.id));
+    expect(allEvents[0].id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(allEvents[1].id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(allEvents[0].id).not.toBe(allEvents[1].id);
   });
 
   it('loads a stream in sequence order', async () => {
@@ -148,6 +153,15 @@ describe('PgEventStoreAdapter Integration', () => {
     // Use append (not appendToStream) so events go into the general event table
     const parent: any = { ...makeEvent(1, 'order-1'), id: undefined }; // let PG generate id
     await adapter.append([parent]);
+    const allEvents = await adapter.getAllEvents(10);
+    const persisted: PersistedEvent[] = [];
+    for await (const batch of allEvents) {
+      persisted.push(...batch);
+    }
+    const persistedParent = persisted.find(
+      (event) => event.type === parent.type && event.identifier === 'integ-order-1'
+    );
+    expect(persistedParent?.id).toBeDefined();
 
     const child1: any = {
       id: undefined,
@@ -155,7 +169,7 @@ describe('PgEventStoreAdapter Integration', () => {
       type: 'Updated',
       payload: {},
       identifier: 'integ-order-1',
-      causationId: parent.id,
+      causationId: persistedParent!.id,
       created: new Date(),
     };
     const child2: any = {
@@ -164,12 +178,12 @@ describe('PgEventStoreAdapter Integration', () => {
       type: 'Updated',
       payload: {},
       identifier: 'integ-order-1',
-      causationId: parent.id,
+      causationId: persistedParent!.id,
       created: new Date(),
     };
     await adapter.append([child1, child2]);
 
-    const descendants = await adapter.findByCausationId(parent.id);
+    const descendants = await adapter.findByCausationId(persistedParent!.id);
     expect(descendants).toHaveLength(2);
   });
 
@@ -190,11 +204,14 @@ describe('PgEventStoreAdapter Integration', () => {
     expect(pages[1]).toHaveLength(2);
   });
 
-  it('getAllEvents returns events ordered by created, id', async () => {
-    // Append multiple events to a single stream
-    await adapter.append([makeEvent(1, 'stream-1')]);
-    await adapter.append([makeEvent(2, 'stream-1')]);
-    await adapter.append([makeEvent(3, 'stream-1')]);
+  it('getAllEvents returns events in append order even when created is out of order', async () => {
+    const lateFirst = makeEvent(1, 'stream-1');
+    const earlySecond = makeEvent(2, 'stream-1');
+    lateFirst.created = new Date('2026-01-03T00:00:00.000Z');
+    earlySecond.created = new Date('2026-01-01T00:00:00.000Z');
+
+    await adapter.append([lateFirst]);
+    await adapter.append([earlySecond]);
 
     const iter = await adapter.getAllEvents(10);
     const all: PersistedEvent[] = [];
@@ -202,12 +219,8 @@ describe('PgEventStoreAdapter Integration', () => {
       all.push(...batch);
     }
 
-    // Should retrieve all 3 events
-    expect(all).toHaveLength(3);
-    // Verify ordering: events should be ordered by created ASC, id ASC
-    for (let i = 1; i < all.length; i++) {
-      expect(all[i].created >= all[i - 1].created).toBe(true);
-    }
+    expect(all).toHaveLength(2);
+    expect(all.map((event) => event.id)).toEqual([lateFirst.id, earlySecond.id]);
   });
 
   it('snapshot stores and retrieves state correctly', async () => {
@@ -333,6 +346,15 @@ describe('PgEventStoreAdapter Integration', () => {
   it('findByCausationId returns all descendants in creation order', async () => {
     const parent: any = { ...makeEvent(1, 'causal-1'), id: undefined };
     await adapter.append([parent]);
+    const allEvents = await adapter.getAllEvents(10);
+    const persisted: PersistedEvent[] = [];
+    for await (const batch of allEvents) {
+      persisted.push(...batch);
+    }
+    const persistedParent = persisted.find(
+      (event) => event.type === parent.type && event.identifier === 'integ-causal-1'
+    );
+    expect(persistedParent?.id).toBeDefined();
 
     const child1: any = {
       id: undefined,
@@ -340,7 +362,7 @@ describe('PgEventStoreAdapter Integration', () => {
       type: 'Updated',
       payload: {},
       identifier: 'causal-1',
-      causationId: parent.id,
+      causationId: persistedParent!.id,
       created: new Date(Date.now() + 100),
     };
     const child2: any = {
@@ -349,15 +371,16 @@ describe('PgEventStoreAdapter Integration', () => {
       type: 'Updated',
       payload: {},
       identifier: 'causal-1',
-      causationId: parent.id,
+      causationId: persistedParent!.id,
       created: new Date(Date.now() + 200),
     };
     await adapter.append([child1, child2]);
 
-    const descendants = await adapter.findByCausationId(parent.id);
+    const descendants = await adapter.findByCausationId(persistedParent!.id);
     expect(descendants).toHaveLength(2);
-    // Should be ordered by created ASC
-    expect(descendants[0].created < descendants[1].created).toBe(true);
+    // Should preserve append order
+    expect(descendants[0].created.getTime()).toBe(child1.created.getTime());
+    expect(descendants[1].created.getTime()).toBe(child2.created.getTime());
   });
 
   it('getStreamEvents returns empty array for non-existent stream', async () => {
@@ -570,7 +593,7 @@ describe('PgEventStoreAdapter Integration', () => {
     expect(result).toBeNull();
   });
 
-  it('events with empty identifier are stored and retrieved correctly', async () => {
+  it('append rejects empty identifiers', async () => {
     const event: any = {
       id: `empty-id-${Date.now()}`,
       domain: 'test',
@@ -579,11 +602,9 @@ describe('PgEventStoreAdapter Integration', () => {
       identifier: '',
       created: new Date(),
     };
-    await adapter.append([event]);
-
-    const retrieved = await adapter.getEventById(event.id);
-    // Empty identifier is normalized to undefined per adapter design
-    expect(retrieved?.identifier).toBeUndefined();
+    await expect(adapter.append([event])).rejects.toMatchObject({
+      name: 'InvalidIdentifierError',
+    });
   });
 
   it('appendToStream with wrong expectedVersion throws', async () => {

@@ -4,6 +4,9 @@ Pure event-log infrastructure for appending, scanning, streaming, exporting, imp
 
 This package does not expose aggregate runtime concepts. Observers receive persisted events only.
 
+`core.stream()` requires a `StreamEventStoreAdapter`.
+`rebuildReadModels()` waits for all observer work to finish before it resolves.
+
 ```ts
 import { makeEventStoreCore } from '@schemeless/event-store-core';
 

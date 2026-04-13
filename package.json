@@ -8,7 +8,7 @@
     "nohoist": []
   },
   "scripts": {
-    "test": "lerna run test",
+    "test": "lerna run test --concurrency 1",
     "bootstrap": "yarn && lerna run prepublish",
     "lerna-test": "lerna run test",
     "lock:regen": "lerna run lock:regen",

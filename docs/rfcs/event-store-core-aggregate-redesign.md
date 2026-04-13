@@ -124,11 +124,11 @@ It is not responsible for:
 
 ```ts
 export interface EventStoreCore {
-  append(events: PersistedEvent[]): Promise<void>;
+  append(events: AppendableEvent[]): Promise<void>;
 
   stream(domain: string, identifier: string, options?: { fromSequence?: number }): Promise<PersistedEvent[]>;
 
-  scan(options?: { pageSize?: number; startFromId?: string }): Promise<AsyncIterable<PersistedEvent[]>>;
+  scan(options?: { pageSize?: number; startFromId?: string }): AsyncIterable<PersistedEvent[]>;
 
   rebuildReadModels(options?: {
     startFromId?: string;
@@ -136,7 +136,7 @@ export interface EventStoreCore {
     reset?: () => Promise<void>;
   }): Promise<void>;
 
-  export(options?: { pageSize?: number }): Promise<PersistedEvent[]>;
+  export(options?: { pageSize?: number }): AsyncIterable<PersistedEvent[]>;
 
   import(
     events: PersistedEvent[],
@@ -157,12 +157,14 @@ export interface Observer {
   filters: Array<{ domain: string; type: string }>;
   priority?: number;
   fireAndForget?: boolean;
+  onError?: (error: unknown, event: PersistedEvent) => void;
 
   apply(event: PersistedEvent): Promise<void> | void;
 }
 ```
 
 Observers do not receive aggregate state. Aggregate state belongs to the aggregate runtime, not the replay engine.
+`rebuildReadModels()` still waits for all observer work to finish before it resolves.
 
 ## Aggregate Layer
 
@@ -200,7 +202,7 @@ export interface AggregateDefinition<Command, Event extends DomainEvent, State> 
   name: string;
   domain: string;
 
-  getIdentifier(input: Command | Event): string;
+  getIdentifier(command: Command): string;
 
   initialState: State;
 
@@ -318,7 +320,7 @@ export interface EventStoreAdapter {
   init(): Promise<void>;
   close?(): Promise<void>;
 
-  append(events: PersistedEvent[]): Promise<void>;
+  append(events: AppendableEvent[]): Promise<void>;
 
   getAllEvents(pageSize?: number, startFromId?: string): Promise<AsyncIterable<PersistedEvent[]>>;
 }
@@ -330,7 +332,7 @@ export interface EventStoreAdapter {
 export interface StreamEventStoreAdapter extends EventStoreAdapter {
   getStreamEvents(domain: string, identifier: string, fromSequence?: number): Promise<PersistedEvent[]>;
 
-  appendToStream(events: PersistedEvent[], expectedVersion: number): Promise<{ nextVersion: number }>;
+  appendToStream(events: StreamAppendableEvent[], expectedVersion: number): Promise<{ nextVersion: number }>;
 
   getSnapshot?<State>(domain: string, identifier: string): Promise<Snapshot<State> | null>;
 
@@ -343,6 +345,8 @@ export interface StreamEventStoreAdapter extends EventStoreAdapter {
   };
 }
 ```
+
+`appendToStream()` is single-stream only, and stream operations require a non-empty `identifier`.
 
 ### Capability Meaning
 

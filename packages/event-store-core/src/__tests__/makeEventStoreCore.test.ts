@@ -1,4 +1,5 @@
 import { makeEventStoreCore } from '../makeEventStoreCore';
+import { AdapterCapabilityError } from '@schemeless/event-store-types';
 import type { EventStoreCoreRepo, PersistedEvent } from '../types';
 import * as exportImport from '../exportImport';
 import * as rebuildReadModelsModule from '../rebuildReadModels';
@@ -65,71 +66,14 @@ describe('makeEventStoreCore', () => {
       expect(repo.getStreamEvents).toHaveBeenCalledWith('test', 'agg-1', 5);
     });
 
-    it('falls back to getAllEvents when getStreamEvents not available', async () => {
+    it('throws a capability error when getStreamEvents is not available', async () => {
       const repo = mockRepo({
         getStreamEvents: undefined,
       });
-      const event = makeEvent({ domain: 'test', identifier: 'agg-1' });
-      const mockIterator = {
-        [Symbol.asyncIterator]: jest.fn().mockReturnValue({
-          next: jest
-            .fn()
-            .mockResolvedValueOnce({ value: [event], done: false })
-            .mockResolvedValueOnce({ value: [], done: false })
-            .mockResolvedValueOnce({ value: undefined, done: true }),
-        }),
-      };
-      (repo.getAllEvents as jest.Mock).mockResolvedValue(mockIterator);
       const core = makeEventStoreCore(repo);
 
-      await core.stream('test', 'agg-1');
-
-      expect(repo.getAllEvents).toHaveBeenCalled();
-    });
-
-    it('filters by domain and identifier when using getAllEvents fallback', async () => {
-      const repo = mockRepo({
-        getStreamEvents: undefined,
-      });
-      const matchingEvent = makeEvent({ domain: 'test', identifier: 'agg-1', id: 'event-1' });
-      const otherEvent = makeEvent({ domain: 'other', identifier: 'other-agg', id: 'event-2' });
-      const mockIterator = {
-        [Symbol.asyncIterator]: jest.fn().mockReturnValue({
-          next: jest
-            .fn()
-            .mockResolvedValueOnce({ value: [matchingEvent, otherEvent], done: false })
-            .mockResolvedValueOnce({ value: undefined, done: true }),
-        }),
-      };
-      (repo.getAllEvents as jest.Mock).mockResolvedValue(mockIterator);
-      const core = makeEventStoreCore(repo);
-
-      const result = await core.stream('test', 'agg-1');
-
-      expect(result).toEqual([matchingEvent]);
-    });
-
-    it('filters by fromSequence when using getAllEvents fallback', async () => {
-      const repo = mockRepo({
-        getStreamEvents: undefined,
-      });
-      const event1 = makeEvent({ sequence: 1, id: 'event-1' });
-      const event3 = makeEvent({ sequence: 3, id: 'event-3' });
-      const event5 = makeEvent({ sequence: 5, id: 'event-5' });
-      const mockIterator = {
-        [Symbol.asyncIterator]: jest.fn().mockReturnValue({
-          next: jest
-            .fn()
-            .mockResolvedValueOnce({ value: [event1, event3, event5], done: false })
-            .mockResolvedValueOnce({ value: undefined, done: true }),
-        }),
-      };
-      (repo.getAllEvents as jest.Mock).mockResolvedValue(mockIterator);
-      const core = makeEventStoreCore(repo);
-
-      const result = await core.stream('test', 'agg-1', { fromSequence: 2 });
-
-      expect(result).toEqual([event3, event5]);
+      await expect(core.stream('test', 'agg-1')).rejects.toBeInstanceOf(AdapterCapabilityError);
+      expect(repo.getAllEvents).not.toHaveBeenCalled();
     });
   });
 

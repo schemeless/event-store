@@ -1,4 +1,5 @@
-const { makeEventStoreCore } = require('../dist/index.js');
+const { AdapterCapabilityError } = require('@schemeless/event-store-types');
+const { makeEventStoreCore } = require('../src');
 
 const event = (overrides = {}) => ({
   id: 'e1',
@@ -45,6 +46,14 @@ describe('event-store-core', () => {
     expect(result).toHaveLength(1);
   });
 
+  it('stream throws when repo does not support stream queries', async () => {
+    const repo = makeRepo({ getStreamEvents: undefined });
+    const core = makeEventStoreCore(repo);
+
+    await expect(core.stream('test', 'abc')).rejects.toBeInstanceOf(AdapterCapabilityError);
+    expect(repo.getAllEvents).not.toHaveBeenCalled();
+  });
+
   it('scan returns paginated iterator', async () => {
     const repo = makeRepo({ getAllEvents: jest.fn(async () => buildIterator([[event()], []])) });
     const core = makeEventStoreCore(repo);
@@ -79,7 +88,7 @@ describe('event-store-core', () => {
     expect(calls).toEqual(['early', 'late']);
   });
 
-  it('fire-and-forget observer does not block rebuild', async () => {
+  it('rebuildReadModels waits for fire-and-forget observers to finish', async () => {
     let done = false;
     const observers = [
       {
@@ -96,7 +105,7 @@ describe('event-store-core', () => {
     const core = makeEventStoreCore(repo);
 
     await core.rebuildReadModels({ observers });
-    expect(done).toBe(false);
+    expect(done).toBe(true);
   });
 
   it('export and import round trip', async () => {

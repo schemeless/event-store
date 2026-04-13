@@ -1,5 +1,11 @@
-import type { AppendableEvent, PersistedEvent, StreamEventStoreAdapter } from '@schemeless/event-store-types';
-export { StreamConcurrencyError } from '@schemeless/event-store-types';
+import type {
+  AppendableEvent,
+  PersistedEvent,
+  Snapshot,
+  StreamAppendableEvent,
+  StreamEventStoreAdapter,
+} from '@schemeless/event-store-types';
+export { InvalidIdentifierError, StreamConcurrencyError } from '@schemeless/event-store-types';
 export type { PersistedEvent, Snapshot } from '@schemeless/event-store-types';
 
 export type DomainEvent = PersistedEvent;
@@ -33,6 +39,18 @@ export interface HandleResult<Event extends DecidedEvent, State> extends Hydrate
   events: Event[];
 }
 
+export interface SnapshotFailureInfo<State = unknown> {
+  aggregateName: string;
+  domain: string;
+  identifier: string;
+  command: unknown;
+  snapshot: Snapshot<State>;
+}
+
+export interface AggregateRuntimeOptions {
+  onSnapshotError?(error: unknown, info: SnapshotFailureInfo): void;
+}
+
 export interface AggregateRuntime {
   handle<C, E extends DecidedEvent, S>(
     aggregate: AggregateDefinition<C, E, S>,
@@ -48,3 +66,5 @@ export type AggregateRuntimeAdapter = Pick<
   StreamEventStoreAdapter,
   'getStreamEvents' | 'appendToStream' | 'getSnapshot' | 'saveSnapshot'
 >;
+
+export type CanonicalStreamEvent<Payload = any> = StreamAppendableEvent<Payload>;

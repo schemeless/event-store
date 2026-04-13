@@ -12,6 +12,12 @@ Expo SQLite adapter for the V6 event-store contracts.
 - `saveSnapshot(snapshot)`
 - `reset()` for tests and import replacement flows
 
+## Semantics
+
+- `appendToStream(events, expectedVersion)` accepts one stream per call.
+- `getAllEvents()` and rebuild/export flows follow storage commit order.
+- `startFromId` is a strict cursor and must reference an existing event id.
+
 ## Install
 
 ```bash

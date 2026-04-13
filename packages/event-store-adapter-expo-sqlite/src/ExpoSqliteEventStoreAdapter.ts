@@ -2,9 +2,13 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { monotonicFactory } from 'ulid';
 import {
   AppendableEvent,
+  EventCursorNotFoundError,
+  InvalidIdentifierError,
+  InvalidStreamBatchError,
   PersistedEvent,
   Snapshot,
   StreamConcurrencyError,
+  StreamAppendableEvent,
   StreamEventStoreAdapter,
 } from '@schemeless/event-store-types';
 
@@ -116,19 +120,54 @@ export class ExpoSqliteEventStoreAdapter implements StreamEventStoreAdapter {
     };
   }
 
-  private ensureEventIds(events: AppendableEvent[]): PersistedEvent[] {
-    return events.map((event) => {
-      if (!event.id) {
-        event.id = monotonicUlid();
+  private normalizeOptionalIdentifier(identifier: string | undefined, context: string): string {
+    if (identifier == null) {
+      return '';
+    }
+    if (identifier.trim().length === 0) {
+      throw new InvalidIdentifierError(`${context} requires a non-empty identifier`);
+    }
+    return identifier;
+  }
+
+  private assertStreamIdentifier(identifier: string, context: string): string {
+    return this.normalizeOptionalIdentifier(identifier, context);
+  }
+
+  private assertSingleStream(events: Array<{ domain: string; identifier: string }>): {
+    domain: string;
+    identifier: string;
+  } {
+    const first = events[0];
+    if (!first) {
+      throw new InvalidStreamBatchError('appendToStream requires at least one event');
+    }
+    for (const event of events) {
+      if (event.domain !== first.domain || event.identifier !== first.identifier) {
+        throw new InvalidStreamBatchError('appendToStream only accepts events from a single domain/identifier stream');
       }
-      return event as PersistedEvent;
+    }
+    return first;
+  }
+
+  private ensureEventIds(events: AppendableEvent[]): Array<PersistedEvent & { identifier: string }> {
+    return events.map((event) => {
+      const identifier = this.normalizeOptionalIdentifier(event.identifier, 'Persisted events');
+      return {
+        ...event,
+        id: event.id ?? monotonicUlid(),
+        identifier,
+        created: event.created instanceof Date ? event.created : new Date(event.created ?? Date.now()),
+      } as PersistedEvent & { identifier: string };
     });
   }
 
-  private groupEventsByStream(events: PersistedEvent[]): Map<string, PersistedEvent[]> {
-    const grouped = new Map<string, PersistedEvent[]>();
+  private groupEventsByStream(
+    events: Array<PersistedEvent & { identifier: string }>
+  ): Map<string, Array<PersistedEvent & { identifier: string }>> {
+    const grouped = new Map<string, Array<PersistedEvent & { identifier: string }>>();
     for (const event of events) {
-      const key = `${event.domain}::${event.identifier ?? ''}`;
+      const key = `${event.domain}::${event.identifier}`;
       if (!grouped.has(key)) {
         grouped.set(key, []);
       }
@@ -196,14 +235,19 @@ export class ExpoSqliteEventStoreAdapter implements StreamEventStoreAdapter {
     await this.appendGroupedEvents(events);
   }
 
-  async appendToStream(events: AppendableEvent[], expectedVersion: number): Promise<{ nextVersion: number }> {
+  async appendToStream(events: StreamAppendableEvent[], expectedVersion: number): Promise<{ nextVersion: number }> {
     if (!events.length) {
       return { nextVersion: expectedVersion };
     }
 
+    const first = this.assertSingleStream(
+      events.map((event) => ({
+        domain: event.domain,
+        identifier: this.assertStreamIdentifier(event.identifier, 'appendToStream'),
+      }))
+    );
     const versions = await this.appendGroupedEvents(events, { expectedVersion });
-    const first = events[0];
-    const key = `${first.domain}::${first.identifier ?? ''}`;
+    const key = `${first.domain}::${first.identifier}`;
     return { nextVersion: versions.get(key) ?? expectedVersion };
   }
 
@@ -212,25 +256,19 @@ export class ExpoSqliteEventStoreAdapter implements StreamEventStoreAdapter {
     startFromId?: string
   ): Promise<AsyncIterableIterator<Array<PersistedEvent>>> {
     const self = this;
-    let cursorCreated: number | null = null;
-    let cursorId: string | null = null;
+    let cursorRowId: number | null = null;
     let hasMore = true;
 
     if (startFromId) {
-      const startRow = (await this.db.getFirstAsync(`SELECT created, id FROM ${this.tableName} WHERE id = ?`, [
+      const startRow = (await this.db.getFirstAsync(`SELECT rowid AS rowid FROM ${this.tableName} WHERE id = ?`, [
         startFromId,
-      ])) as { created: number; id: string } | null;
+      ])) as { rowid: number } | null;
 
-      if (startRow) {
-        cursorCreated = startRow.created;
-        cursorId = startRow.id;
-      } else {
-        cursorCreated = null;
-        cursorId = startFromId;
+      if (!startRow) {
+        throw new EventCursorNotFoundError(startFromId);
       }
+      cursorRowId = startRow.rowid;
     }
-
-    const useFallback = startFromId != null && cursorCreated === null;
 
     return {
       async next() {
@@ -239,24 +277,17 @@ export class ExpoSqliteEventStoreAdapter implements StreamEventStoreAdapter {
         }
 
         let rows: RawEventRow[];
-        if (useFallback && cursorCreated === null) {
+        if (cursorRowId !== null) {
           rows = (await self.db.getAllAsync(
             `SELECT * FROM ${self.tableName}
-             WHERE id > ?
-             ORDER BY created ASC, id ASC LIMIT ?`,
-            [cursorId!, pageSize]
-          )) as RawEventRow[];
-        } else if (cursorCreated !== null && cursorId !== null) {
-          rows = (await self.db.getAllAsync(
-            `SELECT * FROM ${self.tableName}
-             WHERE (created > ?) OR (created = ? AND id > ?)
-             ORDER BY created ASC, id ASC LIMIT ?`,
-            [cursorCreated, cursorCreated, cursorId, pageSize]
+             WHERE rowid > ?
+             ORDER BY rowid ASC LIMIT ?`,
+            [cursorRowId, pageSize]
           )) as RawEventRow[];
         } else {
           rows = (await self.db.getAllAsync(
             `SELECT * FROM ${self.tableName}
-             ORDER BY created ASC, id ASC LIMIT ?`,
+             ORDER BY rowid ASC LIMIT ?`,
             [pageSize]
           )) as RawEventRow[];
         }
@@ -267,8 +298,11 @@ export class ExpoSqliteEventStoreAdapter implements StreamEventStoreAdapter {
         }
 
         const lastRow = rows[rows.length - 1];
-        cursorCreated = lastRow.created;
-        cursorId = lastRow.id;
+        const lastCursorRow = (await self.db.getFirstAsync(
+          `SELECT rowid AS rowid FROM ${self.tableName} WHERE id = ?`,
+          [lastRow.id]
+        )) as { rowid: number } | null;
+        cursorRowId = lastCursorRow?.rowid ?? cursorRowId;
         if (rows.length < pageSize) {
           hasMore = false;
         }
@@ -294,27 +328,29 @@ export class ExpoSqliteEventStoreAdapter implements StreamEventStoreAdapter {
 
   async findByCausationId(causationId: string): Promise<PersistedEvent[]> {
     const rows = (await this.db.getAllAsync(
-      `SELECT * FROM ${this.tableName} WHERE causationId = ? ORDER BY created ASC, id ASC`,
+      `SELECT * FROM ${this.tableName} WHERE causationId = ? ORDER BY rowid ASC`,
       [causationId]
     )) as RawEventRow[];
     return rows.map((row) => this.mapRowToEvent(row));
   }
 
   async getStreamEvents(domain: string, identifier: string, fromSequence: number = 0): Promise<PersistedEvent[]> {
+    const canonicalIdentifier = this.assertStreamIdentifier(identifier, 'getStreamEvents');
     const rows = (await this.db.getAllAsync(
       `SELECT * FROM ${this.tableName}
        WHERE domain = ? AND identifier = ? AND sequence > ?
        ORDER BY sequence ASC`,
-      [domain, identifier || '', fromSequence]
+      [domain, canonicalIdentifier, fromSequence]
     )) as RawEventRow[];
     return rows.map((row) => this.mapRowToEvent(row));
   }
 
   async getSnapshot<State>(domain: string, identifier: string): Promise<Snapshot<State> | null> {
+    const canonicalIdentifier = this.assertStreamIdentifier(identifier, 'getSnapshot');
     const row = (await this.db.getFirstAsync(
       `SELECT * FROM ${this.snapshotTableName}
        WHERE domain = ? AND identifier = ?`,
-      [domain, identifier]
+      [domain, canonicalIdentifier]
     )) as { domain: string; identifier: string; state: string; sequence: number; created: number } | null;
 
     if (!row) {
@@ -331,13 +367,14 @@ export class ExpoSqliteEventStoreAdapter implements StreamEventStoreAdapter {
   }
 
   async saveSnapshot<State>(snapshot: Snapshot<State>): Promise<void> {
+    const identifier = this.assertStreamIdentifier(snapshot.identifier, 'saveSnapshot');
     await this.db.runAsync(
       `INSERT OR REPLACE INTO ${this.snapshotTableName}
        (domain, identifier, state, sequence, created)
        VALUES (?, ?, ?, ?, ?)`,
       [
         snapshot.domain,
-        snapshot.identifier,
+        identifier,
         JSON.stringify(snapshot.state),
         snapshot.sequence,
         (snapshot.created instanceof Date ? snapshot.created : new Date(snapshot.created)).getTime(),

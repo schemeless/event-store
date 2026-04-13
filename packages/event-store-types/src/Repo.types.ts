@@ -11,6 +11,13 @@ export type AppendableEvent<Payload = any, META extends EventMeta = EventMeta> =
   id?: string;
 };
 
+export type StreamAppendableEvent<Payload = any, META extends EventMeta = EventMeta> = AppendableEvent<
+  Payload,
+  META
+> & {
+  identifier: string;
+};
+
 export interface Snapshot<State = any> {
   domain: string;
   identifier: string;
@@ -29,7 +36,7 @@ export interface EventStoreAdapter {
 
 export interface StreamEventStoreAdapter extends EventStoreAdapter {
   getStreamEvents(domain: string, identifier: string, fromSequence?: number): Promise<PersistedEvent[]>;
-  appendToStream(events: AppendableEvent[], expectedVersion: number): Promise<{ nextVersion: number }>;
+  appendToStream(events: StreamAppendableEvent[], expectedVersion: number): Promise<{ nextVersion: number }>;
   getSnapshot?<State>(domain: string, identifier: string): Promise<Snapshot<State> | null>;
   saveSnapshot?<State>(snapshot: Snapshot<State>): Promise<void>;
   capabilities: {
