@@ -3,7 +3,7 @@ name: Publish Packages
 on:
   push:
     tags:
-      - "v*"
+      - 'v*'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -78,7 +78,7 @@ jobs:
         run: yarn lerna run compile
 
       - name: Run tests
-        run: yarn lerna run test
+        run: yarn lerna run test --concurrency 1
 
       - name: Publish packages
         env:
