@@ -48,7 +48,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           registry-url: https://registry.npmjs.org
           cache: yarn
 
@@ -99,7 +99,16 @@ jobs:
             VERSION="$(node -p "require('./lerna.json').version")"
             NPM_TAG=latest
             if [[ "${VERSION}" == *-* ]]; then NPM_TAG=next; fi
-            npx lerna publish from-package --yes --no-verify-access --dist-tag "${NPM_TAG}"
+            # Modern npm supports existing OIDC trusted publishers, then token auth.
+            # Publish types first so downstream prerelease dependencies are available.
+            for package_dir in packages/event-store-types packages/event-store-core packages/event-store-aggregate packages/event-store-revert packages/event-store-adapter-pg packages/event-store-adapter-expo-sqlite; do
+              NAME="$(node -p "require('./${package_dir}/package.json').name")"
+              if npm view "${NAME}@${VERSION}" version >/dev/null 2>&1; then
+                echo "Already published: ${NAME}@${VERSION}"
+              else
+                (cd "${package_dir}" && npx --yes npm@11 publish --access public --tag "${NPM_TAG}")
+              fi
+            done
           fi
 
       - name: Create GitHub Release
