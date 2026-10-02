@@ -81,8 +81,6 @@ jobs:
         run: yarn lerna run test --concurrency 1
 
       - name: Publish packages
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
 
@@ -99,7 +97,7 @@ jobs:
             VERSION="$(node -p "require('./lerna.json').version")"
             NPM_TAG=latest
             if [[ "${VERSION}" == *-* ]]; then NPM_TAG=next; fi
-            # Modern npm supports existing OIDC trusted publishers, then token auth.
+            # Authenticate with the package-specific GitHub Actions OIDC trust.
             # Publish types first so downstream prerelease dependencies are available.
             for package_dir in packages/event-store-types packages/event-store-core packages/event-store-aggregate packages/event-store-revert packages/event-store-adapter-pg packages/event-store-adapter-expo-sqlite; do
               NAME="$(node -p "require('./${package_dir}/package.json').name")"
