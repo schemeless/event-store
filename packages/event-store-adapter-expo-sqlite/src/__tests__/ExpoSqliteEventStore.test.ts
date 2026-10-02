@@ -175,8 +175,8 @@ describe('ExpoSqliteEventStoreAdapter', () => {
     adapter = new ExpoSqliteEventStoreAdapter(ctx.db);
   });
 
-  it('does not advertise PostgreSQL-only batch or incremental capabilities', () => {
-    expect(supportsAppendBatch(adapter)).toBe(false);
+  it('advertises batch support without incremental log support', () => {
+    expect(supportsAppendBatch(adapter)).toBe(true);
     expect(supportsIncrementalLog(adapter)).toBe(false);
   });
 

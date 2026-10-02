@@ -109,3 +109,12 @@ The V6 PostgreSQL adapter supports optional `appendBatch`, `getStreamVersions`,
 incremental checkpoints. See the [PostgreSQL API and receipt example](packages/event-store-adapter-pg/readme.md).
 The existing global event ID/position cursor is allocation ordered, not commit
 ordered; use the new stream-vector cursor for concurrent incremental consumers.
+
+### Expo SQLite atomic batches (V6 RC.7)
+
+Expo SQLite also supports optional `appendBatch` and `getStreamVersions`, preserving
+input order with atomic version checks and rollback. See the [SQLite API and native
+platform limits](packages/event-store-adapter-expo-sqlite/readme.md). Consumer receipt
+transaction composition remains PostgreSQL-specific. Core replay/rebuild/export
+requires stopped writers for completeness; see [adapter boundaries](docs/adapters.md).
+Repository tests use Node 22.13+ for real SQLite engine coverage.

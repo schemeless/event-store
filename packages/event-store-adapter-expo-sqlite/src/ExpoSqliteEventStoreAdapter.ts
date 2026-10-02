@@ -2,6 +2,9 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { monotonicFactory } from 'ulid';
 import {
   AppendableEvent,
+  BatchEventStoreAdapter,
+  DuplicateEventError,
+  ExpectedStreamVersion,
   EventCursorNotFoundError,
   InvalidIdentifierError,
   InvalidStreamBatchError,
@@ -9,7 +12,6 @@ import {
   Snapshot,
   StreamConcurrencyError,
   StreamAppendableEvent,
-  StreamEventStoreAdapter,
 } from '@schemeless/event-store-types';
 
 export interface ExpoSqliteAdapterOptions {
@@ -39,7 +41,7 @@ function assertValidTableName(name: string): void {
   }
 }
 
-export class ExpoSqliteEventStoreAdapter implements StreamEventStoreAdapter {
+export class ExpoSqliteEventStoreAdapter implements BatchEventStoreAdapter {
   private readonly db: SQLiteDatabase;
   private readonly tableName: string;
   private readonly snapshotTableName: string;
@@ -118,7 +120,7 @@ export class ExpoSqliteEventStoreAdapter implements StreamEventStoreAdapter {
     if (identifier == null) {
       return '';
     }
-    if (identifier.trim().length === 0) {
+    if (typeof identifier !== 'string' || identifier.trim().length === 0) {
       throw new InvalidIdentifierError(`${context} requires a non-empty identifier`);
     }
     return identifier;
@@ -152,49 +154,82 @@ export class ExpoSqliteEventStoreAdapter implements StreamEventStoreAdapter {
     });
   }
 
-  private groupEventsByStream(
-    events: Array<PersistedEvent & { identifier: string }>
-  ): Map<string, Array<PersistedEvent & { identifier: string }>> {
-    const grouped = new Map<string, Array<PersistedEvent & { identifier: string }>>();
-    for (const event of events) {
-      const key = `${event.domain}::${event.identifier}`;
-      if (!grouped.has(key)) {
-        grouped.set(key, []);
-      }
-      grouped.get(key)!.push(event);
-    }
-    return grouped;
+  private streamKey(stream: { domain: string; identifier?: string }): string {
+    return JSON.stringify([stream.domain, stream.identifier ?? '']);
   }
 
-  private async appendGroupedEvents(
-    events: AppendableEvent[],
-    options?: { expectedVersion?: number }
-  ): Promise<Map<string, number>> {
-    if (!events.length) {
-      return new Map();
-    }
+  private async readVersion(txn: SQLiteDatabase, domain: string, identifier: string): Promise<number> {
+    const row = await txn.getFirstAsync<{ maxseq: number }>(
+      `SELECT COALESCE(MAX(sequence), 0) as maxseq FROM ${this.tableName} WHERE domain = ? AND identifier = ?`,
+      [domain, identifier]
+    );
+    return row?.maxseq ?? 0;
+  }
 
-    const eventsWithIds = this.ensureEventIds(events);
-    const versions = new Map<string, number>();
+  async getStreamVersions(
+    streams: readonly Pick<ExpectedStreamVersion, 'domain' | 'identifier'>[]
+  ): Promise<ExpectedStreamVersion[]> {
+    const input = streams.map((stream) => ({
+      domain: stream.domain,
+      identifier: this.normalizeOptionalIdentifier(stream.identifier, 'getStreamVersions'),
+    }));
+    const result: ExpectedStreamVersion[] = [];
     await this.db.withExclusiveTransactionAsync(async (txn) => {
-      for (const [streamKey, streamEvents] of this.groupEventsByStream(eventsWithIds).entries()) {
-        const [domain, ...rest] = streamKey.split('::');
-        const identifier = rest.join('::');
+      for (const stream of input)
+        result.push({
+          domain: stream.domain,
+          identifier: stream.identifier || undefined,
+          expectedVersion: await this.readVersion(txn, stream.domain, stream.identifier),
+        });
+    });
+    return result;
+  }
 
-        const row = (await txn.getFirstAsync(
-          `SELECT COALESCE(MAX(sequence), 0) as maxseq
-           FROM ${this.tableName}
-           WHERE domain = ? AND identifier = ?`,
-          [domain, identifier]
-        )) as { maxseq: number } | null;
-        const currentVersion = row?.maxseq ?? 0;
+  private async appendEvents(events: AppendableEvent[], expected?: readonly ExpectedStreamVersion[]): Promise<void> {
+    const versions = new Map<string, ExpectedStreamVersion>();
+    for (const stream of expected ?? []) {
+      this.normalizeOptionalIdentifier(stream.identifier, 'Expected stream');
+      if (!Number.isSafeInteger(stream.expectedVersion) || stream.expectedVersion < 0) {
+        throw new InvalidStreamBatchError('Expected versions must be non-negative safe integers');
+      }
+      const key = this.streamKey(stream);
+      if (versions.has(key)) throw new InvalidStreamBatchError('Duplicate expected stream version');
+      versions.set(key, { ...stream });
+    }
+    const prepared = this.ensureEventIds(events);
+    const streams = new Map<string, { domain: string; identifier: string }>();
+    for (const event of prepared) {
+      const key = this.streamKey(event);
+      if (expected !== undefined && !versions.has(key)) {
+        throw new InvalidStreamBatchError('Every written stream needs an expected version');
+      }
+      streams.set(key, { domain: event.domain, identifier: event.identifier });
+    }
+    for (const [key, stream] of versions)
+      streams.set(key, {
+        domain: stream.domain,
+        identifier: stream.identifier ?? '',
+      });
+    if (!streams.size) return;
 
-        if (options?.expectedVersion !== undefined && currentVersion !== options.expectedVersion) {
-          throw new StreamConcurrencyError(domain, identifier, options.expectedVersion, currentVersion);
+    await this.db.withExclusiveTransactionAsync(async (txn) => {
+      // Acquire SQLite's writer reservation before reading, including for empty streams.
+      // A deferred read-first transaction could otherwise fail upgrading a stale snapshot.
+      await txn.runAsync(`UPDATE ${this.tableName} SET sequence = sequence WHERE 0`);
+      const current = new Map<string, number>();
+      for (const [key, stream] of streams) {
+        const actual = await this.readVersion(txn, stream.domain, stream.identifier);
+        const expectation = versions.get(key);
+        if (expectation && actual !== expectation.expectedVersion) {
+          throw new StreamConcurrencyError(stream.domain, stream.identifier, expectation.expectedVersion, actual);
         }
-
-        let nextSequence = currentVersion + 1;
-        for (const event of streamEvents) {
+        current.set(key, actual);
+      }
+      // Preserve caller order; stream sequences advance independently.
+      for (const event of prepared) {
+        const key = this.streamKey(event);
+        const sequence = current.get(key)! + 1;
+        try {
           await txn.runAsync(
             `INSERT INTO ${this.tableName}
              (id, domain, type, payload, meta, identifier, correlationId, causationId, sequence, created)
@@ -205,40 +240,45 @@ export class ExpoSqliteEventStoreAdapter implements StreamEventStoreAdapter {
               event.type,
               JSON.stringify(event.payload ?? null),
               event.meta != null ? JSON.stringify(event.meta) : null,
-              event.identifier ?? '',
+              event.identifier,
               event.correlationId ?? null,
               event.causationId ?? null,
-              nextSequence++,
-              (event.created instanceof Date ? event.created : new Date(event.created)).getTime(),
+              sequence,
+              event.created.getTime(),
             ]
           );
+        } catch (error) {
+          // Classify by the persisted ID, not by brittle native error-message matching.
+          const duplicate = await txn.getFirstAsync(`SELECT id FROM ${this.tableName} WHERE id = ?`, [event.id]);
+          if (duplicate) throw new DuplicateEventError(event.id);
+          throw error;
         }
-
-        versions.set(streamKey, currentVersion + streamEvents.length);
+        current.set(key, sequence);
       }
     });
-
-    return versions;
   }
 
   async append(events: AppendableEvent[]): Promise<void> {
-    await this.appendGroupedEvents(events);
+    await this.appendEvents(events);
+  }
+
+  async appendBatch(events: AppendableEvent[], expectedVersions: readonly ExpectedStreamVersion[]): Promise<void> {
+    await this.appendEvents(events, expectedVersions);
   }
 
   async appendToStream(events: StreamAppendableEvent[], expectedVersion: number): Promise<{ nextVersion: number }> {
-    if (!events.length) {
-      return { nextVersion: expectedVersion };
+    if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 0) {
+      throw new InvalidStreamBatchError('Expected versions must be non-negative safe integers');
     }
-
+    if (!events.length) return { nextVersion: expectedVersion };
     const first = this.assertSingleStream(
       events.map((event) => ({
         domain: event.domain,
         identifier: this.normalizeOptionalIdentifier(event.identifier, 'appendToStream'),
       }))
     );
-    const versions = await this.appendGroupedEvents(events, { expectedVersion });
-    const key = `${first.domain}::${first.identifier}`;
-    return { nextVersion: versions.get(key) ?? expectedVersion };
+    await this.appendBatch(events, [{ ...first, expectedVersion }]);
+    return { nextVersion: expectedVersion + events.length };
   }
 
   async getAllEvents(

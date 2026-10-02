@@ -30,7 +30,8 @@ await adapter.init();
 
 `appendBatch(events, expectedVersions): Promise<void>` is an optional capability
 exported as `BatchEventStoreAdapter` from `@schemeless/event-store-types`.
-Use `supportsAppendBatch(adapter)` to detect it; core and SQLite do not require it.
+Use `supportsAppendBatch(adapter)` to detect it; core does not require it.
+Expo SQLite also implements the batch capability starting in RC.7.
 Each written `(domain, identifier)` needs exactly one expected version. Additional
 entries validate read-only dependencies, including empty streams at version zero.
 Versions must be non-negative safe integers. Identifiers follow V6 rules: omit
@@ -104,6 +105,11 @@ const result = await adapter.withTransaction(async tx => {
   return receipt;
 });
 ```
+
+Consumers should additionally bind a command ID to an authenticated caller and a
+canonical request hash, rejecting reuse with different arguments. The example above
+only illustrates the transaction boundary; the library does not implement command
+deduplication or result replay.
 
 A failed receipt/outbox insert or callback exception rolls back the events and
 consumer SQL together. The receipt claim also rolls back on failure. A caught
@@ -232,3 +238,7 @@ PGPORT=55432 yarn test
 
 See [RC.6 validation record](../../docs/releases/6.0.0-rc.6.md) for exact results
 and acceptance coverage.
+
+Core replay/rebuild/export still use the legacy iterator. Stop writers and drain
+consumer work for a complete rebuild/export; an incremental vector page is not an
+atomic projection batch. See [rebuild boundaries](../../docs/adapters.md#rebuild-and-export-while-writers-are-active).
