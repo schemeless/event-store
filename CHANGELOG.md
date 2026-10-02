@@ -1,5 +1,24 @@
 # Changelog
 
+## [6.0.0-rc.6] - 2026-10-02
+
+### Added
+
+- Optional typed atomic multi-stream append and version-vector decision baselines.
+- PostgreSQL transaction scopes with same-connection consumer SQL and durable receipt composition.
+- Per-stream incremental log checkpoints that retain late commits across streams.
+- Real PostgreSQL concurrent-transaction acceptance tests and receipt/deduplication examples.
+
+### Fixed and clarified
+
+- Empty-stream write races, inconsistent stream lock ordering, and grouped-event log reordering.
+- Typed duplicate-event errors, scope lifetime checks, rollback on consumer failure, and bigint ID cursor precision.
+- Included the pending V6 contract simplification: explicit event types, method-based capability detection, and existing adapter updates.
+- Global position/ID cursors remain allocation ordered; documented alternatives for concurrency and whole-scope decisions.
+- Release dry runs now only pack; RC publications use npm next and GitHub prerelease status.
+
+See [validation and compatibility record](docs/releases/6.0.0-rc.6.md).
+
 ## [6.0.0-rc.2] - 2026-03-24
 
 ### Changed

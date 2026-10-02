@@ -5,8 +5,9 @@ V6 splits the repository into four layers:
 ```mermaid
 flowchart LR
   A["App / Command"] --> B["Aggregate Runtime"]
-  B --> C["Event Store Core"]
-  C --> D["Event Store Adapter"]
+  A --> C["Event Store Core"]
+  B --> D["Event Store Adapter"]
+  C --> D
   C --> E["Observers"]
   E --> F["Projection Store"]
 ```
@@ -26,7 +27,7 @@ flowchart LR
   - run `precondition`
   - `decide` domain events
   - `evolve` state
-  - append with optimistic concurrency
+  - append with optimistic concurrency through a `StreamEventStoreAdapter`
 
 - `@schemeless/event-store-types`
 
@@ -48,3 +49,4 @@ flowchart LR
 - `identifier` is the canonical aggregate key and must be non-empty for stream operations
 - `evolve` is the only state transition function
 - read-model rebuild is separate from aggregate hydrate
+- aggregate runtime and core are sibling entry points over the adapter; aggregate writes do not go through core

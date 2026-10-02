@@ -89,18 +89,28 @@ jobs:
           DRY_RUN='${{ github.event.inputs.dry_run || 'false' }}'
 
           if [ "${DRY_RUN}" = "true" ]; then
-            npx lerna publish from-package --yes --no-verify-access --loglevel verbose
+            # Packaging validation only: never invoke publish in dry-run mode.
+            for package_dir in packages/*; do
+              if [ "$(node -p "Boolean(require('./${package_dir}/package.json').private)")" = "false" ]; then
+                (cd "${package_dir}" && npm pack --dry-run)
+              fi
+            done
           else
-            npx lerna publish from-package --yes
+            VERSION="$(node -p "require('./lerna.json').version")"
+            NPM_TAG=latest
+            if [[ "${VERSION}" == *-* ]]; then NPM_TAG=next; fi
+            npx lerna publish from-package --yes --no-verify-access --dist-tag "${NPM_TAG}"
           fi
 
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') && github.event.inputs.dry_run != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
-          gh release create "${TAG}" \
+          RELEASE_ARGS=()
+          if [[ "${TAG}" == *-* ]]; then RELEASE_ARGS+=(--prerelease); fi
+          gh release create "${TAG}" "${RELEASE_ARGS[@]}" \
             --title "${TAG}" \
             --generate-notes \
             --verify-tag

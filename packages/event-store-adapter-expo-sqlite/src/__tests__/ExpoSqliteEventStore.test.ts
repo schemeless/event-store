@@ -1,3 +1,4 @@
+import { supportsAppendBatch, supportsIncrementalLog } from '@schemeless/event-store-types';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { PersistedEvent, StreamAppendableEvent } from '@schemeless/event-store-types';
 import { ExpoSqliteEventStoreAdapter } from '../ExpoSqliteEventStoreAdapter';
@@ -172,6 +173,11 @@ describe('ExpoSqliteEventStoreAdapter', () => {
   beforeEach(() => {
     ctx = createMockDb();
     adapter = new ExpoSqliteEventStoreAdapter(ctx.db);
+  });
+
+  it('does not advertise PostgreSQL-only batch or incremental capabilities', () => {
+    expect(supportsAppendBatch(adapter)).toBe(false);
+    expect(supportsIncrementalLog(adapter)).toBe(false);
   });
 
   it('rejects invalid table names', () => {

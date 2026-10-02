@@ -39,15 +39,44 @@ export interface StreamEventStoreAdapter extends EventStoreAdapter {
   appendToStream(events: StreamAppendableEvent[], expectedVersion: number): Promise<{ nextVersion: number }>;
   getSnapshot?<State>(domain: string, identifier: string): Promise<Snapshot<State> | null>;
   saveSnapshot?<State>(snapshot: Snapshot<State>): Promise<void>;
-  capabilities: {
-    streamQuery: true;
-    optimisticConcurrency: true;
-    snapshot?: boolean;
-  };
 }
 
 export interface RevertableEventStoreAdapter {
   getEventById(id: string): Promise<PersistedEvent | null>;
   findByCausationId(causationId: string): Promise<PersistedEvent[]>;
   append(events: AppendableEvent[]): Promise<void>;
+}
+
+/** Omit identifier for the legacy domain-only stream; empty identifiers are invalid. */
+export interface ExpectedStreamVersion {
+  domain: string;
+  identifier?: string;
+  expectedVersion: number;
+}
+
+/** Optional capability: core and other adapters need not implement this interface. */
+export interface BatchEventStoreAdapter extends StreamEventStoreAdapter {
+  appendBatch(events: AppendableEvent[], expectedVersions: readonly ExpectedStreamVersion[]): Promise<void>;
+  getStreamVersions(
+    streams: readonly Pick<ExpectedStreamVersion, 'domain' | 'identifier'>[]
+  ): Promise<ExpectedStreamVersion[]>;
+}
+
+/** A per-stream checkpoint, scoped to one adapter event table, not a commit-order cursor. */
+export interface StreamLogPage {
+  events: PersistedEvent[];
+  cursor: ExpectedStreamVersion[];
+}
+
+export interface IncrementalEventStoreAdapter extends EventStoreAdapter {
+  getLogPage(cursor?: readonly ExpectedStreamVersion[], pageSize?: number): Promise<StreamLogPage>;
+}
+
+export function supportsAppendBatch(adapter: EventStoreAdapter): adapter is BatchEventStoreAdapter {
+  const candidate = adapter as BatchEventStoreAdapter;
+  return typeof candidate.appendBatch === 'function' && typeof candidate.getStreamVersions === 'function';
+}
+
+export function supportsIncrementalLog(adapter: EventStoreAdapter): adapter is IncrementalEventStoreAdapter {
+  return typeof (adapter as IncrementalEventStoreAdapter).getLogPage === 'function';
 }

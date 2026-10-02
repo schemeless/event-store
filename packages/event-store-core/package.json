@@ -1,7 +1,6 @@
 {
   "name": "@schemeless/event-store-core",
-  "version": "6.0.0-rc.5",
-  "typescript:main": "src/index.ts",
+  "version": "6.0.0-rc.6",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -15,13 +14,12 @@
     "type": "git",
     "url": "git+https://github.com/schemeless/event-store.git"
   },
-  "keywords": [],
   "author": "akinoniku",
   "bugs": {
     "url": "https://github.com/schemeless/event-store/issues"
   },
   "dependencies": {
-    "@schemeless/event-store-types": "^6.0.0-rc.5"
+    "@schemeless/event-store-types": "^6.0.0-rc.6"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
@@ -33,6 +31,5 @@
   },
   "publishConfig": {
     "access": "public"
-  },
-  "gitHead": "0d1e175bf8294c9f33be8c875aad9ae8249ca1d6"
+  }
 }

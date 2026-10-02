@@ -53,3 +53,17 @@ export class EventCursorNotFoundError extends EventStoreError {
     this.name = 'EventCursorNotFoundError';
   }
 }
+
+export class TransactionScopeError extends EventStoreError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TransactionScopeError';
+  }
+}
+
+export class DuplicateEventError extends EventStoreError {
+  constructor(public readonly eventId: string) {
+    super(`Event already exists: "${eventId}"`);
+    this.name = 'DuplicateEventError';
+  }
+}

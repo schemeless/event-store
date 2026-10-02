@@ -42,7 +42,7 @@ This ambiguity is survivable for short-term manual maintenance, but it is a poor
 - Make replay a read-model rebuild tool, not a hidden aggregate recovery tool
 - Make aggregate identity canonical and persisted
 - Make aggregate state transition use exactly one function
-- Make adapter capabilities explicit
+- Make adapter contracts explicit
 - Prefer architecture that remains understandable after many AI-generated edits
 
 ## Non-Goals
@@ -212,7 +212,7 @@ export interface AggregateDefinition<Command, Event extends DomainEvent, State> 
 
   decide(command: Command, state: State, ctx: AggregateContext): Promise<Event[]> | Event[];
 
-  validateEvent?(event: Event, state: State, ctx: PhaseContext): Promise<void> | void;
+  validateEvent?(event: Event, state: State, ctx: AggregateContext): Promise<void> | void;
 }
 ```
 
@@ -338,11 +338,6 @@ export interface StreamEventStoreAdapter extends EventStoreAdapter {
 
   saveSnapshot?<State>(snapshot: Snapshot<State>): Promise<void>;
 
-  capabilities: {
-    streamQuery: true;
-    optimisticConcurrency: true;
-    snapshot?: boolean;
-  };
 }
 ```
 
@@ -564,7 +559,7 @@ Proceed with the split:
 1. define the new adapter contracts
 2. implement `event-store-core`
 3. implement `event-store-aggregate`
-4. update adapters with explicit capabilities
+4. update adapters with explicit stream/OCC contracts
 5. publish a migration guide with one end-to-end example aggregate
 
 This is a better long-term foundation than continuing to evolve aggregate behavior inside the current `EventFlow` abstraction.

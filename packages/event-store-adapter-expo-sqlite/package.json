@@ -1,7 +1,6 @@
 {
   "name": "@schemeless/event-store-adapter-expo-sqlite",
-  "version": "6.0.0-rc.5",
-  "typescript:main": "src/index.ts",
+  "version": "6.0.0-rc.6",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -12,7 +11,7 @@
     "prepublish": "yarn run clean && yarn run compile"
   },
   "dependencies": {
-    "@schemeless/event-store-types": "^6.0.0-rc.5",
+    "@schemeless/event-store-types": "^6.0.0-rc.6",
     "ulid": "^3.0.2"
   },
   "peerDependencies": {
@@ -29,6 +28,5 @@
   },
   "publishConfig": {
     "access": "public"
-  },
-  "gitHead": "0d1e175bf8294c9f33be8c875aad9ae8249ca1d6"
+  }
 }

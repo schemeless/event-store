@@ -2,7 +2,7 @@
 
 This directory contains the implementation plan for the V6 redesign described in:
 
-- [RFC: Split Event Store Into Core + Aggregate Runtime](/Users/akino/Projects/event-store/docs/rfcs/event-store-core-aggregate-redesign.md)
+- [RFC: Split Event Store Into Core + Aggregate Runtime](../../rfcs/event-store-core-aggregate-redesign.md)
 
 ## Goal
 
@@ -12,7 +12,7 @@ The target system is:
 
 - `@schemeless/event-store-core`
 - `@schemeless/event-store-aggregate`
-- explicit adapter capabilities
+- explicit adapter contracts
 - projection rebuild as a core concern
 - aggregate command handling as a separate runtime concern
 

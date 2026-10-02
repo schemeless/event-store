@@ -46,10 +46,6 @@ export class MemoryEventStore implements AggregateRuntimeAdapter, EventStoreCore
     return identifier;
   }
 
-  private assertStreamIdentifier(identifier: string, context: string): string {
-    return this.normalizeOptionalIdentifier(identifier, context);
-  }
-
   private assertSingleStream(events: Array<{ domain: string; identifier: string }>): {
     domain: string;
     identifier: string;
@@ -101,7 +97,7 @@ export class MemoryEventStore implements AggregateRuntimeAdapter, EventStoreCore
   }
 
   async getStreamEvents(domain: string, identifier: string, fromSequence = 0): Promise<PersistedEvent[]> {
-    const canonicalIdentifier = this.assertStreamIdentifier(identifier, 'getStreamEvents');
+    const canonicalIdentifier = this.normalizeOptionalIdentifier(identifier, 'getStreamEvents');
     return this.events
       .filter(
         (event) =>
@@ -118,7 +114,7 @@ export class MemoryEventStore implements AggregateRuntimeAdapter, EventStoreCore
       const { domain, identifier } = this.assertSingleStream(
         events.map((event) => ({
           domain: event.domain,
-          identifier: this.assertStreamIdentifier(event.identifier, 'appendToStream'),
+          identifier: this.normalizeOptionalIdentifier(event.identifier, 'appendToStream'),
         }))
       );
       const current = await this.getCurrentVersion(domain, identifier);
@@ -143,12 +139,12 @@ export class MemoryEventStore implements AggregateRuntimeAdapter, EventStoreCore
   }
 
   async getSnapshot<State>(domain: string, identifier: string): Promise<Snapshot<State> | null> {
-    const canonicalIdentifier = this.assertStreamIdentifier(identifier, 'getSnapshot');
+    const canonicalIdentifier = this.normalizeOptionalIdentifier(identifier, 'getSnapshot');
     return this.snapshots.get(`${domain}::${canonicalIdentifier}`) ?? null;
   }
 
   async saveSnapshot<State>(snapshot: Snapshot<State>): Promise<void> {
-    const identifier = this.assertStreamIdentifier(snapshot.identifier, 'saveSnapshot');
+    const identifier = this.normalizeOptionalIdentifier(snapshot.identifier, 'saveSnapshot');
     this.snapshots.set(`${snapshot.domain}::${identifier}`, { ...snapshot, identifier });
   }
 

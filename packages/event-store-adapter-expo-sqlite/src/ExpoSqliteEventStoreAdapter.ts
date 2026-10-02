@@ -40,12 +40,6 @@ function assertValidTableName(name: string): void {
 }
 
 export class ExpoSqliteEventStoreAdapter implements StreamEventStoreAdapter {
-  readonly capabilities = {
-    streamQuery: true as const,
-    optimisticConcurrency: true as const,
-    snapshot: true as const,
-  };
-
   private readonly db: SQLiteDatabase;
   private readonly tableName: string;
   private readonly snapshotTableName: string;
@@ -128,10 +122,6 @@ export class ExpoSqliteEventStoreAdapter implements StreamEventStoreAdapter {
       throw new InvalidIdentifierError(`${context} requires a non-empty identifier`);
     }
     return identifier;
-  }
-
-  private assertStreamIdentifier(identifier: string, context: string): string {
-    return this.normalizeOptionalIdentifier(identifier, context);
   }
 
   private assertSingleStream(events: Array<{ domain: string; identifier: string }>): {
@@ -243,7 +233,7 @@ export class ExpoSqliteEventStoreAdapter implements StreamEventStoreAdapter {
     const first = this.assertSingleStream(
       events.map((event) => ({
         domain: event.domain,
-        identifier: this.assertStreamIdentifier(event.identifier, 'appendToStream'),
+        identifier: this.normalizeOptionalIdentifier(event.identifier, 'appendToStream'),
       }))
     );
     const versions = await this.appendGroupedEvents(events, { expectedVersion });
@@ -335,7 +325,7 @@ export class ExpoSqliteEventStoreAdapter implements StreamEventStoreAdapter {
   }
 
   async getStreamEvents(domain: string, identifier: string, fromSequence: number = 0): Promise<PersistedEvent[]> {
-    const canonicalIdentifier = this.assertStreamIdentifier(identifier, 'getStreamEvents');
+    const canonicalIdentifier = this.normalizeOptionalIdentifier(identifier, 'getStreamEvents');
     const rows = (await this.db.getAllAsync(
       `SELECT * FROM ${this.tableName}
        WHERE domain = ? AND identifier = ? AND sequence > ?
@@ -346,7 +336,7 @@ export class ExpoSqliteEventStoreAdapter implements StreamEventStoreAdapter {
   }
 
   async getSnapshot<State>(domain: string, identifier: string): Promise<Snapshot<State> | null> {
-    const canonicalIdentifier = this.assertStreamIdentifier(identifier, 'getSnapshot');
+    const canonicalIdentifier = this.normalizeOptionalIdentifier(identifier, 'getSnapshot');
     const row = (await this.db.getFirstAsync(
       `SELECT * FROM ${this.snapshotTableName}
        WHERE domain = ? AND identifier = ?`,
@@ -367,7 +357,7 @@ export class ExpoSqliteEventStoreAdapter implements StreamEventStoreAdapter {
   }
 
   async saveSnapshot<State>(snapshot: Snapshot<State>): Promise<void> {
-    const identifier = this.assertStreamIdentifier(snapshot.identifier, 'saveSnapshot');
+    const identifier = this.normalizeOptionalIdentifier(snapshot.identifier, 'saveSnapshot');
     await this.db.runAsync(
       `INSERT OR REPLACE INTO ${this.snapshotTableName}
        (domain, identifier, state, sequence, created)

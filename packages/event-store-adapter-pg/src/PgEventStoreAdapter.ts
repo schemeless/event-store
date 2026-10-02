@@ -1,8 +1,14 @@
 import { createHash } from 'crypto';
-import { Pool, PoolClient, PoolConfig } from 'pg';
+import { Pool, PoolClient, PoolConfig, QueryResult } from 'pg';
 import { monotonicFactory } from 'ulid';
 import {
   AppendableEvent,
+  BatchEventStoreAdapter,
+  DuplicateEventError,
+  ExpectedStreamVersion,
+  IncrementalEventStoreAdapter,
+  StreamLogPage,
+  TransactionScopeError,
   EventCursorNotFoundError,
   InvalidIdentifierError,
   InvalidStreamBatchError,
@@ -10,7 +16,6 @@ import {
   Snapshot,
   StreamConcurrencyError,
   StreamAppendableEvent,
-  StreamEventStoreAdapter,
 } from '@schemeless/event-store-types';
 
 export interface PgAdapterOptions extends PoolConfig {
@@ -40,14 +45,76 @@ function buildIndexName(tableName: string, suffix: string): string {
   return `${truncatedBase}_${hash}_${suffix}`;
 }
 
-export class PgEventStoreAdapter implements StreamEventStoreAdapter {
-  readonly capabilities = {
-    streamQuery: true as const,
-    optimisticConcurrency: true as const,
-    snapshot: true as const,
-  };
-
+export class PgEventStoreAdapter implements BatchEventStoreAdapter, IncrementalEventStoreAdapter {
   private readonly pool: Pool;
+  private scope?: { client: PoolClient; active: boolean; failure?: unknown; appended: boolean; pending: number };
+
+  private assertActive(): void {
+    if (this.scope && (!this.scope.active || this.scope.failure)) {
+      throw new TransactionScopeError('Transaction scope has ended or failed');
+    }
+  }
+
+  private assertRoot(operation: string): void {
+    if (this.scope) throw new TransactionScopeError(`${operation} is not allowed on a transaction scope`);
+  }
+
+  private async query(sql: string, values?: any[]): Promise<QueryResult> {
+    this.assertActive();
+    if (this.scope) this.scope.pending++;
+    try {
+      return await (this.scope ? this.scope.client : this.pool).query(sql, values);
+    } catch (error) {
+      if (this.scope) this.scope.failure = error;
+      throw error;
+    } finally {
+      if (this.scope) this.scope.pending--;
+    }
+  }
+
+  /** The callback must await every operation. Nested transactions are rejected. */
+  async withTransaction<T>(task: (adapter: PgTransactionAdapter) => Promise<T>): Promise<T> {
+    this.assertRoot('Nested transactions');
+    const client = await this.pool.connect();
+    let discardClient = false;
+    const scoped: PgEventStoreAdapter = Object.create(this);
+    scoped.scope = { client, active: true, appended: false, pending: 0 };
+    try {
+      await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+      const result = await task(scoped);
+      scoped.assertActive();
+      if (scoped.scope.pending) throw new TransactionScopeError('Await every transaction operation before returning');
+      scoped.scope.active = false;
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      scoped.scope.active = false;
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        discardClient = true;
+      }
+      throw error;
+    } finally {
+      scoped.scope.active = false;
+      client.release(discardClient);
+    }
+  }
+
+  /** Parameterized consumer SQL on the transaction connection only. */
+  async execute(sql: string, values?: any[]): Promise<QueryResult> {
+    this.assertActive();
+    if (!this.scope) throw new TransactionScopeError('execute requires withTransaction');
+    // Consumer SQL is trusted, but transaction ownership must stay with the adapter.
+    // Accept one DML statement; use parameters for values (including semicolons).
+    if (!/^\s*(SELECT|INSERT|UPDATE|DELETE|WITH)\b/i.test(sql) || sql.includes(';')) {
+      const error = new TransactionScopeError('execute accepts one SELECT/INSERT/UPDATE/DELETE/WITH statement');
+      this.scope.failure = error;
+      throw error;
+    }
+    return this.query(sql, values);
+  }
+
   private readonly tableName: string;
   private readonly snapshotTableName: string;
   private readonly eventPositionSequence: string;
@@ -68,6 +135,7 @@ export class PgEventStoreAdapter implements StreamEventStoreAdapter {
   }
 
   async init(): Promise<void> {
+    this.assertRoot('init');
     const client = await this.pool.connect();
     try {
       await client.query(`
@@ -178,11 +246,13 @@ export class PgEventStoreAdapter implements StreamEventStoreAdapter {
   }
 
   async close(): Promise<void> {
+    this.assertRoot('close');
     await this.pool.end();
   }
 
   async reset(): Promise<void> {
-    await this.pool.query(`TRUNCATE TABLE ${this.tableName}, ${this.snapshotTableName} RESTART IDENTITY`);
+    this.assertRoot('reset');
+    await this.query(`TRUNCATE TABLE ${this.tableName}, ${this.snapshotTableName} RESTART IDENTITY`);
   }
 
   private mapRowToEvent(row: any): PersistedEvent {
@@ -204,14 +274,10 @@ export class PgEventStoreAdapter implements StreamEventStoreAdapter {
     if (identifier == null) {
       return '';
     }
-    if (identifier.trim().length === 0) {
+    if (typeof identifier !== 'string' || identifier.trim().length === 0) {
       throw new InvalidIdentifierError(`${context} requires a non-empty identifier`);
     }
     return identifier;
-  }
-
-  private assertStreamIdentifier(identifier: string, context: string): string {
-    return this.normalizeOptionalIdentifier(identifier, context);
   }
 
   private assertSingleStream(events: Array<{ domain: string; identifier: string }>): {
@@ -230,23 +296,45 @@ export class PgEventStoreAdapter implements StreamEventStoreAdapter {
     return first;
   }
 
-  private async getStreamVersion(
-    client: PoolClient,
-    domain: string,
-    identifier: string,
-    lock: boolean
-  ): Promise<number> {
-    const query = lock
-      ? `SELECT COALESCE(MAX(sequence), 0) as "maxseq" FROM (
-           SELECT sequence FROM ${this.tableName}
-           WHERE domain = $1 AND identifier = $2
-           FOR UPDATE
-         ) locked`
-      : `SELECT COALESCE(MAX(sequence), 0) as "maxseq"
-         FROM ${this.tableName}
-         WHERE domain = $1 AND identifier = $2`;
-    const res = await client.query(query, [domain, identifier]);
-    return Number(res.rows[0].maxseq);
+  private streamKey(stream: { domain: string; identifier?: string }): string {
+    return JSON.stringify([stream.domain, stream.identifier ?? '']);
+  }
+
+  private validateVersions(expected: readonly ExpectedStreamVersion[]): Map<string, ExpectedStreamVersion> {
+    const versions = new Map<string, ExpectedStreamVersion>();
+    for (const stream of expected) {
+      this.normalizeOptionalIdentifier(stream.identifier, 'Expected stream');
+      if (!Number.isSafeInteger(stream.expectedVersion) || stream.expectedVersion < 0) {
+        throw new InvalidStreamBatchError('Expected versions must be non-negative safe integers');
+      }
+      const key = this.streamKey(stream);
+      if (versions.has(key)) throw new InvalidStreamBatchError('Duplicate expected stream version');
+      versions.set(key, stream);
+    }
+    return versions;
+  }
+
+  async getStreamVersions(
+    streams: readonly Pick<ExpectedStreamVersion, 'domain' | 'identifier'>[]
+  ): Promise<ExpectedStreamVersion[]> {
+    this.assertActive();
+    const input = streams.map((stream) => ({
+      domain: stream.domain,
+      identifier: this.normalizeOptionalIdentifier(stream.identifier, 'getStreamVersions'),
+    }));
+    const res = await this.query(
+      `SELECT requested.domain, requested.identifier, COALESCE(MAX(events.sequence), 0) AS version
+       FROM jsonb_to_recordset($1::jsonb) AS requested(domain text, identifier text)
+       LEFT JOIN ${this.tableName} events
+       ON events.domain = requested.domain AND events.identifier = requested.identifier
+       GROUP BY requested.domain, requested.identifier`,
+      [JSON.stringify(input)]
+    );
+    return res.rows.map((row) => ({
+      domain: row.domain,
+      identifier: row.identifier || undefined,
+      expectedVersion: Number(row.version),
+    }));
   }
 
   private ensureEventIds(events: AppendableEvent[]): Array<PersistedEvent & { identifier: string }> {
@@ -261,139 +349,179 @@ export class PgEventStoreAdapter implements StreamEventStoreAdapter {
     });
   }
 
-  private groupEventsByStream(
-    events: Array<PersistedEvent & { identifier: string }>
-  ): Map<string, Array<PersistedEvent & { identifier: string }>> {
-    const grouped = new Map<string, Array<PersistedEvent & { identifier: string }>>();
-    for (const event of events) {
-      const key = `${event.domain}::${event.identifier}`;
-      if (!grouped.has(key)) {
-        grouped.set(key, []);
-      }
-      grouped.get(key)!.push(event);
+  private async appendEvents(events: AppendableEvent[], expected?: readonly ExpectedStreamVersion[]): Promise<void> {
+    this.assertActive();
+    if (!this.scope) {
+      return this.withTransaction((scoped) => (scoped as PgEventStoreAdapter).appendEvents(events, expected));
     }
-    return grouped;
-  }
-
-  private async appendGroupedEvents(
-    events: AppendableEvent[],
-    options?: { expectedVersion?: number }
-  ): Promise<Map<string, number>> {
-    if (!events.length) {
-      return new Map();
-    }
-
-    const eventsWithIds = this.ensureEventIds(events);
-
-    const client = await this.pool.connect();
     try {
-      await client.query('BEGIN');
+      if (this.scope.appended) throw new TransactionScopeError('Use one append batch per transaction');
+      this.scope.appended = true;
+      const versions = expected === undefined ? undefined : this.validateVersions(expected);
+      const prepared = this.ensureEventIds(events);
+      const streams = new Map<string, { domain: string; identifier?: string }>();
+      for (const event of prepared) {
+        const key = this.streamKey(event);
+        if (versions && !versions.has(key))
+          throw new InvalidStreamBatchError('Every written stream needs an expected version');
+        streams.set(key, { domain: event.domain, identifier: event.identifier || undefined });
+      }
+      if (versions) for (const [key, stream] of versions) streams.set(key, stream);
 
-      const versions = new Map<string, number>();
-      for (const [streamKey, streamEvents] of this.groupEventsByStream(eventsWithIds).entries()) {
-        const [domain, ...rest] = streamKey.split('::');
-        const identifier = rest.join('::');
-        const currentVersion = await this.getStreamVersion(client, domain, identifier, true);
-
-        if (options?.expectedVersion !== undefined && currentVersion !== options.expectedVersion) {
-          throw new StreamConcurrencyError(domain, identifier, options.expectedVersion, currentVersion);
+      // Relation OID makes qualified/unqualified names of the same table share locks.
+      const relation = await this.query('SELECT $1::regclass::oid AS oid', [this.tableName]);
+      const locks = [...streams.keys()]
+        .map((key) => {
+          const hex = createHash('sha256').update(`${relation.rows[0].oid}:${key}`).digest('hex').slice(0, 16);
+          return hex;
+        })
+        .sort();
+      // Sort actual lock keys, including rare hash collisions, before taking any lock.
+      for (const lock of new Set(locks))
+        await this.query("SELECT pg_advisory_xact_lock(('x' || $1)::bit(64)::bigint)", [lock]);
+      const current = new Map(
+        (await this.getStreamVersions([...streams.values()])).map((stream) => [
+          this.streamKey(stream),
+          stream.expectedVersion,
+        ])
+      );
+      if (versions)
+        for (const [key, stream] of versions) {
+          const actual = current.get(key)!;
+          if (actual !== stream.expectedVersion) {
+            throw new StreamConcurrencyError(stream.domain, stream.identifier ?? '', stream.expectedVersion, actual);
+          }
         }
-
-        let nextSequence = currentVersion + 1;
-        for (const event of streamEvents) {
-          await client.query(
+      // Insert in caller order, not grouped order; sequence advances independently per stream.
+      for (const event of prepared) {
+        const key = this.streamKey(event);
+        const sequence = current.get(key)! + 1;
+        try {
+          const inserted = await this.query(
             `INSERT INTO ${this.tableName}
              (id, domain, type, payload, meta, identifier, "correlationId", "causationId", sequence, created)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+             ON CONFLICT (id) DO NOTHING RETURNING id`,
             [
               event.id,
               event.domain,
               event.type,
               event.payload != null ? JSON.stringify(event.payload) : null,
               event.meta != null ? JSON.stringify(event.meta) : null,
-              event.identifier ?? '',
+              event.identifier,
               event.correlationId ?? null,
               event.causationId ?? null,
-              nextSequence++,
+              sequence,
               event.created,
             ]
           );
+          if (!inserted.rowCount) throw new DuplicateEventError(event.id);
+        } catch (error: any) {
+          if (error.code === '23505' && error.constraint === this.idxStreamSequence) {
+            throw new StreamConcurrencyError(
+              event.domain,
+              event.identifier,
+              versions?.get(key)?.expectedVersion ?? sequence - 1,
+              sequence
+            );
+          }
+          throw error;
         }
-
-        versions.set(streamKey, currentVersion + streamEvents.length);
+        current.set(key, sequence);
       }
-
-      await client.query('COMMIT');
-      return versions;
-    } catch (error: any) {
-      try {
-        await client.query('ROLLBACK');
-      } catch {
-        // Ignore rollback failures after transaction abort.
-      }
-
-      if (error?.code === '23505' && error?.constraint === this.idxStreamSequence && eventsWithIds[0]) {
-        const identifier = eventsWithIds[0].identifier ?? '';
-        const actualVersion = await this.getStreamVersion(client, eventsWithIds[0].domain, identifier, false);
-        throw new StreamConcurrencyError(
-          eventsWithIds[0].domain,
-          identifier,
-          options?.expectedVersion ?? 0,
-          actualVersion
-        );
-      }
-
+    } catch (error) {
+      this.scope.failure = error;
       throw error;
-    } finally {
-      client.release();
     }
   }
 
   async append(events: AppendableEvent[]): Promise<void> {
-    await this.appendGroupedEvents(events);
+    this.assertActive();
+    if (!events.length) return;
+    await this.appendEvents(events);
+  }
+
+  async appendBatch(events: AppendableEvent[], expectedVersions: readonly ExpectedStreamVersion[]): Promise<void> {
+    await this.appendEvents(events, expectedVersions);
   }
 
   async appendToStream(events: StreamAppendableEvent[], expectedVersion: number): Promise<{ nextVersion: number }> {
-    if (!events.length) {
-      return { nextVersion: expectedVersion };
+    this.assertActive();
+    try {
+      this.validateVersions([{ domain: events[0]?.domain ?? '', identifier: events[0]?.identifier, expectedVersion }]);
+      if (!events.length) return { nextVersion: expectedVersion };
+      const first = this.assertSingleStream(
+        events.map((event) => ({
+          domain: event.domain,
+          identifier: this.normalizeOptionalIdentifier(event.identifier, 'appendToStream'),
+        }))
+      );
+      await this.appendBatch(events, [{ ...first, expectedVersion }]);
+      return { nextVersion: expectedVersion + events.length };
+    } catch (error) {
+      if (this.scope) this.scope.failure = error;
+      throw error;
     }
+  }
 
-    const first = this.assertSingleStream(
-      events.map((event) => ({
-        domain: event.domain,
-        identifier: this.assertStreamIdentifier(event.identifier, 'appendToStream'),
-      }))
+  /** No commit-order promise: a stream vector cannot skip late commits on other streams. */
+  async getLogPage(cursor: readonly ExpectedStreamVersion[] = [], pageSize: number = 100): Promise<StreamLogPage> {
+    this.assertActive();
+    // ponytail: checkpoint size grows with stream count; use CDC for large/unbounded logs.
+    const versions = this.validateVersions(cursor);
+    if (!Number.isSafeInteger(pageSize) || pageSize <= 0)
+      throw new InvalidStreamBatchError('pageSize must be a positive safe integer');
+    const res = await this.query(
+      `WITH checkpoint AS (
+         SELECT * FROM jsonb_to_recordset($1::jsonb) AS c(domain text, identifier text, "expectedVersion" bigint)
+       )
+       SELECT events.* FROM ${this.tableName} events
+       LEFT JOIN checkpoint c ON c.domain = events.domain AND c.identifier = events.identifier
+       WHERE events.sequence > COALESCE(c."expectedVersion", 0) OR events.sequence IS NULL
+       ORDER BY events.position ASC LIMIT $2`,
+      [JSON.stringify(cursor.map((stream) => ({ ...stream, identifier: stream.identifier ?? '' }))), pageSize]
     );
-    const versions = await this.appendGroupedEvents(events, { expectedVersion });
-    const key = `${first.domain}::${first.identifier}`;
-    return { nextVersion: versions.get(key) ?? expectedVersion };
+    if (res.rows.some((row) => row.sequence == null)) {
+      throw new InvalidStreamBatchError(
+        'Incremental log requires sequenced V6 events; use an offline export for legacy rows'
+      );
+    }
+    for (const row of res.rows)
+      versions.set(this.streamKey(row), {
+        domain: row.domain,
+        identifier: row.identifier || undefined,
+        expectedVersion: Number(row.sequence),
+      });
+    return { events: res.rows.map((row) => this.mapRowToEvent(row)), cursor: [...versions.values()] };
   }
 
   async getAllEvents(
     pageSize: number = 100,
     startFromId?: string
   ): Promise<AsyncIterableIterator<Array<PersistedEvent>>> {
+    this.assertActive();
     const self = this;
-    let currentPosition: number | null = null;
+    let currentPosition: string | null = null;
     let hasMore = true;
 
     if (startFromId) {
-      const cursorCheck = await this.pool.query(`SELECT position FROM ${this.tableName} WHERE id = $1`, [startFromId]);
+      const cursorCheck = await this.query(`SELECT position FROM ${this.tableName} WHERE id = $1`, [startFromId]);
       if (cursorCheck.rows.length === 0) {
         throw new EventCursorNotFoundError(startFromId);
       }
-      currentPosition = Number(cursorCheck.rows[0].position);
+      currentPosition = String(cursorCheck.rows[0].position);
     }
 
     return {
       async next() {
+        self.assertActive();
         if (!hasMore) {
           return { value: undefined as any, done: true };
         }
 
         let res;
         if (currentPosition != null) {
-          res = await self.pool.query(
+          res = await self.query(
             `SELECT * FROM ${self.tableName}
              WHERE position > $1
              ORDER BY position ASC
@@ -401,7 +529,7 @@ export class PgEventStoreAdapter implements StreamEventStoreAdapter {
             [currentPosition, pageSize]
           );
         } else {
-          res = await self.pool.query(`SELECT * FROM ${self.tableName} ORDER BY position ASC LIMIT $1`, [pageSize]);
+          res = await self.query(`SELECT * FROM ${self.tableName} ORDER BY position ASC LIMIT $1`, [pageSize]);
         }
 
         if (res.rows.length === 0) {
@@ -409,7 +537,7 @@ export class PgEventStoreAdapter implements StreamEventStoreAdapter {
           return { value: undefined as any, done: true };
         }
 
-        currentPosition = Number(res.rows[res.rows.length - 1].position);
+        currentPosition = String(res.rows[res.rows.length - 1].position);
         if (res.rows.length < pageSize) {
           hasMore = false;
         }
@@ -423,22 +551,21 @@ export class PgEventStoreAdapter implements StreamEventStoreAdapter {
   }
 
   async getEventById(id: string): Promise<PersistedEvent | null> {
-    const res = await this.pool.query(`SELECT * FROM ${this.tableName} WHERE id = $1`, [id]);
+    const res = await this.query(`SELECT * FROM ${this.tableName} WHERE id = $1`, [id]);
     if (!res.rows.length) return null;
     return this.mapRowToEvent(res.rows[0]);
   }
 
   async findByCausationId(causationId: string): Promise<PersistedEvent[]> {
-    const res = await this.pool.query(
-      `SELECT * FROM ${this.tableName} WHERE "causationId" = $1 ORDER BY position ASC`,
-      [causationId]
-    );
+    const res = await this.query(`SELECT * FROM ${this.tableName} WHERE "causationId" = $1 ORDER BY position ASC`, [
+      causationId,
+    ]);
     return res.rows.map((row) => this.mapRowToEvent(row));
   }
 
   async getStreamEvents(domain: string, identifier: string, fromSequence: number = 0): Promise<PersistedEvent[]> {
-    const canonicalIdentifier = this.assertStreamIdentifier(identifier, 'getStreamEvents');
-    const res = await this.pool.query(
+    const canonicalIdentifier = this.normalizeOptionalIdentifier(identifier, 'getStreamEvents');
+    const res = await this.query(
       `SELECT * FROM ${this.tableName}
        WHERE domain = $1 AND identifier = $2 AND sequence > $3
        ORDER BY sequence ASC`,
@@ -448,8 +575,8 @@ export class PgEventStoreAdapter implements StreamEventStoreAdapter {
   }
 
   async getSnapshot<State>(domain: string, identifier: string): Promise<Snapshot<State> | null> {
-    const canonicalIdentifier = this.assertStreamIdentifier(identifier, 'getSnapshot');
-    const res = await this.pool.query(
+    const canonicalIdentifier = this.normalizeOptionalIdentifier(identifier, 'getSnapshot');
+    const res = await this.query(
       `SELECT domain, identifier, state, sequence, created
        FROM ${this.snapshotTableName}
        WHERE domain = $1 AND identifier = $2`,
@@ -471,8 +598,8 @@ export class PgEventStoreAdapter implements StreamEventStoreAdapter {
   }
 
   async saveSnapshot<State>(snapshot: Snapshot<State>): Promise<void> {
-    const identifier = this.assertStreamIdentifier(snapshot.identifier, 'saveSnapshot');
-    await this.pool.query(
+    const identifier = this.normalizeOptionalIdentifier(snapshot.identifier, 'saveSnapshot');
+    await this.query(
       `INSERT INTO ${this.snapshotTableName} (domain, identifier, state, sequence, created)
        VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (domain, identifier) DO UPDATE
@@ -483,3 +610,20 @@ export class PgEventStoreAdapter implements StreamEventStoreAdapter {
     );
   }
 }
+
+/** Only transaction-safe operations are exposed in the callback type. */
+export type PgTransactionAdapter = Pick<
+  PgEventStoreAdapter,
+  | 'append'
+  | 'appendBatch'
+  | 'appendToStream'
+  | 'getStreamVersions'
+  | 'getLogPage'
+  | 'getAllEvents'
+  | 'getEventById'
+  | 'findByCausationId'
+  | 'getStreamEvents'
+  | 'getSnapshot'
+  | 'saveSnapshot'
+  | 'execute'
+>;

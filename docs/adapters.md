@@ -19,11 +19,18 @@ For `aggregate`:
 - `getStreamEvents(domain, identifier, fromSequence?)`
 - `appendToStream(events, expectedVersion)`
 
+For `revert`:
+
+- `getEventById(id)`
+- `findByCausationId(causationId)`
+- `append(events)`
+
 Optional:
 
 - `getSnapshot(domain, identifier)`
 - `saveSnapshot(snapshot)`
 - `reset()` for tests and import replacement flows
+- `close()` for releasing adapter resources
 
 ## Behaviour Rules
 
@@ -49,3 +56,12 @@ Use `@schemeless/event-store-adapter-expo-sqlite` when you want:
 - on-device event logs
 - offline-first mobile workflows
 - local aggregate hydration and replay
+
+
+## V6 PostgreSQL atomic extensions
+
+`BatchEventStoreAdapter` and `IncrementalEventStoreAdapter` are optional capability
+contracts; `supportsAppendBatch` / `supportsIncrementalLog` detect support. SQLite
+and core keep their existing contracts. PostgreSQL transaction composition remains
+pg-specific via `withTransaction` and scoped `execute`; pg driver types do not enter
+shared contracts. See [API, isolation, cursor limitations and receipt example](../packages/event-store-adapter-pg/readme.md).

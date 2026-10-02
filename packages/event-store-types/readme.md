@@ -12,7 +12,7 @@ This package is the canonical home for:
 
 - persisted event types
 - snapshot types
-- adapter capability contracts
+- adapter storage contracts
 - concurrency and snapshot errors
 
 ## Installation

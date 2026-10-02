@@ -13,7 +13,7 @@ This step defines the correctness boundary for concurrency, multi-instance safet
 
 ## Scope
 
-Update `@schemeless/event-store-types` with new adapter interfaces and capability flags.
+Update `@schemeless/event-store-types` with new adapter interfaces.
 
 This is the architectural center of the redesign. Aggregate runtime must not be built until these contracts are stable.
 
@@ -39,12 +39,6 @@ export interface StreamEventStoreAdapter extends EventStoreAdapter {
   getSnapshot?<State>(domain: string, identifier: string): Promise<Snapshot<State> | null>;
 
   saveSnapshot?<State>(snapshot: Snapshot<State>): Promise<void>;
-
-  capabilities: {
-    streamQuery: true;
-    optimisticConcurrency: true;
-    snapshot?: boolean;
-  };
 }
 ```
 
@@ -53,7 +47,7 @@ export interface StreamEventStoreAdapter extends EventStoreAdapter {
 1. Add new adapter interfaces to types package
 2. Define concurrency conflict error types
 3. Define snapshot types
-4. Define capability semantics in docs
+4. Document stream, OCC, and snapshot semantics
 5. Update internal code references to stop assuming one undifferentiated repo interface
 
 ## Hard Decisions To Encode
@@ -73,11 +67,11 @@ Add tests for:
 - stream read ordering
 - append-to-stream version mismatch
 - snapshot load and incremental stream replay
-- adapters that support base capability but not aggregate runtime capability
+- adapters that support base storage but not stream runtime methods
 
 ## Exit Criteria
 
 - core can be typed against the base adapter
 - aggregate runtime can be typed against the stream-capable adapter
-- capability gaps are explicit in types and runtime checks
+- stream-method gaps are explicit in types and runtime checks
 - concurrency semantics are documented, not implied

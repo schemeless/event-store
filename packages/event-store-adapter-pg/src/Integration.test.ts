@@ -1,3 +1,4 @@
+import { Client } from 'pg';
 import { PgEventStoreAdapter } from './PgEventStoreAdapter';
 import type { PersistedEvent, StreamAppendableEvent } from '@schemeless/event-store-types';
 
@@ -895,4 +896,53 @@ describe('PgEventStoreAdapter Integration', () => {
     expect(events[0].domain).toBe('test');
     expect(events[0].identifier).toBe('integ-test-id');
   });
+
+  it('rejects invalid table names', () => {
+    expect(() => new PgEventStoreAdapter({ ...connectionOptions, tableName: 'DROP TABLE foo; --' })).toThrow(
+      /Invalid table name/
+    );
+  });
+
+  it('creates distinct stream indexes for long custom table names', async () => {
+    const prefix = 'event_store_table_with_really_long_name_prefix_for_collision_';
+    const tableNameA = `${prefix}a`;
+    const tableNameB = `${prefix}b`;
+
+    const adapterA = new PgEventStoreAdapter({ ...connectionOptions, tableName: tableNameA });
+    const adapterB = new PgEventStoreAdapter({ ...connectionOptions, tableName: tableNameB });
+    const client = new Client(connectionOptions);
+
+    try {
+      await adapterA.init();
+      await adapterB.init();
+
+      await client.connect();
+      const res = await client.query(
+        `SELECT tablename, indexname
+         FROM pg_indexes
+         WHERE tablename IN ($1, $2)
+           AND indexdef LIKE '%(domain, identifier, sequence)%'
+         ORDER BY tablename ASC`,
+        [tableNameA, tableNameB]
+      );
+
+      expect(res.rows.length).toBe(2);
+      expect(new Set(res.rows.map((row) => row.indexname)).size).toBe(2);
+    } finally {
+      await client.end();
+      await adapterA.close();
+      await adapterB.close();
+      const cleanup = new Client(connectionOptions);
+      await cleanup.connect();
+      try {
+        await cleanup.query(`DROP TABLE IF EXISTS ${tableNameA}`);
+        await cleanup.query(`DROP TABLE IF EXISTS ${tableNameA}_snapshots`);
+        await cleanup.query(`DROP TABLE IF EXISTS ${tableNameB}`);
+        await cleanup.query(`DROP TABLE IF EXISTS ${tableNameB}_snapshots`);
+      } finally {
+        await cleanup.end();
+      }
+    }
+  });
+
 });

@@ -22,9 +22,3 @@ export interface CreatedEvent<Payload = any, META extends EventMeta = EventMeta>
   id: string;
   created: Date;
 }
-
-export interface StoredEvent<Payload = any, META extends EventMeta = EventMeta> extends CreatedEvent<Payload, META> {
-  sequence?: number;
-}
-
-export type Event<Payload, META extends EventMeta = EventMeta> = StoredEvent<Payload, META>;

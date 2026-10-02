@@ -369,5 +369,4 @@ Compensating events are appended via `adapter.append()` (bulk, no OCC). This is 
 
 A complete reference aggregate (cash account with deposits, withdrawals, OCC, and snapshot) is available at:
 
-- npm: `@schemeless/event-store-cash-account-example@next`
 - source: [`packages/event-store-cash-account-example`](../packages/event-store-cash-account-example)

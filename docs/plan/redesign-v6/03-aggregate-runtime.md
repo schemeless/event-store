@@ -40,7 +40,7 @@ export interface AggregateDefinition<Command, Event extends DomainEvent, State> 
 
   decide(command: Command, state: State, ctx: AggregateContext): Promise<Event[]> | Event[];
 
-  validateEvent?(event: Event, state: State, ctx: PhaseContext): Promise<void> | void;
+  validateEvent?(event: Event, state: State, ctx: AggregateContext): Promise<void> | void;
 }
 ```
 

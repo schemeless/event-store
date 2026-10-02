@@ -6,5 +6,6 @@ module.exports = {
     '<rootDir>/packages/event-store-adapter-pg/jest.config.js',
     '<rootDir>/packages/event-store-adapter-expo-sqlite/jest.config.js',
     '<rootDir>/packages/event-store-revert/jest.config.js',
+    '<rootDir>/packages/event-store-cash-account-example/jest.config.js',
   ],
 };

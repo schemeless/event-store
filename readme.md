@@ -1,6 +1,6 @@
 # Schemeless Event Store
 
-[简体中文](/Users/akino/Projects/event-store/README.zh-CN.md)
+[简体中文](README.zh-CN.md)
 
 Schemeless Event Store is a V6 split architecture for event-sourced systems:
 
@@ -100,3 +100,12 @@ These adapters implement the V6 contracts in `@schemeless/event-store-types`:
 yarn install
 yarn test
 ```
+
+
+### PostgreSQL atomic batches and consumer transactions (V6 RC.6)
+
+The V6 PostgreSQL adapter supports optional `appendBatch`, `getStreamVersions`,
+`withTransaction` with same-connection consumer SQL, and no-loss per-stream
+incremental checkpoints. See the [PostgreSQL API and receipt example](packages/event-store-adapter-pg/readme.md).
+The existing global event ID/position cursor is allocation ordered, not commit
+ordered; use the new stream-vector cursor for concurrent incremental consumers.

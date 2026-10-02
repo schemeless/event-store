@@ -1,6 +1,6 @@
 # Schemeless Event Store
 
-[English](/Users/akino/Projects/event-store/readme.md)
+[English](readme.md)
 
 这是 V6 的拆层式 Event Sourcing 工具箱，核心由四部分组成：
 

@@ -16,8 +16,6 @@ export interface AggregateContext {
   sequence: number;
 }
 
-export interface PhaseContext extends AggregateContext {}
-
 export interface AggregateDefinition<Command, Event extends DecidedEvent, State> {
   name: string;
   domain: string;
@@ -26,7 +24,7 @@ export interface AggregateDefinition<Command, Event extends DecidedEvent, State>
   evolve(state: State, event: Event): State;
   precondition?(command: Command, state: State, ctx: AggregateContext): Promise<void> | void;
   decide(command: Command, state: State, ctx: AggregateContext): Promise<Event[]> | Event[];
-  validateEvent?(event: Event, state: State, ctx: PhaseContext): Promise<void> | void;
+  validateEvent?(event: Event, state: State, ctx: AggregateContext): Promise<void> | void;
 }
 
 export interface HydratedAggregate<State> {
